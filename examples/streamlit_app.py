@@ -444,6 +444,11 @@ if page == "📄 Chunking Lab":
             f"**{sections_that_split}** section(s) exceeded **{parent_size}** chars and "
             f"were recursively split into smaller parents."
         )
+        st.caption(
+            f"💡 **{parent_size}** is a maximum, not a target — the splitter breaks at the "
+            f"nearest paragraph (\\n\\n) boundary before the limit, so chunks may be shorter. "
+            f"Overlap ({parent_overlap} chars) is only visible when a paragraph itself is split mid-text."
+        )
 
     col1, col2 = st.columns([3, 1])
     with col1:
