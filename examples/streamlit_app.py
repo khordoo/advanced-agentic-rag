@@ -8,7 +8,7 @@ Interactive app to visualize the 3-stage chunking strategy:
   2. Recursive split into parent chunks
   3. Sub-split into child chunks
 
-Run with: streamlit run examples/streamlit_app.py
+Run with: uv run streamlit run examples/streamlit_app.py
 """
 
 import streamlit as st
@@ -58,25 +58,29 @@ st.markdown("""
     .stage-3 { background: #d1fae5; color: #065f46; }
 
     .chunk-card {
-        border: 1px solid #e5e7eb;
+        border: 1px solid rgba(128, 128, 128, 0.3);
         border-radius: 12px;
         padding: 16px;
         margin-bottom: 12px;
-        background: #fafafa;
+        background: rgba(128, 128, 128, 0.05);
         transition: box-shadow 0.2s ease;
     }
     .chunk-card:hover {
-        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    .chunk-card pre {
+        color: inherit !important;
+        background: transparent !important;
     }
 
     .meta-tag {
         display: inline-block;
-        background: #f3f4f6;
-        border: 1px solid #e5e7eb;
+        background: rgba(128, 128, 128, 0.1);
+        border: 1px solid rgba(128, 128, 128, 0.25);
         padding: 2px 8px;
         border-radius: 6px;
         font-size: 0.75rem;
-        color: #4b5563;
+        color: inherit;
         margin-right: 4px;
         margin-bottom: 4px;
     }
@@ -111,29 +115,39 @@ st.markdown("""
 
 SAMPLE_MARKDOWN = """# Annual Report 2024
 
-Welcome to the annual report. This document covers financial performance, risk factors, and strategic outlook.
+Welcome to the annual report. This document covers financial performance, risk factors, and strategic outlook for fiscal year 2024.
 
 ## Financial Highlights
 
 Revenue grew 15% year-over-year to $4.2 billion, driven by strong demand across all business segments. Operating income improved by 22%, reflecting disciplined cost management and operational efficiency gains. The gross margin expanded by 180 basis points to 42.3%, while free cash flow generation remained robust at $890 million, supporting continued investment in R&D and strategic acquisitions.
 
-Capital expenditures totalled $450 million, primarily directed toward expanding manufacturing capacity in key growth markets and upgrading digital infrastructure. The company returned $1.2 billion to shareholders through dividends and share buybacks during the fiscal year, demonstrating our commitment to delivering long-term shareholder value.
+Capital expenditures totalled $450 million, primarily directed toward expanding manufacturing capacity in key growth markets including Southeast Asia, Latin America, and Eastern Europe, and upgrading digital infrastructure across all operating regions. The company returned $1.2 billion to shareholders through dividends and share buybacks during the fiscal year, demonstrating our commitment to delivering long-term shareholder value.
+
+Net earnings per share increased to $6.72, up from $5.90 in the prior year, reflecting the combined impact of revenue growth, margin expansion, and disciplined share repurchase activity. The Board of Directors approved a 9% increase in the quarterly dividend to $1.01 per share.
+
+By segment, Health Care delivered the strongest performance with sales growth of 8% to $1.1 billion, followed by Fabric & Home Care at 6% growth to $1.4 billion. The Grooming segment achieved mid-single-digit growth, while Beauty and Baby, Feminine & Family Care each grew in the low single digits. E-commerce sales now represent 18% of total revenue, up from 14% in the prior year.
+
+The company completed two bolt-on acquisitions during the year for a combined consideration of $340 million, expanding our presence in the premium skincare and professional grooming categories. Integration of both businesses is on track and expected to be accretive to earnings within 12 months.
 
 ## Risk Factors
 
-The company faces risks including market volatility, supply chain disruptions, regulatory changes across multiple jurisdictions, and increasing competition from both established players and emerging startups in the technology sector.
+The company faces a broad range of risks that could materially affect our financial condition, results of operations, and cash flows. These include macroeconomic uncertainty, geopolitical tensions, evolving regulatory requirements across more than 70 countries where we operate, and increasing competition from both established multinational players and nimble direct-to-consumer startups.
+
+Foreign exchange fluctuations represent a significant risk given that approximately 55% of our revenue is generated outside the United States. In fiscal 2024, unfavourable currency movements reduced reported net sales by approximately $420 million, or roughly 2 percentage points of growth. We manage this exposure through a combination of natural hedging and financial instruments, but complete mitigation is not possible.
+
+Commodity cost inflation continues to pressure input costs. Key raw materials including resin, pulp, and palm oil experienced price increases of 8-15% during the fiscal year. While we have implemented pricing actions to offset these increases, there can be no assurance that further price increases will be accepted by consumers or retailers. Private-label competition intensifies during periods of sustained inflation.
 
 ### Cybersecurity Risks
 
-Cybersecurity threats continue to evolve in sophistication and frequency. The company invested $120 million in cybersecurity infrastructure during the fiscal year, representing a 35% increase over the prior period. Despite these investments, no assurance can be given that the company's systems will not be breached.
+Cybersecurity threats continue to evolve in sophistication and frequency. The company invested $120 million in cybersecurity infrastructure during the fiscal year, representing a 35% increase over the prior period. Our security operations centre now monitors more than 2.3 billion events per day across our global network. Despite these investments, no assurance can be given that the company's systems will not be breached, and any such breach could result in significant financial and reputational harm.
 
 ### Supply Chain Risks
 
-Global supply chain disruptions have impacted procurement costs and lead times. The company has diversified its supplier base across 12 countries and maintained safety stock levels at 45 days of inventory to mitigate these risks.
+Global supply chain disruptions have impacted procurement costs and lead times. The company has diversified its supplier base across 12 countries and maintained safety stock levels at 45 days of inventory to mitigate these risks. We have also invested $85 million in supply chain digitisation, including AI-powered demand forecasting and real-time logistics optimisation.
 
 ## Strategic Outlook
 
-The company's strategy centres on three pillars: organic growth through product innovation, selective acquisitions in adjacent markets, and margin expansion via operational excellence. R&D investment increased to $680 million, with a focus on AI-driven analytics and cloud-native platforms.
+The company's strategy centres on three pillars: organic growth through product innovation, selective acquisitions in adjacent markets, and margin expansion via operational excellence. R&D investment increased to $680 million, with a focus on AI-driven analytics and cloud-native platforms. The company plans to launch 15 new products across all segments in fiscal 2025.
 """
 
 # ── Header ──────────────────────────────────────────────────────────────────
@@ -348,7 +362,7 @@ with col1:
                     f'<span class="meta-tag">{len(child_text)} chars</span>'
                     f'<span class="meta-tag">parent: {p_idx + 1}</span>'
                     f'<pre style="white-space: pre-wrap; font-size: 0.85rem; '
-                    f'margin-top: 8px; color: #374151;">{child_text}</pre>'
+                    f'margin-top: 8px;">{child_text}</pre>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )

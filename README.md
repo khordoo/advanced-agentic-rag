@@ -104,13 +104,16 @@ cp .env.example .env
 
 ```bash
 # See how chunking works
-python examples/01_chunking_basics.py
+uv run python examples/01_chunking_basics.py
 
 # See parent-child retrieval in action
-python examples/02_parent_child.py
+uv run python examples/02_parent_child.py
 
 # See reranking improvement
-python examples/03_reranking.py
+uv run python examples/03_reranking.py
+
+# Interactive visualizer (requires: uv sync --extra demo)
+uv run streamlit run examples/streamlit_app.py
 ```
 
 ### 4. Production Stack (Docker)

@@ -24,13 +24,13 @@ uv sync
 
 ```bash
 # Run any script individually
-python examples/01_chunking_basics.py
+uv run python examples/01_chunking_basics.py
 
 # For the full pipeline (requires a .env with LLM provider config)
-python examples/04_full_pipeline.py
+uv run python examples/04_full_pipeline.py
 
 # Launch the interactive visualizer (requires: uv sync --extra demo)
-streamlit run examples/streamlit_app.py
+uv run streamlit run examples/streamlit_app.py
 ```
 
 ## Sample Documents
