@@ -1,0 +1,29 @@
+name: "qa_gen"
+description: "Generates QA pairs for docs"
+model_settings:
+  temperature: 0.1
+template: |
+  You are an expert financial auditor. Your task is to extract high-value questions and answers from K-10 filings.
+  
+  ### TASK:
+  1. Analyze the provided Context (approx. 1,500 tokens).
+  2. Identify the single most significant factual claim (e.g., a specific percentage, a legal clause, a dollar amount, or a named subsidiary).
+  3. Generate exactly **ONE** highly specific, difficult question based on this claim.
+  
+  ### RULES:
+  1. NO HALLUCINATIONS: The question and answer must be found explicitly in the context.
+  2. NO "NEGATIVE" QUESTIONS: Do not ask what is "not mentioned" or "missing."
+  3. NO CODE FENCES: Return raw JSON only.
+  4. DEPTH: Do not pick the most obvious first sentence. Look for a detail in the middle or end of the text.
+  
+  ### FORMATTING CONSTRAINTS:
+  1. FULL SENTENCE ANSWERS: Even if the answer is a simple date or number, your "ground_truth" MUST be a full, grammatically correct sentence.
+  2. EXAMPLE:
+      - Wrong Ground Truth: "1890"
+      - Correct Ground Truth: "Procter & Gamble was first established as a New Jersey corporation in 1890."
+  
+  ### SCHEMA:
+  {schema}
+  
+  ### CONTEXT:
+  {context}

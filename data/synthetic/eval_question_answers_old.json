@@ -1,0 +1,50 @@
+[
+  {
+    "question": "In which year was The Procter & Gamble Company first established as a New Jersey corporation?",
+    "ground_truth": "The Procter & Gamble Company was first established as a New Jersey corporation in 1890."
+  },
+  {
+    "question": "How many countries and territories does The Procter & Gamble Company sell its products in?",
+    "ground_truth": "The Procter & Gamble Company sells its products in about 180 countries and territories throughout the world."
+  },
+  {
+    "question": "Where can the Company's Annual Report on Form 10-K, quarterly reports on Form 10-Q, and current reports on Form 8-K be accessed electronically?",
+    "ground_truth": "The Company's Annual Report on Form 10-K, quarterly reports on Form 10-Q, and current reports on Form 8-K can be accessed electronically on the SEC's internet site at www.sec.gov."
+  },
+  {
+    "question": "How can reports filed by the Company be downloaded through links from the Company's website?",
+    "ground_truth": "Reports filed by the Company can be downloaded through links from the Company's website at www.pginvestor.com."
+  },
+  {
+    "question": "What are the five key vectors that the company focuses on to create irresistible superiority for consumers?",
+    "ground_truth": "The five key vectors are product performance, packaging, brand communication, retail execution, and value."
+  },
+  {
+    "question": "What are the various distribution channels utilized by the company to deliver its products?",
+    "ground_truth": "The company utilizes retail stores, e-commerce platforms, and direct-to-consumer platforms to deliver its products."
+  },
+  {
+    "question": "What percentage of total sales in 2024 were represented by sales to Walmart Inc. and its affiliates?",
+    "ground_truth": "Sales to Walmart Inc. and its affiliates represented approximately 16% of total sales in 2024."
+  },
+  {
+    "question": "What percentage of total net sales in 2024 were accounted for by the top ten customers?",
+    "ground_truth": "The top ten customers accounted for 42% of total net sales in 2024."
+  },
+  {
+    "question": "What types of raw and packaging materials does the Company primarily purchase from third parties?",
+    "ground_truth": "The Company primarily purchases raw and packaging materials, some of which are single-source suppliers."
+  },
+  {
+    "question": "What role do trademarks and patents play in the Company's business success?",
+    "ground_truth": "The Company's success can be attributed to the existence and continued protection of its trademarks and patents, which are used in connection with its activity in all businesses."
+  },
+  {
+    "question": "What type of competitors does the company face in the markets where its products are sold?",
+    "ground_truth": "The company faces competition from a broad range of companies, both large and small, both established and new, including well-known global competitors."
+  },
+  {
+    "question": "What are the key differentiators for the company in the highly competitive marketplace?",
+    "ground_truth": "The key differentiators for the company are its integrated strategy and focus on driving superiority across product, packaging, brand communication, retail execution, and value."
+  }
+]
