@@ -321,21 +321,19 @@ if page == "📄 Chunking Lab":
             key="text_input",
         )
 
-    if not input_text.strip():
-        st.info("👆 Paste a markdown document above or click **Load Sample** to get started.")
-        st.stop()
-
-    if not headers:
-        st.warning("Select at least one header level in the sidebar.")
-        st.stop()
-
-    # ── Process button (below the text area, full width) ────────────────────
+    # ── Process button (always visible below the text area) ───────────────────
 
     if st.button(
         "⚡  Process Document",
         type="primary",
         use_container_width=True,
     ):
+        if not input_text.strip():
+            st.error("Paste a markdown document above first.")
+            st.stop()
+        if not headers:
+            st.warning("Select at least one header level in the sidebar.")
+            st.stop()
         with st.spinner("Processing document — splitting headers, parents, and children..."):
             md_splitter = MarkdownHeaderTextSplitter(headers_to_split_on=headers)
             hdr_chunks = md_splitter.split_text(input_text)
@@ -379,6 +377,8 @@ if page == "📄 Chunking Lab":
     # ── Show results (only after processing) ────────────────────────────────
 
     if not st.session_state.processed:
+        if not input_text.strip():
+            st.info("👆 Paste a markdown document above or click **Load Sample**, then hit **Process Document**.")
         st.stop()
 
     header_chunks = st.session_state.display_header_chunks
