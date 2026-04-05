@@ -1,5 +1,22 @@
 """Markdown → parent / child chunk splitting and storage.
 
+Uses a 3-stage chunking strategy:
+
+  Stage 1 — **Header split**: Split the markdown along its natural heading
+  boundaries (#, ##, ###). This preserves the document's logical structure
+  so a section about "Risk Factors" stays together with its metadata. A naive
+  character splitter would cut right through a section, losing that context.
+
+  Stage 2 — **Recursive split into parents**: A single header section can be
+  thousands of characters (e.g. "Financial Highlights" spanning 3 pages).
+  We recursively split each section into manageable parent chunks (~1,500 ch)
+  that inherit the section metadata. These are what the LLM reads.
+
+  Stage 3 — **Sub-split into children**: For vector search, smaller text
+  produces more focused embeddings. Each parent is split into child chunks
+  (~300 ch) that get embedded in the vector DB. Each child keeps a pointer
+  back to its parent for lookup at query time.
+
 This module is **backend-agnostic**: it accepts any LangChain-compatible
 vector store so you can switch between InMemoryVectorStore (learning track),
 Chroma, or Qdrant (production track) without changing the chunking logic.

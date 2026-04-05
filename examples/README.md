@@ -18,6 +18,7 @@ uv sync
 | 02 | `02_parent_child.py` | Parent-child hierarchical retrieval pattern |
 | 03 | `03_reranking.py` | How cross-encoder reranking improves result quality |
 | 04 | `04_full_pipeline.py` | End-to-end: ingest PDF → query → get answer |
+| 🔬 | `streamlit_app.py` | **Interactive visualizer** — see all 3 chunking stages in real time |
 
 ## Running
 
@@ -27,6 +28,9 @@ python examples/01_chunking_basics.py
 
 # For the full pipeline (requires a .env with LLM provider config)
 python examples/04_full_pipeline.py
+
+# Launch the interactive visualizer (requires: uv sync --extra demo)
+streamlit run examples/streamlit_app.py
 ```
 
 ## Sample Documents

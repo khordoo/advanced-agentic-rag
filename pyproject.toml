@@ -23,6 +23,7 @@ dependencies = [
 [project.optional-dependencies]
 qdrant = ["langchain-qdrant>=0.2.0"]
 dev = ["pytest>=8.0", "pytest-asyncio>=0.25"]
+demo = ["streamlit>=1.40"]
 serve = ["fastapi>=0.115", "uvicorn>=0.34"]
 ui = ["chainlit>=2.5"]
 

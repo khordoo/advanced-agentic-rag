@@ -44,7 +44,6 @@ class RAGPipeline:
             ``{"response": str, "contexts": list[str]}``
         """
         context_docs = self.retriever.hierarchical_search(query, k=10)
-        print('context text:', context_docs)
         context_text = "\n\n----\n\n".join(context_docs)
 
         prompt = PromptLoader.load("rag_qa", context=context_text, question=query)
@@ -73,3 +72,4 @@ if __name__ == "__main__":
     print("\n--- Response ---")
     print(result["response"])
     print(f"\n({len(result['contexts'])} context chunks used)")
+    print(result["contexts"])
