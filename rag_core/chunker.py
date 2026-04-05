@@ -227,5 +227,4 @@ def store_chunks(
 
 
 def _get_clean_name(path: str | Path) -> str:
-    filename = os.path.basename(str(path))
-    return filename.replace(".pdf", "").replace("_", " ")
+    return os.path.basename(str(path))

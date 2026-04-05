@@ -76,7 +76,7 @@ def main():
     retriever = Retriever(vector_store=vector_store, doc_store=doc_store, config=cfg)
     pipeline = RAGPipeline(cfg, provider="aws", retriever=retriever)
 
-    query = "What are the main risk factors mentioned in this document?"
+    query="Identify the five largest international markets listed under 'Global Economic Conditions' and state what percentage of total net sales they collectively comprised in fiscal 2024"
     print(f'  Query: "{query}"')
 
     result = pipeline.run(query)
