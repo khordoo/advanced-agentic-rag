@@ -577,7 +577,8 @@ elif page == "🔍 Search & Chat":
     if not st.session_state.indexed:
         st.warning(
             "⚠️ No document indexed yet. Go to **📄 Chunking Lab**, "
-            "process a document, and click **Index these chunks for search**."
+            "process a document, then scroll to the bottom and click "
+            "**Index these chunks for search**."
         )
         st.stop()
 
