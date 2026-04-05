@@ -2,7 +2,7 @@
 """
 RAG Chunking Visualizer — Interactive two-page Streamlit app.
 
-Page 1 (Chunking Lab): Paste or load markdown → see the 3-stage chunking.
+Page 1 (Chunking Lab): Paste or load markdown → hit Process → see 3-stage chunking.
 Page 2 (Search & Chat): Query the indexed chunks → see retrieval pipeline → LLM answer.
 
 Run with: uv run streamlit run examples/streamlit_app.py
@@ -177,22 +177,26 @@ The company's strategy centres on three pillars: organic growth through product 
 
 # ── Session state init ──────────────────────────────────────────────────────
 
-if "indexed" not in st.session_state:
-    st.session_state.indexed = False
-if "vector_store" not in st.session_state:
-    st.session_state.vector_store = None
-if "doc_store" not in st.session_state:
-    st.session_state.doc_store = {}
-if "all_parents" not in st.session_state:
-    st.session_state.all_parents = []
-if "header_chunks" not in st.session_state:
-    st.session_state.header_chunks = []
-if "total_children" not in st.session_state:
-    st.session_state.total_children = 0
-if "input_text" not in st.session_state:
-    st.session_state.input_text = ""
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
+defaults = {
+    "indexed": False,
+    "processed": False,
+    "vector_store": None,
+    "doc_store": {},
+    "all_parents": [],
+    "header_chunks": [],
+    "total_children": 0,
+    "chat_history": [],
+    # Cached chunking results for display
+    "display_header_chunks": [],
+    "display_all_parents": [],
+    "display_parent_section_map": [],
+    "display_total_children": 0,
+    "display_child_data": [],
+    "display_text_len": 0,
+}
+for key, val in defaults.items():
+    if key not in st.session_state:
+        st.session_state[key] = val
 
 # ── Sidebar ─────────────────────────────────────────────────────────────────
 
@@ -240,10 +244,7 @@ if use_h3:
     headers.append(("###", "h3"))
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# INDEXING HELPER
-# ═══════════════════════════════════════════════════════════════════════════
-
+# ── Indexing helper ─────────────────────────────────────────────────────────
 
 def _index_chunks(all_parents, header_chunks, child_splitter, total_children):
     """Build an in-memory vector index from parent/child chunks."""
@@ -260,7 +261,6 @@ def _index_chunks(all_parents, header_chunks, child_splitter, total_children):
     for p_idx, parent in enumerate(all_parents):
         parent_id = uuid.uuid4().hex
 
-        # Build breadcrumb
         breadcrumb = " > ".join(
             str(parent.metadata.get(k, ""))
             for k in ["h1", "h2", "h3"]
@@ -297,44 +297,31 @@ def _index_chunks(all_parents, header_chunks, child_splitter, total_children):
 if page == "📄 Chunking Lab":
     st.markdown('<p class="main-title">📄 Chunking Lab</p>', unsafe_allow_html=True)
     st.markdown(
-        "Paste markdown (or load a sample), then hit **Process** to see the "
+        "Paste markdown (or load a sample), then hit **Process Document** to see the "
         "3-stage chunking strategy in action."
     )
 
     # ── Input section ───────────────────────────────────────────────────────
 
-    col_input, col_btn = st.columns([4, 1])
+    col_input, col_btn = st.columns([5, 1])
+
+    with col_btn:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("📥 Load Sample", use_container_width=True):
+            st.session_state.text_input = SAMPLE_MARKDOWN
+            st.session_state.processed = False
+            st.session_state.indexed = False
+            st.rerun()
 
     with col_input:
         input_text = st.text_area(
             "Paste your markdown document here",
-            value=st.session_state.input_text or "",
             height=200,
             placeholder="# My Document\n\n## Section 1\n\nContent here...",
             key="text_input",
         )
 
-    with col_btn:
-        st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("📥 Load Sample", use_container_width=True):
-            st.session_state.input_text = SAMPLE_MARKDOWN
-            st.rerun()
-
-        process_clicked = st.button(
-            "⚡ Process",
-            type="primary",
-            use_container_width=True,
-        )
-
-    # Sync input back to session state
-    if input_text:
-        st.session_state.input_text = input_text
-
-    # ── Process the document ────────────────────────────────────────────────
-
-    text_to_process = st.session_state.input_text
-
-    if not text_to_process.strip():
+    if not input_text.strip():
         st.info("👆 Paste a markdown document above or click **Load Sample** to get started.")
         st.stop()
 
@@ -342,10 +329,66 @@ if page == "📄 Chunking Lab":
         st.warning("Select at least one header level in the sidebar.")
         st.stop()
 
-    # --- Stage 1: Header split ---
-    md_splitter = MarkdownHeaderTextSplitter(headers_to_split_on=headers)
-    header_chunks = md_splitter.split_text(text_to_process)
+    # ── Process button (below the text area, full width) ────────────────────
 
+    if st.button(
+        "⚡  Process Document",
+        type="primary",
+        use_container_width=True,
+    ):
+        with st.spinner("Processing document — splitting headers, parents, and children..."):
+            md_splitter = MarkdownHeaderTextSplitter(headers_to_split_on=headers)
+            hdr_chunks = md_splitter.split_text(input_text)
+
+            p_splitter = RecursiveCharacterTextSplitter(
+                separators=["\n\n", "\n", " ", ""],
+                chunk_size=parent_size,
+                chunk_overlap=parent_overlap,
+            )
+            c_splitter = RecursiveCharacterTextSplitter(
+                separators=["\n\n", "\n", " ", ""],
+                chunk_size=child_size,
+                chunk_overlap=child_overlap,
+            )
+
+            parents = []
+            psec_map = []
+            for i, section in enumerate(hdr_chunks):
+                for doc in p_splitter.split_documents([section]):
+                    parents.append(doc)
+                    psec_map.append(i)
+
+            total_ch = 0
+            ch_data = []
+            for p_idx, parent in enumerate(parents):
+                texts = c_splitter.split_text(parent.page_content)
+                total_ch += len(texts)
+                ch_data.append((p_idx, texts))
+
+            st.session_state.display_header_chunks = hdr_chunks
+            st.session_state.display_all_parents = parents
+            st.session_state.display_parent_section_map = psec_map
+            st.session_state.display_total_children = total_ch
+            st.session_state.display_child_data = ch_data
+            st.session_state.display_text_len = len(input_text)
+            st.session_state.processed = True
+            st.session_state.indexed = False
+
+        st.rerun()
+
+    # ── Show results (only after processing) ────────────────────────────────
+
+    if not st.session_state.processed:
+        st.stop()
+
+    header_chunks = st.session_state.display_header_chunks
+    all_parents = st.session_state.display_all_parents
+    parent_section_map = st.session_state.display_parent_section_map
+    total_children = st.session_state.display_total_children
+    child_data = st.session_state.display_child_data
+    text_len = st.session_state.display_text_len
+
+    # --- Stage 1: Header split ---
     st.markdown("---")
     st.markdown('<span class="stage-badge stage-1">STAGE 1</span>', unsafe_allow_html=True)
     st.markdown("### 📑 Markdown Header Split")
@@ -384,32 +427,17 @@ if page == "📄 Chunking Lab":
         )
 
     # --- Stage 2: Parent split ---
-    parent_splitter = RecursiveCharacterTextSplitter(
-        separators=["\n\n", "\n", " ", ""],
-        chunk_size=parent_size,
-        chunk_overlap=parent_overlap,
-    )
-
-    all_parents = []
-    parent_section_map = []
-    for i, section in enumerate(header_chunks):
-        parent_docs = parent_splitter.split_documents([section])
-        for doc in parent_docs:
-            all_parents.append(doc)
-            parent_section_map.append(i)
-
     st.markdown("---")
     st.markdown('<span class="stage-badge stage-2">STAGE 2</span>', unsafe_allow_html=True)
     st.markdown("### 📦 Recursive Parent Split")
 
-    # Show a helpful note when no splitting happens
     sections_that_split = sum(
         1 for sec in header_chunks if len(sec.page_content) > parent_size
     )
     if sections_that_split == 0:
         st.info(
             f"All sections are under **{parent_size}** chars — no parent splitting needed. "
-            f"Try lowering the parent chunk size in the sidebar to see splitting in action."
+            f"Try lowering the parent chunk size in the sidebar to see splitting."
         )
     else:
         st.markdown(
@@ -451,13 +479,6 @@ if page == "📄 Chunking Lab":
         )
 
     # --- Stage 3: Child split ---
-    child_splitter = RecursiveCharacterTextSplitter(
-        separators=["\n\n", "\n", " ", ""],
-        chunk_size=child_size,
-        chunk_overlap=child_overlap,
-    )
-
-    total_children = 0
     st.markdown("---")
     st.markdown('<span class="stage-badge stage-3">STAGE 3</span>', unsafe_allow_html=True)
     st.markdown("### 🧩 Child Chunk Split")
@@ -469,14 +490,11 @@ if page == "📄 Chunking Lab":
 
     col1, col2 = st.columns([3, 1])
     with col1:
-        for p_idx, parent in enumerate(all_parents):
-            child_texts = child_splitter.split_text(parent.page_content)
-            total_children += len(child_texts)
-
+        for p_idx, child_texts in child_data:
             section_label = " > ".join(
-                parent.metadata.get(k, "")
+                all_parents[p_idx].metadata.get(k, "")
                 for k in ["h1", "h2", "h3"]
-                if k in parent.metadata
+                if k in all_parents[p_idx].metadata
             )
 
             with st.expander(
@@ -501,10 +519,7 @@ if page == "📄 Chunking Lab":
             unsafe_allow_html=True,
         )
         st.markdown("")
-        all_child_lens = []
-        for p in all_parents:
-            for t in child_splitter.split_text(p.page_content):
-                all_child_lens.append(len(t))
+        all_child_lens = [len(t) for _, texts in child_data for t in texts]
         avg_c = sum(all_child_lens) // max(len(all_child_lens), 1)
         st.markdown(
             f'<div class="stat-box"><div class="stat-number">{avg_c}</div>'
@@ -517,7 +532,7 @@ if page == "📄 Chunking Lab":
     st.markdown("### 📊 Pipeline Summary")
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        st.metric("Input Length", f"{len(text_to_process):,} chars")
+        st.metric("Input Length", f"{text_len:,} chars")
     with c2:
         st.metric("Header Sections", len(header_chunks))
     with c3:
@@ -526,7 +541,7 @@ if page == "📄 Chunking Lab":
         st.metric("Child Chunks", total_children)
 
     st.markdown(
-        f"**Flow:** {len(text_to_process):,} chars → "
+        f"**Flow:** {text_len:,} chars → "
         f"{len(header_chunks)} sections → "
         f"{len(all_parents)} parents → "
         f"{total_children} children"
@@ -534,13 +549,22 @@ if page == "📄 Chunking Lab":
 
     # --- Index for search ---
     st.markdown("---")
-    if st.button(
-        "✅  Index these chunks for search  →",
-        type="primary",
-        use_container_width=True,
-    ):
-        _index_chunks(all_parents, header_chunks, child_splitter, total_children)
-        st.rerun()
+    if st.session_state.indexed:
+        st.success("✅ Chunks are indexed! Switch to **🔍 Search & Chat** in the sidebar.")
+    else:
+        if st.button(
+            "✅  Index these chunks for search  →",
+            type="primary",
+            use_container_width=True,
+        ):
+            c_splitter = RecursiveCharacterTextSplitter(
+                separators=["\n\n", "\n", " ", ""],
+                chunk_size=child_size,
+                chunk_overlap=child_overlap,
+            )
+            with st.spinner("Indexing — embedding children into vector store..."):
+                _index_chunks(all_parents, header_chunks, c_splitter, total_children)
+            st.rerun()
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -574,7 +598,6 @@ elif page == "🔍 Search & Chat":
     if not query.strip():
         st.info("👆 Type a question above to search the indexed document.")
 
-        # Show chat history if any
         if st.session_state.chat_history:
             st.markdown("---")
             st.markdown("### 💬 Previous Queries")
@@ -699,13 +722,11 @@ elif page == "🔍 Search & Chat":
         )
         prompt = PromptLoader.load("rag_qa", context=context_text, question=query)
 
-        # Try to detect available provider
         provider = None
         if cfg.get("OLLAMA_BASE_URL"):
             provider = "ollama"
         if cfg.get("OPEN_AI_COMPATIBLE_BASE_URL"):
             provider = "lmstudio"
-        # AWS is default if credentials exist
         try:
             import boto3
             boto3.Session().get_credentials()
@@ -737,15 +758,12 @@ elif page == "🔍 Search & Chat":
             f'<div class="answer-card">{llm_answer}</div>',
             unsafe_allow_html=True,
         )
-
-        # Save to chat history
         st.session_state.chat_history.append({
             "query": query,
             "answer": llm_answer,
             "n_parents": len(parent_results),
         })
     elif parent_results:
-        # Still save retrieval results
         st.session_state.chat_history.append({
             "query": query,
             "answer": "(LLM not configured — retrieval results shown above)",
@@ -766,4 +784,3 @@ elif page == "🔍 Search & Chat":
 
 st.markdown("---")
 st.caption("Built with Streamlit • Part of the Advanced RAG Pipeline")
-
