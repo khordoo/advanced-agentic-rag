@@ -209,6 +209,34 @@ with st.sidebar:
     )
 
     st.markdown("---")
+    with st.expander("🤖 LLM Settings", expanded=True):
+        llm_provider = st.selectbox(
+            "Provider",
+            ["None (Retrieval Only)", "LM Studio", "Ollama", "AWS Bedrock"],
+            index=1,
+            help="Select the LLM provider for answer generation.",
+        )
+
+        llm_config = {}
+        llm_model = None
+
+        if llm_provider == "LM Studio":
+            lm_url = st.text_input("Base URL", value="http://127.0.0.1:1234/v1")
+            llm_config["OPEN_AI_COMPATIBLE_BASE_URL"] = lm_url
+            st.caption("Ensure your LM Studio local server is running. It will use whatever model you have loaded.")
+        elif llm_provider == "Ollama":
+            ollama_url = st.text_input("Base URL", value="http://127.0.0.1:11434")
+            llm_model = st.text_input("Model Name", value="gemma", help="e.g. gemma, llama3, mistral")
+            llm_config["OLLAMA_BASE_URL"] = ollama_url
+        elif llm_provider == "AWS Bedrock":
+            st.caption("Uses AWS credentials from your environment.")
+
+        # Save to session state so other pages can use it
+        st.session_state.llm_provider = llm_provider
+        st.session_state.llm_config = llm_config
+        st.session_state.llm_model = llm_model
+
+    st.markdown("---")
     st.markdown("### ⚙️ Chunking Parameters")
 
     st.markdown("**Stage 1: Header Split**")
@@ -719,45 +747,41 @@ elif page == "🔍 Search & Chat":
     llm_answer = None
 
     try:
-        from rag_core.config import load_config
         from rag_core.agents import AgentFactory, PromptLoader
 
-        cfg = load_config()
         context_text = "\n\n----\n\n".join(
             p.get("content", "") for p in parent_results
         )
         prompt = PromptLoader.load("rag_qa", context=context_text, question=query)
 
-        provider = None
-        if cfg.get("OLLAMA_BASE_URL"):
-            provider = "ollama"
-        if cfg.get("OPEN_AI_COMPATIBLE_BASE_URL"):
-            provider = "lmstudio"
-        try:
-            import boto3
-            boto3.Session().get_credentials()
-            provider = "aws"
-        except Exception:
-            pass
-
-        if provider:
-            with st.spinner(f"Generating answer via {provider}..."):
-                llm = AgentFactory.create(provider, config=cfg)
+        provider_map = {
+            "LM Studio": "lmstudio",
+            "Ollama": "ollama",
+            "AWS Bedrock": "aws",
+        }
+        
+        provider_name = st.session_state.get("llm_provider", "None (Retrieval Only)")
+        
+        if provider_name in provider_map:
+            provider_id = provider_map[provider_name]
+            cfg = st.session_state.get("llm_config", {})
+            model_name = st.session_state.get("llm_model", None)
+            
+            with st.spinner(f"Generating answer via {provider_name}..."):
+                llm = AgentFactory.create(provider_id, model_name=model_name, config=cfg)
                 response = llm.invoke(prompt.template)
                 llm_answer = response.content
         else:
             st.info(
                 "💡 **No LLM provider configured.** The retrieval pipeline above works "
-                "without an LLM. To see generated answers, configure a provider in `.env` "
-                "(AWS Bedrock, Ollama, or LM Studio)."
+                "without an LLM. To see generated answers, select a provider in the **🤖 LLM Settings** sidebar."
             )
 
     except Exception as e:
-        st.info(
-            f"💡 **LLM not available** ({type(e).__name__}). "
-            "The retrieval visualization above shows the full pipeline. "
-            "Configure an LLM provider in `.env` to see generated answers."
-        )
+        import traceback
+        st.error(f"❌ **LLM Error**: {str(e)}")
+        with st.expander("Show details"):
+            st.code(traceback.format_exc())
 
     if llm_answer:
         st.markdown(
