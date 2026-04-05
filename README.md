@@ -1,41 +1,142 @@
-from langchain_text_splitters import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
+# Advanced RAG Pipeline
 
-# 1. A dummy document with headers and one very long paragraph
-markdown_document = """
-# Introduction
-Welcome to the company. This section is short.
+A production-grade Retrieval-Augmented Generation pipeline featuring hierarchical parent-child chunking, cross-encoder reranking, hybrid search (BM25 + vector), and automated evaluation with RAGAS.
 
-## Remote Work Policy
-Employees are allowed to work from anywhere in the world. 
-However, you must have a stable internet connection at all times. This is a very long paragraph that we are intentionally making long so that the recursive splitter is forced to step in and chop it up. If we don't make it long, the recursive splitter will just look at it and say 'this is fine' and leave it alone. But we want to see the sliding window overlap in action!
-"""
+## Architecture
 
-# 2. First Pass: Split by the Markdown headers
-headers_to_split_on = [
-    ("#", "Header_1"),
-    ("##", "Header_2"),
-]
-markdown_splitter = MarkdownHeaderTextSplitter(headers_to_split_on=headers_to_split_on)
-md_splits = markdown_splitter.split_text(markdown_document)
+```
+PDF Document
+    │
+    ▼
+┌──────────────┐     ┌─────────────────────────┐
+│   Docling     │────▶│  Numbered Markdown       │
+│  (converter)  │     │  with page markers       │
+└──────────────┘     └────────────┬────────────┘
+                                  │
+                                  ▼
+                     ┌─────────────────────────┐
+                     │  Markdown Header Split   │
+                     │  (h1 > h2 > h3 sections) │
+                     └────────────┬────────────┘
+                                  │
+                     ┌────────────┴────────────┐
+                     ▼                         ▼
+              ┌─────────────┐          ┌─────────────┐
+              │   Parent     │          │   Child      │
+              │  (~1500 ch)  │          │  (~300 ch)   │
+              │  Doc Store   │          │  Vector DB   │
+              └──────┬──────┘          └──────┬──────┘
+                     │                        │
+                     │    ┌───────────────────┘
+                     │    │  similarity search
+                     │    ▼
+                     │  ┌─────────────────────┐
+                     │  │  Cross-Encoder       │
+                     │  │  Reranking           │
+                     │  └─────────┬───────────┘
+                     │            │
+                     │◀───────────┘  parent lookup
+                     │
+                     ▼
+              ┌─────────────┐
+              │     LLM      │
+              │  Generation   │
+              └─────────────┘
+```
 
-print("--- AFTER MARKDOWN SPLITTING ---")
-for i, chunk in enumerate(md_splits):
-    print(f"Chunk {i+1} Metadata: {chunk.metadata}")
-    print(f"Chunk {i+1} Text Length: {len(chunk.page_content)}")
-    print("-" * 20)
+## Features
 
-# 3. Second Pass: The Recursive Splitter
-# We set a tiny chunk size (100) just to force it to split our text
-recursive_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=100, 
-    chunk_overlap=20 # 20 characters of sliding window overlap!
-)
+- **Hierarchical Chunking** — Markdown header splitting → parent/child chunks with page-level metadata
+- **Parent-Child Retrieval** — Search small chunks (precision), return large chunks (context)
+- **Cross-Encoder Reranking** — BAAI/bge-reranker-v2-m3 for accurate re-scoring
+- **Multi-Provider LLM** — AWS Bedrock, Ollama, LM Studio, Kimi (NVIDIA)
+- **RAGAS Evaluation** — Faithfulness, relevancy, recall, precision, correctness
+- **Synthetic QA Generation** — Auto-generate test sets from your documents
+- **Docker Stack** — Qdrant (hybrid search) + LangFuse (observability)
 
-final_chunks = recursive_splitter.split_documents(md_splits)
+## Quick Start
 
-print("\n--- AFTER RECURSIVE SPLITTING ---")
-for i, chunk in enumerate(final_chunks):
-    print(f"Chunk {i+1} Metadata: {chunk.metadata}")
-    print(f"Chunk {i+1} Content: {chunk.page_content}")
-    print("-" * 20)
+### 1. Install
 
+```bash
+# Clone and install
+git clone <your-repo-url> && cd advanced-rag
+uv sync
+
+# For development
+uv sync --extra dev
+
+# For production (Qdrant)
+uv sync --extra qdrant
+```
+
+### 2. Configure
+
+```bash
+cp .env.example .env
+# Edit .env with your provider credentials
+```
+
+### 3. Run Examples (No Infra Needed)
+
+```bash
+# See how chunking works
+python examples/01_chunking_basics.py
+
+# See parent-child retrieval in action
+python examples/02_parent_child.py
+
+# See reranking improvement
+python examples/03_reranking.py
+```
+
+### 4. Production Stack (Docker)
+
+```bash
+cd docker
+docker compose up -d
+
+# Qdrant dashboard: http://localhost:6333/dashboard
+# LangFuse UI:      http://localhost:3000
+```
+
+## Project Structure
+
+```
+advanced-rag/
+├── rag_core/           # Shared library (pip-installable)
+│   ├── converter.py    # PDF → Markdown
+│   ├── chunker.py      # Markdown → parent/child chunks
+│   ├── retriever.py    # Hierarchical search + reranking
+│   ├── pipeline.py     # End-to-end RAG pipeline
+│   ├── agents.py       # LLM factory + prompt loader
+│   └── prompts/        # YAML prompt templates
+├── examples/           # Learning track (zero infra)
+├── evaluation/         # RAGAS evaluation + QA generation
+├── docker/             # Production stack (Qdrant + LangFuse)
+├── tests/              # Test suite
+└── docs/               # Source PDFs for ingestion
+```
+
+## Evaluation Results
+
+With cross-encoder reranking on child chunks before parent lookup:
+
+| Metric | Score |
+|---|---|
+| Faithfulness | 0.972 |
+| Answer Relevancy | 0.903 |
+| Context Recall | 0.917 |
+| Context Precision | 0.917 |
+| Answer Correctness | 0.836 |
+
+## Roadmap
+
+- [x] Phase 1: Restructure + Docker Compose (Qdrant + LangFuse)
+- [ ] Phase 2: Streamlit frontend for learning examples
+- [ ] Phase 3: FastAPI API layer + Chainlit chat UI
+- [ ] Phase 4: Showcase test suite (pytest)
+
+## License
+
+MIT
