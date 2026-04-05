@@ -209,7 +209,7 @@ with st.sidebar:
     )
 
     st.markdown("---")
-    with st.expander("🤖 LLM Settings", expanded=True):
+    with st.expander("🤖 LLM Settings", expanded=False):
         llm_provider = st.selectbox(
             "Provider",
             ["None (Retrieval Only)", "LM Studio", "Ollama", "AWS Bedrock"],
@@ -226,7 +226,7 @@ with st.sidebar:
             st.caption("Ensure your LM Studio local server is running. It will use whatever model you have loaded.")
         elif llm_provider == "Ollama":
             ollama_url = st.text_input("Base URL", value="http://127.0.0.1:11434")
-            llm_model = st.text_input("Model Name", value="gemma", help="e.g. gemma, llama3, mistral")
+            llm_model = st.text_input("Model Name", value="gemma4:e2b", help="e.g. gemma:2b, llama3, mistral")
             llm_config["OLLAMA_BASE_URL"] = ollama_url
         elif llm_provider == "AWS Bedrock":
             st.caption("Uses AWS credentials from your environment.")
