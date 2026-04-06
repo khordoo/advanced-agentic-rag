@@ -802,11 +802,15 @@ elif page == "🔍 Search & Chat":
                     except Exception:
                         meta = {}
 
-                section = (
-                    meta.get("h3") or meta.get("h2") or meta.get("h1")
-                    or meta.get("Header 3") or meta.get("Header 2") or meta.get("Header 1")
-                    or "General"
-                )
+                # Build section breadcrumb from all available header levels
+                header_keys = [("h1", "Header 1"), ("h2", "Header 2"), ("h3", "Header 3")]
+                breadcrumb_parts = []
+                for short_key, long_key in header_keys:
+                    val = meta.get(short_key) or meta.get(long_key)
+                    if val:
+                        breadcrumb_parts.append(str(val))
+                breadcrumb = " › ".join(breadcrumb_parts) if breadcrumb_parts else "General"
+
                 file_name = meta.get("file_name", "document")
                 page_start = meta.get("page_start")
                 page_end = meta.get("page_end")
@@ -816,17 +820,20 @@ elif page == "🔍 Search & Chat":
                 elif page_start:
                     page_label = f"Page {page_start}"
                 else:
-                    page_label = ""
+                    page_label = None
 
-                page_badge = f' · <span style="opacity:0.7">{page_label}</span>' if page_label else ""
+                # Format: file.pdf | Section Breadcrumb | Page N
+                parts = [f"<strong style='color:#1e90ff;'>📄 {file_name}</strong>"]
+                parts.append(breadcrumb)
+                if page_label:
+                    parts.append(page_label)
 
                 st.markdown(
                     f'<div style="margin-bottom:0.5rem; padding:0.6rem 1rem; '
                     f'background:rgba(30,144,255,0.06); '
                     f'border-left:3px solid #1e90ff; border-radius:0 4px 4px 0; '
                     f'font-size:0.88em;">'
-                    f'<strong style="color:#1e90ff;">📄 {file_name}</strong>'
-                    f' · Section: {section}{page_badge}'
+                    f'{" &nbsp;|&nbsp; ".join(parts)}'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
