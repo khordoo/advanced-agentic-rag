@@ -274,7 +274,7 @@ if use_h3:
 
 # ── Indexing helper ─────────────────────────────────────────────────────────
 
-def _index_chunks(all_parents, header_chunks, child_splitter, total_children):
+def _index_chunks(all_parents, header_chunks, child_splitter, total_children, doc_name="document"):
     """Build an in-memory vector index from parent/child chunks."""
     import uuid
     from langchain_core.documents import Document
@@ -297,7 +297,9 @@ def _index_chunks(all_parents, header_chunks, child_splitter, total_children):
         header = f"[Section: {breadcrumb}]\n\n"
         enriched = header + parent.page_content
 
-        doc_store[parent_id] = {"content": enriched, "metadata": dict(parent.metadata)}
+        meta = dict(parent.metadata)
+        meta["file_name"] = doc_name
+        doc_store[parent_id] = {"content": enriched, "metadata": meta}
 
         child_texts = child_splitter.split_text(parent.page_content)
         for child_text in child_texts:
@@ -337,6 +339,7 @@ if page == "📄 Chunking Lab":
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("📥 Load Sample", use_container_width=True):
             st.session_state.text_input = SAMPLE_MARKDOWN
+            st.session_state.sample_doc_name = "Annual_Report_2024.pdf"
             st.session_state.processed = False
             st.session_state.indexed = False
             st.rerun()
@@ -348,6 +351,9 @@ if page == "📄 Chunking Lab":
             placeholder="# My Document\n\n## Section 1\n\nContent here...",
             key="text_input",
         )
+
+    # Document name: use sample name if loaded, otherwise generic
+    doc_name = st.session_state.get("sample_doc_name", "clipboard_input.md")
 
     # ── Process button (always visible below the text area) ───────────────────
 
@@ -596,7 +602,7 @@ if page == "📄 Chunking Lab":
                 chunk_overlap=child_overlap,
             )
             with st.spinner("Indexing — embedding children into vector store..."):
-                _index_chunks(all_parents, header_chunks, c_splitter, total_children)
+                _index_chunks(all_parents, header_chunks, c_splitter, total_children, doc_name=doc_name or "document")
             st.rerun()
 
 
