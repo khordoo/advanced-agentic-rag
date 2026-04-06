@@ -352,7 +352,7 @@ if page == "📄 Chunking Lab":
         )
 
     # Document name: use sample name if exact match, otherwise generic clipboard
-    doc_name = "Annual_Report.pdf" if input_text.strip() == SAMPLE_MARKDOWN.strip() else "clipboard.md"
+    doc_name = "Annual_Report.pdf" if input_text.strip() == SAMPLE_MARKDOWN.strip() else "clipboard Text"
 
     # ── Process button (always visible below the text area) ───────────────────
 
@@ -819,10 +819,15 @@ elif page == "🔍 Search & Chat":
         )
 
         # ── 📑 Sources (rendered from metadata, not LLM output) ────────────
-        if parent_results:
+        # Filter sources by relevance score (e.g. cutoff = 0.1)
+        valid_parents = [p for p in parent_results if p.get("relevance_score", 1.0) >= 0.1]
+        
+        if valid_parents:
             st.markdown("#### 📑 Sources")
-            for i, parent in enumerate(parent_results):
+            for i, parent in enumerate(valid_parents):
                 meta = parent.get("metadata", {})
+                score = parent.get("relevance_score", 0.0)
+                
                 # Parse metadata if it's a string (from persisted stores)
                 if isinstance(meta, str):
                     try:
@@ -851,11 +856,15 @@ elif page == "🔍 Search & Chat":
                 else:
                     page_label = 'N/A'
 
-                # Format: file.pdf | Section Breadcrumb | Page N
+                # Format: file.pdf | Section Breadcrumb | Page N | Score
                 parts = [f"<strong style='color:#1e90ff;'>📄 {file_name}</strong>"]
                 parts.append(breadcrumb)
                 if page_label:
                     parts.append(page_label)
+                
+                # Add score badge
+                score_badge = f"<span style='background:#e2f0fd; color:#0366d6; padding:0.1rem 0.4rem; border-radius:12px; font-weight:600;'>{score:.3f}</span>"
+                parts.append(score_badge)
 
                 st.markdown(
                     f'<div style="margin-bottom:0.5rem; padding:0.6rem 1rem; '

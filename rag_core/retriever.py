@@ -79,7 +79,11 @@ class Retriever:
         pairs = [(query, doc.page_content) for doc in docs]
         scores = self.reranker.predict(pairs)
         scored = sorted(zip(scores, docs), key=lambda x: x[0], reverse=True)
-        ranked = [doc for _, doc in scored[:top_n]]
+        ranked = []
+        for score, doc in scored[:top_n]:
+            doc.metadata["relevance_score"] = float(score)
+            ranked.append(doc)
+            
         logger.info(
             "Reranked %d docs → top %d (scores: %s)",
             len(docs),
@@ -120,6 +124,7 @@ class Retriever:
                     parent_results.append({
                         "content": parent.get("content", ""),
                         "metadata": raw_meta,
+                        "relevance_score": doc.metadata.get("relevance_score", 0.0),
                     })
                 else:
                     logger.warning(
