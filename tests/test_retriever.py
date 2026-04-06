@@ -37,9 +37,10 @@ def test_similarity_search_returns_results():
 
 
 def test_hierarchical_search_returns_parent_content():
-    """Hierarchical search should return parent content strings."""
+    """Hierarchical search should return parent dicts with content and metadata."""
     vs, ds = _build_test_store()
     retriever = Retriever(vector_store=vs, doc_store=ds)
     results = retriever.hierarchical_search("cybersecurity spending", k=3, top_n=2)
     assert len(results) > 0
-    assert all(isinstance(r, str) for r in results)
+    assert all(isinstance(r, dict) for r in results)
+    assert all("content" in r and "metadata" in r for r in results)

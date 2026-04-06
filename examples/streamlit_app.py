@@ -297,7 +297,7 @@ def _index_chunks(all_parents, header_chunks, child_splitter, total_children):
         header = f"[Section: {breadcrumb}]\n\n"
         enriched = header + parent.page_content
 
-        doc_store[parent_id] = {"content": enriched, "metadata": str(parent.metadata)}
+        doc_store[parent_id] = {"content": enriched, "metadata": dict(parent.metadata)}
 
         child_texts = child_splitter.split_text(parent.page_content)
         for child_text in child_texts:
@@ -788,6 +788,49 @@ elif page == "🔍 Search & Chat":
             f'<div class="answer-card">{llm_answer}</div>',
             unsafe_allow_html=True,
         )
+
+        # ── 📑 Sources (rendered from metadata, not LLM output) ────────────
+        if parent_results:
+            st.markdown("#### 📑 Sources")
+            for i, parent in enumerate(parent_results):
+                meta = parent.get("metadata", {})
+                # Parse metadata if it's a string (from persisted stores)
+                if isinstance(meta, str):
+                    try:
+                        import json as _json
+                        meta = _json.loads(meta)
+                    except Exception:
+                        meta = {}
+
+                section = (
+                    meta.get("h3") or meta.get("h2") or meta.get("h1")
+                    or meta.get("Header 3") or meta.get("Header 2") or meta.get("Header 1")
+                    or "General"
+                )
+                file_name = meta.get("file_name", "document")
+                page_start = meta.get("page_start")
+                page_end = meta.get("page_end")
+
+                if page_start and page_end and page_start != page_end:
+                    page_label = f"Pages {page_start}–{page_end}"
+                elif page_start:
+                    page_label = f"Page {page_start}"
+                else:
+                    page_label = ""
+
+                page_badge = f' · <span style="opacity:0.7">{page_label}</span>' if page_label else ""
+
+                st.markdown(
+                    f'<div style="margin-bottom:0.5rem; padding:0.6rem 1rem; '
+                    f'background:rgba(30,144,255,0.06); '
+                    f'border-left:3px solid #1e90ff; border-radius:0 4px 4px 0; '
+                    f'font-size:0.88em;">'
+                    f'<strong style="color:#1e90ff;">📄 {file_name}</strong>'
+                    f' · Section: {section}{page_badge}'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+
         st.session_state.chat_history.append({
             "query": query,
             "answer": llm_answer,

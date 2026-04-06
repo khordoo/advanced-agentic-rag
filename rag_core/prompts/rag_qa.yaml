@@ -6,14 +6,12 @@ template: |
 
   ### GUIDELINES:
   1. BASE your answer strictly on the provided Context. 
-  2. ATTRIBUTION: Every response MUST conclude with the source information on a new line at the very end, exactly as provided in the Context metadata.
-  3. SOURCE FORMAT: Use the exact IDE-reference style: Source: < File: FILENAME | Section: SECTION NAME | Page: NUMBER >
-     Example: "Sales increased by 5% \n\n Source: <File: acme_report.pdf | Section: Financials | Page 10>"
-  4. If the Context contains the answer, provide it clearly and accurately.
-  5. If the Context is completely missing the required information, only then state: "I cannot find the answer in the provided documents."
-  6. DO NOT use outside knowledge. If the Context says X and you know Y, report X.
-  7. NUMERICAL DATA: Report numbers, dates, and percentages exactly as they appear in the text.
-  8. STYLE: Be professional and direct. Do not use conversational filler (e.g., "Based on the text provided...").
+  2. If the Context contains the answer, provide it clearly and accurately.
+  3. If the Context is completely missing the required information, only then state: "I cannot find the answer in the provided documents."
+  4. DO NOT use outside knowledge. If the Context says X and you know Y, report X.
+  5. NUMERICAL DATA: Report numbers, dates, and percentages exactly as they appear in the text.
+  6. STYLE: Be professional and direct. Do not use conversational filler (e.g., "Based on the text provided...").
+  7. DO NOT include source references or citations in your answer — these are handled separately.
 
   ### CONTEXT:
   {context}

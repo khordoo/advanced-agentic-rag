@@ -41,10 +41,11 @@ class RAGPipeline:
         Returns
         -------
         dict
-            ``{"response": str, "contexts": list[str]}``
+            ``{"response": str, "contexts": list[dict]}``
+            Each context dict has ``{"content": str, "metadata": dict}``.
         """
         context_docs = self.retriever.hierarchical_search(query, k=10)
-        context_text = "\n\n----\n\n".join(context_docs)
+        context_text = "\n\n----\n\n".join(d["content"] for d in context_docs)
 
         prompt = PromptLoader.load("rag_qa", context=context_text, question=query)
         response = self.llm.invoke(prompt.template)
@@ -72,4 +73,4 @@ if __name__ == "__main__":
     print("\n--- Response ---")
     print(result["response"])
     print(f"\n({len(result['contexts'])} context chunks used)")
-    print(result["contexts"])
+

@@ -48,7 +48,7 @@ def build_evaluation_set(
                 "user_input": case["question"],
                 "reference": case["ground_truth"],
                 "response": rag_out["response"],
-                "retrieved_contexts": rag_out["contexts"],
+                "retrieved_contexts": [c["content"] for c in rag_out["contexts"]],
             }
         )
         logger.info("Completed test case %d/%d", idx + 1, len(test_cases))

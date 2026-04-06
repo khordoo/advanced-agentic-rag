@@ -88,16 +88,20 @@ class Retriever:
         )
         return ranked
 
-    def hierarchical_search(self, query: str, k: int = 15, top_n: int = 3) -> list[str]:
-        """Search child chunks → rerank → deduplicate → return parent contents.
+    def hierarchical_search(self, query: str, k: int = 15, top_n: int = 3) -> list[dict]:
+        """Search child chunks → rerank → deduplicate → return parent dicts.
 
-        This is the primary retrieval method used by :class:`RAGPipeline`.
+        Returns
+        -------
+        list[dict]
+            Each dict has ``{"content": str, "metadata": dict}``.
+            This is the primary retrieval method used by :class:`RAGPipeline`.
         """
         child_docs = self.similarity_search(query, k=k)
         child_docs = self.rerank(query, child_docs, top_n=top_n)
 
         seen_parents: set[str] = set()
-        parent_contents: list[str] = []
+        parent_results: list[dict] = []
 
         for doc in child_docs:
             parent_id = doc.metadata.get("parent")
@@ -105,7 +109,18 @@ class Retriever:
                 seen_parents.add(parent_id)
                 parent = self.doc_store.get(parent_id)
                 if parent:
-                    parent_contents.append(parent.get("content", ""))
+                    # metadata may be stored as a JSON string or a dict
+                    raw_meta = parent.get("metadata", {})
+                    if isinstance(raw_meta, str):
+                        try:
+                            import json
+                            raw_meta = json.loads(raw_meta)
+                        except (json.JSONDecodeError, ValueError):
+                            raw_meta = {}
+                    parent_results.append({
+                        "content": parent.get("content", ""),
+                        "metadata": raw_meta,
+                    })
                 else:
                     logger.warning(
                         "Parent ID %s found in vector DB but missing in document store",
@@ -115,6 +130,6 @@ class Retriever:
         logger.info(
             "Hierarchical search: %d children → %d unique parents",
             len(child_docs),
-            len(parent_contents),
+            len(parent_results),
         )
-        return parent_contents
+        return parent_results
