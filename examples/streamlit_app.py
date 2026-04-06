@@ -694,13 +694,16 @@ elif page == "🔍 Search & Chat":
 
     seen_parents = set()
     parent_results = []
-    for _, doc in reranked:
+    for score, doc in reranked:
         pid = doc.metadata.get("parent")
         if pid and pid not in seen_parents:
             seen_parents.add(pid)
             parent = doc_store.get(pid)
             if parent:
-                parent_results.append(parent)
+                # Copy the dictionary and attach the cross-encoder score from the child chunk
+                parent_copy = dict(parent)
+                parent_copy["relevance_score"] = float(score)
+                parent_results.append(parent_copy)
 
     # ── Visualize the 3-column retrieval pipeline ───────────────────────────
 
