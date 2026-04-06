@@ -353,7 +353,7 @@ if page == "📄 Chunking Lab":
         )
 
     # Document name: use sample name if loaded, otherwise generic
-    doc_name = st.session_state.get("sample_doc_name", "clipboard_input.md")
+    doc_name = st.session_state.get("sample_doc_name", "clipboard.md")
 
     # ── Process button (always visible below the text area) ───────────────────
 
@@ -369,8 +369,26 @@ if page == "📄 Chunking Lab":
             st.warning("Select at least one header level in the sidebar.")
             st.stop()
         with st.spinner("Processing document — splitting headers, parents, and children..."):
+            from rag_core.converter import PAGE_PATTERN
+
             md_splitter = MarkdownHeaderTextSplitter(headers_to_split_on=headers)
             hdr_chunks = md_splitter.split_text(input_text)
+            
+            last_seen_page = 1
+            for doc in hdr_chunks:
+                pages = [int(x) for x in PAGE_PATTERN.findall(doc.page_content)]
+                if pages:
+                    doc.metadata["page_start"] = min(pages)
+                    doc.metadata["page_end"] = max(pages)
+                    doc.metadata["pages"] = sorted(set(pages))
+                    last_seen_page = doc.metadata["page_end"]
+                else:
+                    doc.metadata["page_start"] = last_seen_page
+                    doc.metadata["page_end"] = last_seen_page
+                    doc.metadata["pages"] = [last_seen_page]
+
+                # Strip page markers from text (metadata already captured)
+                doc.page_content = PAGE_PATTERN.sub("", doc.page_content).strip()
 
             p_splitter = RecursiveCharacterTextSplitter(
                 separators=["\n\n", "\n", " ", ""],
@@ -434,8 +452,11 @@ if page == "📄 Chunking Lab":
     col1, col2 = st.columns([3, 1])
     with col1:
         for i, chunk in enumerate(header_chunks):
+            header_vals = [str(v) for k, v in chunk.metadata.items() if k in ["h1", "h2", "h3"]]
+            section_label = " > ".join(header_vals) if header_vals else "General"
+            
             with st.expander(
-                f"Section {i + 1}  —  {' > '.join(chunk.metadata.values())}  "
+                f"Section {i + 1}  —  {section_label}  "
                 f"({len(chunk.page_content)} chars)",
                 expanded=i == 0,
             ):
@@ -487,7 +508,10 @@ if page == "📄 Chunking Lab":
     col1, col2 = st.columns([3, 1])
     with col1:
         for i, (parent, sec_idx) in enumerate(zip(all_parents, parent_section_map)):
-            section_label = " > ".join(header_chunks[sec_idx].metadata.values())
+            sec_meta = header_chunks[sec_idx].metadata
+            header_vals = [str(v) for k, v in sec_meta.items() if k in ["h1", "h2", "h3"]]
+            section_label = " > ".join(header_vals) if header_vals else "General"
+            
             needs_split = len(header_chunks[sec_idx].page_content) > parent_size
             split_indicator = " ✂️" if needs_split else ""
 
@@ -826,7 +850,7 @@ elif page == "🔍 Search & Chat":
                 elif page_start:
                     page_label = f"Page {page_start}"
                 else:
-                    page_label = None
+                    page_label = 'N/A'
 
                 # Format: file.pdf | Section Breadcrumb | Page N
                 parts = [f"<strong style='color:#1e90ff;'>📄 {file_name}</strong>"]
