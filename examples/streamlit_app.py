@@ -339,7 +339,6 @@ if page == "📄 Chunking Lab":
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("📥 Load Sample", use_container_width=True):
             st.session_state.text_input = SAMPLE_MARKDOWN
-            st.session_state.sample_doc_name = "Annual_Report_2024.pdf"
             st.session_state.processed = False
             st.session_state.indexed = False
             st.rerun()
@@ -352,8 +351,8 @@ if page == "📄 Chunking Lab":
             key="text_input",
         )
 
-    # Document name: use sample name if loaded, otherwise generic
-    doc_name = st.session_state.get("sample_doc_name", "clipboard.md")
+    # Document name: use sample name if exact match, otherwise generic clipboard
+    doc_name = "Annual_Report.pdf" if input_text.strip() == SAMPLE_MARKDOWN.strip() else "clipboard.md"
 
     # ── Process button (always visible below the text area) ───────────────────
 
