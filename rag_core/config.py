@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import logging
 from pathlib import Path
-from dotenv import dotenv_values
+from dotenv import dotenv_values, load_dotenv
 
 logger = logging.getLogger(__name__)
 
@@ -28,11 +28,13 @@ _DEFAULTS: dict[str, str] = {
     "CHILD_CHUNK_SIZE": "300",
     "CHILD_CHUNK_OVERLAP": "50",
     "RERANK_TOP_N": "3",
+    "TABLE_CONTEXT_WINDOW": "3",
     # Qdrant (production track)
     "QDRANT_URL": "http://localhost:6333",
     "QDRANT_COLLECTION_NAME": "docs",
     # LangFuse (production track)
     "LANGFUSE_HOST": "http://localhost:3000",
+    'LOG_LEVEL':'INFO'
 }
 
 
@@ -84,3 +86,14 @@ def load_config(env_path: str | Path | None = None) -> dict[str, str]:
 
     logger.debug("Config loaded (%d keys)", len(config))
     return config
+
+def setup_logging():
+    """Independent logging setup that reads directly from the environment."""
+    load_dotenv()
+    level_name = os.environ.get('LOG_LEVEL','INFO').upper()
+    level = getattr(logging,level_name,logging.INFO)
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        force=True
+    )

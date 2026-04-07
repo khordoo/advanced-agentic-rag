@@ -67,7 +67,7 @@ if __name__ == "__main__":
 
     query = "What are the key differentiators mentioned in the company's integrated strategy?"
     query= 'where can we find Information on key product categories?'
-    pipeline = RAGPipeline(cfg, provider="aws")
+    pipeline = RAGPipeline(cfg, provider="lmstudio")
     result = pipeline.run(query)
 
     print("\n--- Response ---")
