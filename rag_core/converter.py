@@ -8,12 +8,22 @@ import re
 from pathlib import Path
 
 from docling.document_converter import DocumentConverter
-
+from docling_core.types.doc import TableItem, TextItem
 logger = logging.getLogger(__name__)
 
 PAGE_TMPL = "<!-- PAGE_{n} -->"
 _pattern_str = re.escape(PAGE_TMPL).replace(r"\{n\}", r"(\d+)")
 PAGE_PATTERN = re.compile(_pattern_str)
+
+def _convert_tables_to_markdown(document: Document) -> str:
+    """Convert tables to markdown."""
+    markdown_tables = []
+    for i, element in enumerate(document.elements):
+        if isinstance(TableItem):
+            if i>0 and isinstance(TextItem):
+               preced_text = ''
+            table_markdown = element.export_to_markdown()
+
 
 
 def convert_pdf_to_markdown(
@@ -30,7 +40,7 @@ def convert_pdf_to_markdown(
     input_path:
         Path to the source PDF.
     output_path:
-        If provided, the numbered markdown is written to this file.
+        If provided, the numbered markdown is written to this dir.
 
     Returns
     -------
@@ -45,7 +55,10 @@ def convert_pdf_to_markdown(
     converter = DocumentConverter()
     logger.info("Converting %s to markdown …", input_path.name)
     result = converter.convert(str(input_path))
-
+    # print('Result:',result)
+    # all_items=result.document.items()
+    # print('all items:',all_items)
+    # exit(1)
     # Export with page-break placeholders
     raw_markdown = result.document.export_to_markdown(
         page_break_placeholder=PAGE_TMPL
@@ -58,7 +71,6 @@ def convert_pdf_to_markdown(
         for i, part in enumerate(parts)
         if part.strip()
     )
-
     # Persist to disk (optional)
     if output_path is not None:
         output_path = Path(output_path)

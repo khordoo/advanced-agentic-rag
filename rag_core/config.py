@@ -16,6 +16,7 @@ _REQUIRED_KEYS: list[str] = []
 _DEFAULTS: dict[str, str] = {
     "CHROMA_COLLECTION_NAME": "docs",
     "CHROMA_PERSIST_DIRECTORY": "artifacts/chroma_db",
+    "DOCS_DIR": "docs",
     "PROCCESED_DOCS_DIR": "data/processed",
     "DOCUMENT_STORE_PERSIST_PATH": "artifacts/document_store/document_store.pkl",
     "SYNTHETIC_QA_PERSIST_PATH": "data/synthetic/eval_question_answers.json",

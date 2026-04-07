@@ -204,6 +204,7 @@ def store_chunks(
     vector_store,
     doc_store: dict[str, dict],
     persist_path: str | Path | None = None,
+    vectore_store_reset_collection: bool = True
 ) -> None:
     """Store parent/child chunks into a vector store and document store.
 

@@ -1,13 +1,14 @@
 """Retriever with hierarchical parent-child search and cross-encoder reranking."""
 
 from __future__ import annotations
-
+import json
 import logging
 import pickle
 from pathlib import Path
 
 from langchain_huggingface import HuggingFaceEmbeddings
 from sentence_transformers import CrossEncoder
+
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +84,7 @@ class Retriever:
         for score, doc in scored[:top_n]:
             doc.metadata["relevance_score"] = float(score)
             ranked.append(doc)
-            
+
         logger.info(
             "Reranked %d docs → top %d (scores: %s)",
             len(docs),
@@ -103,10 +104,8 @@ class Retriever:
         """
         child_docs = self.similarity_search(query, k=k)
         child_docs = self.rerank(query, child_docs, top_n=top_n)
-
         seen_parents: set[str] = set()
         parent_results: list[dict] = []
-
         for doc in child_docs:
             parent_id = doc.metadata.get("parent")
             if parent_id and parent_id not in seen_parents:

@@ -46,7 +46,6 @@ class RAGPipeline:
         """
         context_docs = self.retriever.hierarchical_search(query, k=10)
         context_text = "\n\n----\n\n".join(d["content"] for d in context_docs)
-
         prompt = PromptLoader.load("rag_qa", context=context_text, question=query)
         response = self.llm.invoke(prompt.template)
 
@@ -67,10 +66,13 @@ if __name__ == "__main__":
     cfg = load_config()
 
     query = "What are the key differentiators mentioned in the company's integrated strategy?"
+    query= 'where can we find Information on key product categories?'
     pipeline = RAGPipeline(cfg, provider="aws")
     result = pipeline.run(query)
 
     print("\n--- Response ---")
     print(result["response"])
+    print('----Sources-----------')
+    for r in result['contexts']:
+        print(r['metadata'])
     print(f"\n({len(result['contexts'])} context chunks used)")
-
