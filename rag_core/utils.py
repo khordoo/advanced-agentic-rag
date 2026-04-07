@@ -1,7 +1,5 @@
 import time
 import logging
-import itertools
-from docling_core.types.doc import TableItem, TextItem
 
 logger = logging.getLogger(__name__)
 
