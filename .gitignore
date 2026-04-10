@@ -15,6 +15,7 @@ wheels/
 # Runtime data & artifacts
 artifacts/
 data/
+scratch/
 *.pkl
 
 # OS
@@ -27,5 +28,8 @@ Thumbs.db
 *.swp
 *.swo
 
+
 # Models (downloaded at runtime)
 models/
+gemini.md
+gemini.cmd

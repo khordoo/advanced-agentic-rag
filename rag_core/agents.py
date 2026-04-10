@@ -4,14 +4,18 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-
+from typing import Optional
+from langgraph.graph.state import NoneType
 import yaml
-from langchain_aws import ChatBedrockConverse
-from langchain_core.language_models import BaseChatModel
+import json
+from pydantic import ValidationError
 from langchain_ollama import ChatOllama
 from langchain_openai import ChatOpenAI
+from langchain_aws import ChatBedrockConverse
+from langchain_core.language_models import BaseChatModel
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
-from rag_core.schemas import PromptConfig
+from rag_core.schemas import PromptConfig, ExtractedTable ,TableSummary
 
 logger = logging.getLogger(__name__)
 
@@ -21,28 +25,27 @@ logger = logging.getLogger(__name__)
 
 _PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
 
-
 class PromptLoader:
     """Load and render YAML prompt templates shipped with the package."""
+    def __init__(self,config:PromptConfig)->"PromptLoader":
+        self.config = config
 
     @classmethod
-    def load(cls, name: str, **kwargs) -> PromptConfig:
-        """Load a prompt by *name* (without extension) and render it.
-
-        Any extra ``**kwargs`` are interpolated into the template string via
-        ``str.format()``.
-        """
-        file_path = _PROMPTS_DIR / f"{name}.yaml"
+    def load(cls,name:str)->"PromptLoader":
+        file_path = Path(_PROMPTS_DIR) / f'{name}.yaml'
         if not file_path.is_file():
             raise FileNotFoundError(f"Prompt template not found: {file_path}")
 
-        with open(file_path, "r", encoding="utf-8") as fh:
-            raw_data = yaml.safe_load(fh)
+        with open(file_path,'r',encoding="utf-8") as f:
+            raw_data = yaml.safe_load(f)
+        prompt_config = PromptConfig(**raw_data)
+        return cls(prompt_config)
 
-        config = PromptConfig(**raw_data)
-        config.template = config.template.format(**kwargs)
-        return config
-
+    def render(self,**kwargs):
+        # Making a copy to avoid overwriting the template place holders {}
+        return self.config.model_copy(
+            update={"template":self.config.template.format(**kwargs)}
+        )
 
 # ---------------------------------------------------------------------------
 # Agent / LLM factory
@@ -55,7 +58,7 @@ class AgentFactory:
     DEFAULT_TEMP = 0.2
     DEFAULT_AWS_MODEL = "amazon.nova-micro-v1:0"
     DEFAULT_KIMI_MODEL = "moonshotai/kimi-k2.5"
-    DEFAULT_OLLAMA_MODEL = "gemma4:e2b"
+    DEFAULT_SUMMERIZER_MODEL = "lmstudio-community/gemma-4-e2b-it:Q4_K_S"
 
     @classmethod
     def create(
@@ -123,7 +126,47 @@ class AgentFactory:
         """Return a deterministic model suitable for LLM-as-judge evaluation."""
         return cls.create(
             provider,
-            model_name="amazon.nova-pro-v1:0",
+            model_name="amazon.nova-micro-v1:0",
             temperature=0,
             config=config,
         )
+
+    @classmethod
+    def get_table_summerizer(cls,provider='lmstudio', prompt_name='table_summary'):
+        agent=cls.create(provider=provider)
+        prompt_config = PromptLoader.load(prompt_name)
+        return TableSummarizer(agent,prompt_config)
+
+def log_retry(retry_state):
+    print(
+        f"attempt={retry_state.attempt_number} "
+        f"failed with={retry_state.outcome.exception()!r}"
+    )
+
+class TableSummarizer:
+    """A specialized agent for turning complex tables into searchable summaries."""
+
+    def __init__(self, model: Optional[BaseChatModel]=None,prompt_loader:PromptLoader=None):
+        self.llm = model or AgentFactory.create(provider='lmstudio')
+        # Load our 'table_summary' prompt once
+        self.prompt_loader = prompt_loader or PromptLoader.load('table_summary')
+    @retry(
+        stop = stop_after_attempt(3),
+        wait = wait_exponential(multiplier=1,min=1,max=8),
+        retry=retry_if_exception_type(
+            (json.JSONDecodeError,ValidationError,)
+        ),
+        before_sleep=log_retry,
+        reraise=True
+    )
+    def summarize(self, table_markdown: str) -> str:
+        """Generates a concise summary for a single table."""
+        logger.info("Generating table summary", extra={"table_chars": len(table_markdown)})
+        prompt =self.prompt_loader.render(table_markdown=table_markdown)
+        logger.debug("Rendered table summary prompt", extra={"prompt_preview": prompt.template[:200]})
+        res = self.llm.invoke(prompt.template)
+        logger.debug("LLM returned response", extra={"raw_response": res.content})
+        data = json.loads(res.content)
+        parsed = TableSummary.model_validate(data)
+        logger.info("Table summary generated successfully")
+        return parsed.to_markdown()

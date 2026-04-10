@@ -41,7 +41,8 @@ from langchain_text_splitters import (
 )
 
 from rag_core.converter import PAGE_PATTERN
-
+from rag_core.schemas import ParentChunk
+from rag_core.agents import TableSummarizer
 logger = logging.getLogger(__name__)
 
 # Default header hierarchy for markdown splitting
@@ -53,19 +54,7 @@ HEADERS_TO_SPLIT_ON = [
 HEADER_KEYS = [v for _, v in HEADERS_TO_SPLIT_ON]
 
 
-# ---------------------------------------------------------------------------
-# Data structures
-# ---------------------------------------------------------------------------
 
-
-@dataclass
-class ParentChunk:
-    """A parent chunk with its child documents ready for storage."""
-
-    parent_id: str
-    enriched_text: str
-    metadata: dict[str, Any]
-    children: list[Document] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -193,7 +182,6 @@ def chunk_markdown(
     )
     return all_parent_chunks
 
-
 # ---------------------------------------------------------------------------
 # Storage helpers
 # ---------------------------------------------------------------------------
@@ -204,6 +192,7 @@ def store_chunks(
     vector_store,
     doc_store: dict[str, dict],
     persist_path: str | Path | None = None,
+    vectore_store_reset_collection: bool = True
 ) -> None:
     """Store parent/child chunks into a vector store and document store.
 
@@ -225,7 +214,10 @@ def store_chunks(
             "content": chunk.enriched_text,
             "metadata": json.dumps(chunk.metadata, default=str),
         }
+        print('******************Storing Chunks*******************************')
         if chunk.children:
+            print(chunk.children)
+            print('.....'*30)
             vector_store.add_documents(chunk.children)
 
     logger.info("Stored %d parent chunks in document store", len(chunks))
@@ -242,6 +234,50 @@ def store_chunks(
 # Helpers
 # ---------------------------------------------------------------------------
 
+def summerize_and_chunk_table(table_data_list: list[dict], model:TableSummarizer,summerize_enabled=True) -> list[ParentChunk]:
+    logger.info("Summarizing %d tables", len(table_data_list))
+    parent_chunks=[]
+    for i,table_data in enumerate(table_data_list):
+        table_id = f"DATA_TABLE_{i:03d}"
+        raw_md = table_data['markdown']
+
+        base_header = f"[Doc: {table_data['file_name']}] [Section: Data Table] [Location: Page {table_data['page_no']}]"
+
+        logger.debug(
+            "Summarizing table %s from %s page %s",
+            table_id,
+            table_data['file_name'],
+            table_data['page_no'],
+        )
+        table_summary =model.summarize(table_markdown=raw_md) if summerize_enabled else table_data
+        logger.debug("Summary ready for table %s", table_id)
+        parent_id = uuid.uuid4().hex
+        # Create the Child (The Searchable Vector)
+        # We explicitly put the table_id in the text so the vector DB indexes it!
+        # header = f"[Doc: {table_data['file_name']}] [Location: Page {table_data['page_no']}]\n\n"
+        child_text = f"{base_header}[SUMMARY FOR {table_id}]\n\n{table_summary}"
+        child_doc = Document(
+                    page_content=child_text,
+                    metadata={
+                        "parent": parent_id,
+                        "table_id": table_id, # Added for strict metadata filtering
+                        "page_start":table_data['page_no']
+                    }
+                )
+        # Create the Parent (The LLM Payload)
+        # We append the ID to the top so the LLM has a visual anchor
+        parent_text = f"{base_header}\n[{table_id}]\n\n{raw_md}"
+        parent_chunks.append(
+            ParentChunk(
+                parent_id=parent_id,
+                enriched_text=parent_text,
+                metadata=child_doc.metadata,
+                children=[child_doc],
+            )
+        )
+
+    logger.info("Created %d table parent chunks", len(parent_chunks))
+    return parent_chunks
 
 def _get_clean_name(path: str | Path) -> str:
     return os.path.basename(str(path))

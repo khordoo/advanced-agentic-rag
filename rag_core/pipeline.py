@@ -44,10 +44,15 @@ class RAGPipeline:
             ``{"response": str, "contexts": list[dict]}``
             Each context dict has ``{"content": str, "metadata": dict}``.
         """
-        context_docs = self.retriever.hierarchical_search(query, k=10)
+        context_docs = self.retriever.hierarchical_search(
+            query,
+            k=10,
+            top_n=int(self.config.get('RERANK_TOP_N',3)))
+        for d in context_docs:
+            print(d["content"])
+            print('---'*50)
         context_text = "\n\n----\n\n".join(d["content"] for d in context_docs)
-
-        prompt = PromptLoader.load("rag_qa", context=context_text, question=query)
+        prompt = PromptLoader.load("rag_qa").render(context=context_text, question=query)
         response = self.llm.invoke(prompt.template)
 
         return {
@@ -66,11 +71,17 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     cfg = load_config()
 
-    query = "What are the key differentiators mentioned in the company's integrated strategy?"
+    # query = "What are the key differentiators mentioned in the company's integrated strategy?"
+    query= "According to the 'Net Sales Change Drivers 2024 vs. 2023' table, what was the specific percentage impact of foreign exchange on the net sales growth for the Grooming segment?"
+    # query="According to the 'Net Sales Change Drivers 2024 vs. 2023' table, which specific reportable segment experienced a 2% favorable 'Mix' impact on its net sales growth?"
+    # "ground_truth": "The Health Care segment experienced a 2% favorable Mix impact on its net sales growth."
+    quer="find something about Net Sales Change Drivers?"
     pipeline = RAGPipeline(cfg, provider="aws")
     result = pipeline.run(query)
 
     print("\n--- Response ---")
     print(result["response"])
+    print('----Sources-----------')
+    for r in result['contexts']:
+        print(r['metadata'])
     print(f"\n({len(result['contexts'])} context chunks used)")
-
