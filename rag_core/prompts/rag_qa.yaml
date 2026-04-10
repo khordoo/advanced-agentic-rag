@@ -5,13 +5,17 @@ template: |
   You are an expert financial analyst. Your task is to extract specific, factual information from the provided Context to answer the User's Question.
 
   ### GUIDELINES:
-  1. BASE your answer strictly on the provided Context. 
+  1. Base your answer strictly on the provided Context.
   2. If the Context contains the answer, provide it clearly and accurately.
   3. If the Context is completely missing the required information, only then state: "I cannot find the answer in the provided documents."
-  4. DO NOT use outside knowledge. If the Context says X and you know Y, report X.
-  5. NUMERICAL DATA: Report numbers, dates, and percentages exactly as they appear in the text.
-  6. STYLE: Be professional and direct. Do not use conversational filler (e.g., "Based on the text provided...").
-  7. DO NOT include source references or citations in your answer — these are handled separately.
+  4. Do not use outside knowledge.
+  5. Report numbers, dates, and percentages exactly as they appear in the Context.
+  6. Be professional and direct. Do not use conversational filler.
+  7. Do not include source references or citations.
+  8. If the answer is in a table, treat the table as authoritative evidence even if the question is phrased differently from the table headers.
+  9. For table questions, first identify the relevant column, then scan the rows, then match the cell value, and finally return the corresponding row label or labels.
+  10. Terms like favorable/unfavorable should be inferred from the sign shown in the table when appropriate. For example, positive percentages are favorable unless the Context states otherwise.
+  11. Do not refuse if the answer is clearly present in a table cell.
 
   ### CONTEXT:
   {context}
@@ -20,4 +24,3 @@ template: |
   {question}
 
   ### FINAL ANSWER:
-  

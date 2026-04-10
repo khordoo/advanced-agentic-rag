@@ -1,0 +1,2 @@
+class OutputValidationError(Exception):
+    pass

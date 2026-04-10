@@ -1,134 +1,22 @@
 [
   {
-    "question": "What is the specific type of report filed by the company for the fiscal year ended June 30, 2024, and under which section of the Securities Exchange Act of 1934 is it filed?",
-    "ground_truth": "The company filed an ANNUAL REPORT PURSUANT TO SECTION 13 OR 15(d) OF THE SECURITIES EXCHANGE ACT OF 1934 for the fiscal year ended June 30, 2024."
+    "question": "According to the 'Net Sales Change Drivers 2024 vs. 2023' table, what was the specific percentage impact of foreign exchange on the net sales growth for the Grooming segment?",
+    "ground_truth": "The foreign exchange impact on the Grooming segment's net sales growth was (5)%."
   },
   {
-    "question": "What is the specific percentage rate of the EUR Notes due in 2028 that are registered on the New York Stock Exchange?",
-    "ground_truth": "The specific percentage rate of the EUR Notes due in 2028 that are registered on the New York Stock Exchange is 3.150%."
+    "question": "Based on the 'Operating Costs' table, what was the basis point change for 'Selling, general and administrative expense' as a percentage of net sales from fiscal 2023 to 2024, and what was its final percentage in 2024?",
+    "ground_truth": "The basis point change for Selling, general and administrative expense was 200 bps, bringing it to 27.7% of net sales in 2024."
   },
   {
-    "question": "What is the ticker symbol for the 1.875% Notes due 2038 on the New York Stock Exchange?",
-    "ground_truth": "The ticker symbol for the 1.875% Notes due 2038 on the New York Stock Exchange is PG38."
+    "question": "Looking at the 'SUMMARY OF 2024 RESULTS' table, what was the percentage change in 'Core earnings per share' compared to the prior year, and what was the absolute dollar value reported for 2024?",
+    "ground_truth": "Core earnings per share increased by 12% compared to the prior year, reaching an absolute value of $6.59 in 2024."
   },
   {
-    "question": "According to the provided context, what specific filing status does Procter & Gamble Company hold under the Securities Exchange Act of 1934?",
-    "ground_truth": "Procter & Gamble Company is an accelerated filer under the Securities Exchange Act of 1934."
+    "question": "In the 'BEAUTY' segment financial table, what was the year-over-year percentage change in net earnings for 2024, and what was the total net earnings amount in millions?",
+    "ground_truth": "Net earnings for the Beauty segment decreased by (7)% year-over-year, totaling $2,963 million in 2024."
   },
   {
-    "question": "According to the document, has Procter & Gamble filed a report on and attestation to its management's assessment of the effectiveness of its internal control over financial reporting under Section 404(b) of the Sarbanes-Oxley Act?",
-    "ground_truth": "No, Procter & Gamble has not filed a report on and attestation to its management's assessment of the effectiveness of its internal control over financial reporting under Section 404(b) of the Sarbanes-Oxley Act."
-  },
-  {
-    "question": "What was the aggregate market value of the voting stock held by non-affiliates of Procter & Gamble as of December 31, 2023?",
-    "ground_truth": "The aggregate market value of the voting stock held by non-affiliates amounted to $345 billion on December 31, 2023."
-  },
-  {
-    "question": "What is the specific timeframe within which the Proxy Statement for the 2024 Annual Meeting of Shareholders is expected to be filed after the fiscal year ended June 30, 2024?",
-    "ground_truth": "The Proxy Statement for the 2024 Annual Meeting of Shareholders is expected to be filed within one hundred and twenty days of the fiscal year ended June 30, 2024."
-  },
-  {
-    "question": "What specific section of the Form 10-K discusses unresolved staff comments and cybersecurity?",
-    "ground_truth": "The specific section of the Form 10-K that discusses unresolved staff comments is Item 1B, and the section that discusses cybersecurity is Item 1C."
-  },
-  {
-    "question": "What specific section of the Form 10-K contains the 'Management's Report and Reports of Independent Registered Public Accounting Firm'?",
-    "ground_truth": "The 'Management's Report and Reports of Independent Registered Public Accounting Firm' is located in Item 8 of the Form 10-K."
-  },
-  {
-    "question": "What specific accounting policy is detailed in Note 1 of the Consolidated Financial Statements?",
-    "ground_truth": "Note 1 details the Summary of Significant Accounting Policies."
-  },
-  {
-    "question": "What specific financial metric or detail is discussed in Note 9: Risk Management Activities and Fair Value Measurements on page 58 of the Form 10-K?",
-    "ground_truth": "Note 9: Risk Management Activities and Fair Value Measurements discusses the company's risk management strategies and the fair value measurements of its financial instruments."
-  },
-  {
-    "question": "What specific subsequent event is mentioned in Note 15 of the Form 10-K, and on which page can it be found?",
-    "ground_truth": "The specific subsequent event is mentioned in Note 15 of the Form 10-K, and it can be found on page 64."
-  },
-  {
-    "question": "What is the specific page number where the 'Form 10-K Summary' can be found in the document?",
-    "ground_truth": "The 'Form 10-K Summary' can be found on page 69 of the document."
-  },
-  {
-    "question": "In which year was The Procter & Gamble Company first established as a New Jersey corporation?",
-    "ground_truth": "The Procter & Gamble Company was first established as a New Jersey corporation in 1890."
-  },
-  {
-    "question": "Where can the Company's Annual Report on Form 10-K, quarterly reports on Form 10-Q, and current reports on Form 8-K be accessed electronically?",
-    "ground_truth": "The Company's Annual Report on Form 10-K, quarterly reports on Form 10-Q, and current reports on Form 8-K can be accessed electronically on the SEC's internet site at www.sec.gov."
-  },
-  {
-    "question": "What are the five key vectors that the company focuses on to deliver sustainable value creation?",
-    "ground_truth": "The company focuses on product performance, packaging, brand communication, retail execution, and value to deliver sustainable value creation."
-  },
-  {
-    "question": "What percentage of total sales in 2024 was attributed to Walmart Inc. and its affiliates?",
-    "ground_truth": "Sales to Walmart Inc. and its affiliates represent approximately 16% of our total sales in 2024."
-  },
-  {
-    "question": "What specific types of raw materials does the Company produce for further use in its manufacturing process?",
-    "ground_truth": "The Company produces certain raw materials, primarily chemicals, for further use in the manufacturing process."
-  },
-  {
-    "question": "What are the key differentiators that position the company well in the highly competitive markets in which it operates?",
-    "ground_truth": "The company is well positioned in the industry segments and markets in which it operates due to its integrated strategy and focus on driving superiority across product, packaging, brand communication, retail execution, and value."
-  },
-  {
-    "question": "What specific U.S. law is mentioned in the context that the company must comply with to prevent corruption in its international dealings?",
-    "ground_truth": "The company must comply with the U.S. Foreign Corrupt Practices Act to prevent corruption in its international dealings."
-  },
-  {
-    "question": "What is the Company's expectation regarding the effect of compliance expenditures on its total capital expenditures, earnings, or competitive position in fiscal year 2025 compared to prior periods?",
-    "ground_truth": "The Company does not expect that its expenditures for compliance with current government regulations, including current environmental regulations, will have a material effect on its total capital expenditures, earnings, or competitive position in fiscal year 2025 as compared to prior periods."
-  },
-  {
-    "question": "Which committee within the Board of Directors is responsible for providing oversight of the Company's policies and strategy relating to talent, including equality and inclusion, as well as the Company's compensation principles and practices?",
-    "ground_truth": "The Compensation and Leadership Development Committee (C&LD Committee) is responsible for providing oversight of the Company's policies and strategy relating to talent, including equality and inclusion, as well as the Company's compensation principles and practices."
-  },
-  {
-    "question": "What percentage of the Company's global employees are women as of June 30, 2024?",
-    "ground_truth": "42% of the Company's global employees are women as of June 30, 2024."
-  },
-  {
-    "question": "What is the primary model used by the company for staffing most of its senior leadership positions?",
-    "ground_truth": "The company uses a develop-from-within model for staffing most of its senior leadership positions."
-  },
-  {
-    "question": "What is the company's aspiration for multicultural representation within the U.S. workforce at management and leadership levels?",
-    "ground_truth": "The company aspires to achieve 40% multicultural representation within the U.S. workforce overall as well as at management and leadership levels."
-  },
-  {
-    "question": "What specific principle guides the company's total rewards programs in terms of compensation and benefits?",
-    "ground_truth": "The company's total rewards programs are guided by the principles of paying for performance, paying competitively versus peer companies, and focusing on long-term success through a combination of short-term and long-term incentive programs."
-  },
-  {
-    "question": "What specific year did the Company announce its 2040 net zero ambition?",
-    "ground_truth": "The Company announced its 2040 net zero ambition in 2021."
-  },
-  {
-    "question": "What is the difference in the concept of'materiality' between the standards and guidelines such as the Global Reporting Initiative (GRI) and the Task Force on Climate-related Financial Disclosures (TCFD) and the federal securities laws and disclosures required by the Commission's rules in the Annual Report?",
-    "ground_truth": "The 'materiality' thresholds in the Global Reporting Initiative (GRI) and the Task Force on Climate-related Financial Disclosures (TCFD) may differ from the concept of'materiality' for purposes of the federal securities laws and disclosures required by the Commission's rules in this Annual Report."
-  },
-  {
-    "question": "What is the nature of the forward-looking statements made by the company in their Form 10-K and other communications?",
-    "ground_truth": "The forward-looking statements made by the company in their Form 10-K and other communications are based on financial data and business plans available only as of the time the statements are made, which may become outdated or incomplete."
-  },
-  {
-    "question": "What is the purpose of the 'risk factors' section in the document?",
-    "ground_truth": "The purpose of the 'risk factors' section is to identify significant factors that may adversely affect the company's business, operations, financial position, or future financial performance."
-  },
-  {
-    "question": "What percentage of the company's annual net sales is generated from operations outside the U.S.?",
-    "ground_truth": "The company's operations outside the U.S. generate more than 50% of its annual net sales."
-  },
-  {
-    "question": "What specific risk does the company face due to its international operations, as mentioned in the context?",
-    "ground_truth": "The company faces the risk of adverse impacts on its results of operations, financial condition, and cash flows if it is unable to successfully manage currency exchange, import authorization, pricing, or other controls and restrictions, continue existing business operations, repatriate earnings from overseas, or if new or increased tariffs, quotas, exchange or price controls, trade barriers, or similar restrictions are imposed on its business."
-  },
-  {
-    "question": "What specific economic or social disruptions are mentioned as potential threats to the demand for the company's products?",
-    "ground_truth": "The specific economic or social disruptions mentioned as potential threats to the demand for the company's products include a slow-down, recession or inflationary pressures in the general economy; reduced market growth rates; tighter credit markets for suppliers, vendors or customers; a significant shift in government policies; significant social unrest; the deterioration of economic relations between countries or regions; and potential negative consumer sentiment toward non-local products or sources."
+    "question": "According to the 'Net Sales Change Drivers 2024 vs. 2023' table, which specific reportable segment experienced a 2% favorable 'Mix' impact on its net sales growth?",
+    "ground_truth": "The Health Care segment experienced a 2% favorable Mix impact on its net sales growth."
   }
 ]

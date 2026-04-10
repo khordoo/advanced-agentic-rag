@@ -103,7 +103,15 @@ class Retriever:
             This is the primary retrieval method used by :class:`RAGPipeline`.
         """
         child_docs = self.similarity_search(query, k=k)
+        print('Vector Results:============\n')
+        for doc in child_docs:
+            print(doc)
+            print('.....'*30)
         child_docs = self.rerank(query, child_docs, top_n=top_n)
+        print('Reranked docs:===============\n')
+        for doc in child_docs:
+            print(doc)
+            print('.....'*30)
         seen_parents: set[str] = set()
         parent_results: list[dict] = []
         for doc in child_docs:
@@ -130,7 +138,11 @@ class Retriever:
                         "Parent ID %s found in vector DB but missing in document store",
                         parent_id,
                     )
-
+        print('========='*50)
+        print('****************FULL Parents=================================')
+        for p in parent_results:
+            print(p)
+            print('--'*20)
         logger.info(
             "Hierarchical search: %d children → %d unique parents",
             len(child_docs),

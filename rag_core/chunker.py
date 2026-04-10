@@ -41,7 +41,8 @@ from langchain_text_splitters import (
 )
 
 from rag_core.converter import PAGE_PATTERN
-
+from rag_core.schemas import ParentChunk
+from rag_core.agents import TableSummarizer
 logger = logging.getLogger(__name__)
 
 # Default header hierarchy for markdown splitting
@@ -53,19 +54,7 @@ HEADERS_TO_SPLIT_ON = [
 HEADER_KEYS = [v for _, v in HEADERS_TO_SPLIT_ON]
 
 
-# ---------------------------------------------------------------------------
-# Data structures
-# ---------------------------------------------------------------------------
 
-
-@dataclass
-class ParentChunk:
-    """A parent chunk with its child documents ready for storage."""
-
-    parent_id: str
-    enriched_text: str
-    metadata: dict[str, Any]
-    children: list[Document] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -225,7 +214,10 @@ def store_chunks(
             "content": chunk.enriched_text,
             "metadata": json.dumps(chunk.metadata, default=str),
         }
+        print('******************Storing Chunks*******************************')
         if chunk.children:
+            print(chunk.children)
+            print('.....'*30)
             vector_store.add_documents(chunk.children)
 
     logger.info("Stored %d parent chunks in document store", len(chunks))
@@ -242,6 +234,37 @@ def store_chunks(
 # Helpers
 # ---------------------------------------------------------------------------
 
+def summerize_and_chunk_table(table_makrdowns: list[str], model:TableSummarizer,summerize_enabled=True) -> list[ParentChunk]:
+    print(f'Summerziing the {len(table_makrdowns)} tables...')
+    parent_chunks=[]
+    for i,table_md in enumerate(table_makrdowns):
+        table_id = f"DATA_TABLE_{i:03d}"
+        table_summary =model.summarize(table_markdown=table_md) if summerize_enabled else table_md
+        parent_id = uuid.uuid4().hex
+        # Create the Child (The Searchable Vector)
+        # We explicitly put the table_id in the text so the vector DB indexes it!
+        child_doc = Document(
+                    page_content=f"[SECTION: TABLE SUMMARY FOR {table_id}]\n\n{table_summary}",
+                    metadata={
+                        "parent": parent_id, 
+                        "table_id": table_id # Added for strict metadata filtering
+                    }
+                )
+        # Create the Parent (The LLM Payload)
+        # We append the ID to the top so the LLM has a visual anchor
+        enriched_table_md = f"[{table_id}]\n\n{table_md}"
+        parent_chunks.append(
+            ParentChunk(
+                parent_id=parent_id,
+                enriched_text=enriched_table_md,
+                metadata=child_doc.metadata,
+                children=[child_doc],
+            )
+        )
+
+    # print(f'Parent chunk {len(parent_chunks)}:',parent_chunks[-1])
+    print(f'Parent chunk {len(parent_chunks)}:')
+    return parent_chunks
 
 def _get_clean_name(path: str | Path) -> str:
     return os.path.basename(str(path))

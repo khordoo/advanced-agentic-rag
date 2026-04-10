@@ -15,6 +15,7 @@ wheels/
 # Runtime data & artifacts
 artifacts/
 data/
+scratch/
 *.pkl
 
 # OS
@@ -26,6 +27,7 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+
 
 # Models (downloaded at runtime)
 models/

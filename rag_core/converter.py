@@ -13,7 +13,6 @@ from pathlib import Path
 from docling.document_converter import DocumentConverter
 from docling_core.types.doc import DoclingDocument,DocItemLabel, TableItem, TextItem
 
-from rag_core.utils import get_padded_sliding_window
 logger = logging.getLogger(__name__)
 
 PAGE_TMPL = "<!-- PAGE_{n} -->"
@@ -38,8 +37,8 @@ def convert_pdf_to_markdown(
     output_path:
         If provided, the numbered markdown is written to this dir.
     table_context_window:
-        Number of text elements (paragraphs/headings) to capture AFTER a table. 
-        (Note: One preceding element is always included automatically.) 
+        Number of text elements (paragraphs/headings) to capture AFTER a table.
+        (Note: One preceding element is always included automatically.)
         For example, a value of 3 includes the 1 preceding and 3 following paragraph
     Returns
     -------
@@ -58,14 +57,36 @@ def convert_pdf_to_markdown(
     raw_markdown = result.document.export_to_markdown(
         page_break_placeholder=PAGE_TMPL
     )
+    #redacting tables tp avoic retrivl contamination, Tbales will be seperatly index and added
+    raw_markdown=_remove_tables_from_markdown(raw_markdown,result.document)
+
+    # for i, table in enumerate(result.document.tables):
+    #     table_id = f"DATA_TABLE_{i:03d}"
+    #     table_md = table.export_to_markdown()
+    #     # 1. leading and trailing space, but NO newlines!
+    #     placeholder = f" \n(See extracted structured data: {table_id}) "
+
+    #     # 2. Aggressively target the table AND the newlines around it
+    #     # This swallows the paragraph breaks and glues the text together
+    #     if f"\n\n{table_md}\n\n" in raw_markdown:
+    #         raw_markdown = raw_markdown.replace(f"\n\n{table_md}\n\n", placeholder)
+    #     elif f"{table_md}\n\n" in raw_markdown: # Table is at the top of a section
+    #         raw_markdown = raw_markdown.replace(f"{table_md}\n\n", placeholder)
+    #     elif f"\n\n{table_md}" in raw_markdown: # Table is at the bottom of a section
+    #         raw_markdown = raw_markdown.replace(f"\n\n{table_md}", placeholder)
+    #     else:
+    #         # Fallback just in case
+    #         raw_markdown = raw_markdown.replace(table_md, placeholder)
 
     # Replace generic placeholders with numbered markers
-    parts = raw_markdown.split(PAGE_TMPL)
-    numbered_markdown = "\n\n".join(
-        f"{PAGE_TMPL.format(n=i + 1)}\n{part.strip()}"
-        for i, part in enumerate(parts)
-        if part.strip()
-    )
+    numbered_markdown=_add_page_number_to_markdown(raw_markdown,PAGE_TMPL)
+
+    # parts = raw_markdown.split(PAGE_TMPL)
+    # numbered_markdown = "\n\n".join(
+    #     f"{PAGE_TMPL.format(n=i + 1)}\n{part.strip()}"
+    #     for i, part in enumerate(parts)
+    #     if part.strip()
+    # )
 
 
 
@@ -85,7 +106,6 @@ def convert_pdf_to_markdown(
 def _enrich_tables_with_surrounding_text(document: DoclingDocument,table_context_window=3) -> List[str]:
     # Convert to list so we can look ahead/behind by index
     # Dcouments are genrally small for processing in memeory should be fast
-    print('===========Table contex size insdie func:',table_context_window)
     items = [item for item, _ in document.iterate_items()]
     enriched_tables = []
     for i, current in enumerate(items):
@@ -114,10 +134,46 @@ def _enrich_tables_with_surrounding_text(document: DoclingDocument,table_context
                 # If it doesn't, it might be the concluding paragraph.
 
         enriched_tables.append('\n\n'.join(table_context))
-        print(enriched_tables[-1])
-        print('---'*20)
+        # print(enriched_tables[-1])
+        # print('---'*20)
 
     return enriched_tables
+
+def _remove_tables_from_markdown(raw_markdown: str, doc):
+    """Replaces tables in the markdown with a string placeholder.
+    Tables are processed separately with LLM summary and later added to the text.
+    """
+    logger.info(f"Removing table started...")
+    for i, table in enumerate(doc.tables):
+        try:
+            table_id = f"DATA_TABLE_{i:03d}"
+
+            table_md = table.export_to_markdown(doc)
+            placeholder = f" \n(See extracted structured data: {table_id}) "
+
+            if f"\n\n{table_md}\n\n" in raw_markdown:
+                raw_markdown = raw_markdown.replace(f"\n\n{table_md}\n\n", placeholder)
+            elif f"{table_md}\n\n" in raw_markdown:
+                raw_markdown = raw_markdown.replace(f"{table_md}\n\n", placeholder)
+            elif f"\n\n{table_md}" in raw_markdown:
+                raw_markdown = raw_markdown.replace(f"\n\n{table_md}", placeholder)
+            else:
+                raw_markdown = raw_markdown.replace(table_md, placeholder)
+        except Exception as e:
+            logger.warn(f"Failed to remove table: Reason:{e}")
+    logger.info(f"Removing table completed: Total tables {len(doc.tables)}")
+    return raw_markdown
+
+def _add_page_number_to_markdown(raw_markdown:str,PAGE_TMPL )->str:
+    """ Add PAGE NUMBER Indicators to the Markdown"""
+    parts = raw_markdown.split(PAGE_TMPL)
+    numbered_markdown = "\n\n".join(
+        f"{PAGE_TMPL.format(n=i + 1)}\n{part.strip()}"
+        for i, part in enumerate(parts)
+        if part.strip()
+    )
+    return numbered_markdown
+
 
 def get_clean_name(path: str | Path) -> str:
     """Return a human-readable basename without extension or underscores."""

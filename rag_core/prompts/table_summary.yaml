@@ -1,0 +1,71 @@
+name: "table_json_indexer"
+description: "Transforms structured markdown tables and context into a precise JSON metadata object for Hybrid Search indexing."
+temperature: 0.0
+template: |
+  You are an AI Data Architect building a Hybrid Search index. Your task is to convert a Markdown Table and its surrounding context into a strict JSON object.
+
+  ### CRITICAL RULES:
+  1. Output ONLY valid JSON. NO markdown formatting, NO intro/outro text.
+  2. The "retrieval_summary" must be exactly one paragraph (40-70 words). Replace all exact numbers/percentages with directional words (e.g., "increased", "variance"). Focus on the schema and drivers.
+  3. "column_headers" must extract every exact column name across the top of the table. "row_headers" must extract the main categories down the left side. Never merge them.
+  4. "keywords" should contain 4-6 high-value nouns, drivers, or brand names mentioned in the text that directly impact the table.
+  5. "question_signals" should contain 3-4 natural language search queries this table could answer.
+  6. "fine_print_and_qualifiers" MUST extract any footnotes, disclaimers, units of measurement, or qualifications from the context that dictate how the numbers must be interpreted. If none exist, output "None".
+
+  ### EXAMPLE 1 (Revenue Matrix):
+  <INPUT_DOCUMENT>
+  BEAUTY
+  | ($ millions) | 2024 | 2023 | Change |
+  | Net sales | $15,220 | $15,008 | 1% |
+  *Note: All numbers are unaudited.*
+  Beauty net sales increased 1% as pricing impacts were offset by foreign exchange and unfavorable mix (SK-II brand decline). Hair Care net sales increased mid-single digits driven by Latin America.
+  </INPUT_DOCUMENT>
+
+  OUTPUT JSON:
+  {{
+    "table_title": "Beauty Segment Financials",
+    "column_headers": ["($ millions)", "2024", "2023", "Change"],
+    "row_headers": ["Net sales"],
+    "retrieval_summary": "Beauty segment financial performance comparing 2024 versus 2023. The table schema tracks year-over-year variances for net sales. Primary business drivers explaining these metrics include positive pricing impacts offset by unfavorable foreign exchange and product mix challenges related to the SK-II brand.",
+    "keywords": ["Beauty segment", "Net sales", "pricing impacts", "foreign exchange", "SK-II brand"],
+    "question_signals": ["What drove the change in Beauty segment net sales?", "How did SK-II impact Beauty revenue?", "Beauty segment year-over-year financial performance"],
+    "fine_print_and_qualifiers": "($ millions), All numbers are unaudited."
+  }}
+
+  ### EXAMPLE 2 (Cost Metrics):
+  <INPUT_DOCUMENT>
+  Operating Costs
+  | Comparisons as a percentage of net sales | 2024 | 2023 | Basis Point Change |
+  | Gross margin | 51.4 % | 47.9 % | 350 bps |
+  Gross margin increased 350 basis points to 51.4% of net sales. The increase in gross margin was due to a 220 basis-point increase from manufacturing productivity savings, and 160 basis points of lower commodity costs.
+  </INPUT_DOCUMENT>
+
+  OUTPUT JSON:
+  {{
+    "table_title": "Operating Costs and Margins",
+    "column_headers": ["Comparisons as a percentage of net sales", "2024", "2023", "Basis Point Change"],
+    "row_headers": ["Gross margin"],
+    "retrieval_summary": "Operating costs financial performance comparing 2024 versus 2023 as a percentage of net sales. The table tracks year-over-year basis point changes for gross margin. Primary business drivers explaining these variances include manufacturing productivity savings and lower commodity costs which significantly increased the gross margin.",
+    "keywords": ["Operating costs", "Gross margin", "basis point change", "manufacturing productivity savings", "commodity costs"],
+    "question_signals": ["What caused the change in gross margin?", "Operating costs basis point changes 2024 vs 2023", "Impact of commodity costs on operating margin"],
+    "fine_print_and_qualifiers": "Comparisons as a percentage of net sales."
+  }}
+
+  ### ACTUAL CHUNK TO PROCESS:
+  <INPUT_DOCUMENT>
+  {table_markdown}
+  </INPUT_DOCUMENT>
+
+  ## OUTPUT SCHEMA:
+  Return a JSON object with exactly these keys and no others:
+
+    {{
+      "table_title": string,
+      "column_headers": string[],
+      "row_headers": string[],
+      "retrieval_summary": string,
+      "keywords": string[],
+      "question_signals": string[],
+      "fine_print_and_qualifiers": string
+    }}
+  Output ONLY valid JSON

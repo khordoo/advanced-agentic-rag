@@ -29,6 +29,7 @@ _DEFAULTS: dict[str, str] = {
     "CHILD_CHUNK_OVERLAP": "50",
     "RERANK_TOP_N": "3",
     "TABLE_CONTEXT_WINDOW": "3",
+    "SUMMARIZE_TABLES_ENABLED":"True",
     # Qdrant (production track)
     "QDRANT_URL": "http://localhost:6333",
     "QDRANT_COLLECTION_NAME": "docs",

@@ -1,11 +1,14 @@
 import logging
 import os
+import json
+from pathlib import Path
 from rag_core.converter import convert_pdf_to_markdown
 from rag_core.chunker import chunk_markdown, store_chunks
 from rag_core.store import VectorStore, DocumentStore
 from rag_core.config import load_config, setup_logging
 from rag_core.utils import Stopwatch
-
+from rag_core.agents import TableSummarizer
+from rag_core.chunker import summerize_and_chunk_table
 setup_logging()
 logger = logging.getLogger(__name__)
 
@@ -20,10 +23,11 @@ class IngestionPipeline:
     _IGNORE_DIR = {'.DS_Store'}
 
     def __init__(
-        self, 
+        self,
         config: dict[str, str],
         vector_store: VectorStore | None = None,
-        doc_store: DocumentStore | None = None, 
+        doc_store: DocumentStore | None = None,
+        table_summerizer: TableSummarizer | None = None,
         overwrite: bool = True
     ):
         """
@@ -38,13 +42,15 @@ class IngestionPipeline:
         self.config = config
         self.vector_store = vector_store or VectorStore.from_chroma(config)
         self.doc_store = doc_store or DocumentStore.from_dict()
+        self.table_summerizer= table_summerizer or TableSummarizer()
         self.markdown_chunker = chunk_markdown
+        self.summerize_and_chunk_table = summerize_and_chunk_table
         self.store_chunk = store_chunks
         self.ingestion_dir = self.config.get('DOCS_DIR', 'docs')
         self.processed_dir = self.config.get('PROCESSED_DOCS_DIR', 'data/processed')
         self.store_persistence_path = self.config.get('DOCUMENT_STORE_PERSIST_PATH')
         self.table_context_window = int(self.config.get('TABLE_CONTEXT_WINDOW', 3))
-        
+        self.summarize_tables_enabled: bool = bool(self.config.get('SUMMARIZE_TABLES_ENABLED',True))
         if overwrite:
             self.vector_store.reset_collection()
             logger.info("Vector DB collection reset")
@@ -66,14 +72,24 @@ class IngestionPipeline:
                     table_context_window=self.table_context_window
                 )
                 logger.debug(f"Conversion complete: {len(markdown)} chars and {len(tables)} tables")
-                
+                table_chunks = self.summerize_and_chunk_table(tables,model=self.table_summerizer, summerize_enabled=self.summarize_tables_enabled)
+                logger.debug(f"Table Summerization and chunking complete: {len(table_chunks)} tables")
                 chunks = self.markdown_chunker(
                     markdown=markdown,
                     source_path=file_path,
                     config=self.config
                 )
                 logger.info(f"Chunked into {len(chunks)} parents.")
-                
+
+                md_file_name = str(Path(self.processed_dir) / f"{Path(file_path).stem}.md")
+                with open(md_file_name,'w', encoding='utf-8') as f:
+                    f.write(markdown)
+
+                logger.info("Stored %s markdown file in data folder", md_file_name)
+                print('Total chunks:',len(chunks), 'tables:',len(table_chunks))
+                chunks.extend(table_chunks)
+                print('All chunks:',chunks)
+                print('Total extneded chunks:',len(chunks))
                 self.store_chunk(
                     chunks=chunks,
                     vector_store=self.vector_store,

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from typing import List, Optional
-
+from typing import List, Optional,Any
+from langchain_core.documents import Document
 from pydantic import BaseModel, Field
-
+from dataclasses import dataclass, field
 
 class QAPair(BaseModel):
     """A single question-answer pair for evaluation."""
@@ -34,6 +34,8 @@ class QARecord(BaseModel):
     refusal: Optional[str] = None
 
 
+
+
 class PromptConfig(BaseModel):
     """Parsed YAML prompt template."""
 
@@ -42,6 +44,77 @@ class PromptConfig(BaseModel):
     temperature: float = 0.2
     template: str
 
+#------------- Ingestion -------------------
+# --- 1. The Pydantic Schema (The Contract) ---
+class TableSummary(BaseModel):
+    """Schema for the LLM to geenrate a sumary of the table"""
+    table_title: str = Field(description="The exact name or number of the table (e.g., 'Table 4.1'). If none, write 'Unnamed Table'.")
+    retrieval_summary: str = Field(description="A concise 2-sentence summary of the core trends, anomalies, or totals in the table.")
+    column_headers: list[str] = Field(description="Extract every column header across the top of the table.")
+    row_headers: list[str] = Field(description="Extract the main row categories down the left side of the table.")
+    keywords: list[str] = Field(description="5-7 highly specific entities, financial metrics, or jargon terms found in the data.")
+    question_signals: list[str] = Field(description="3 highly specific questions a user might ask which this table perfectly answers. Frame them exactly how a human would type a search query.")
+    fine_print_and_qualifiers: str = Field(
+            description="Extract any footnotes, captions, or fine print from the surrounding context that change how the numbers should be interpreted (e.g., 'Unaudited', 'Dollars in thousands', 'Excludes Q4'). If none exist, write 'None'."
+        )
 
+    def to_markdown(self) -> str:
+            """Converts the JSON state into an atomic, Agent-friendly Markdown block."""
+
+            # 1. We use a single H3 for the main title to group it under the document's H2s
+            md = f"### Data Table: {self.table_title}\n\n"
+
+            # 2. We use bold text for keys to prevent accidental chunking
+            md += f"**Summary:** {self.retrieval_summary}\n\n"
+
+            # 3. We join lists with commas for token-dense readability
+            md += f"**Columns:** {', '.join(self.column_headers)}\n"
+            md += f"**Rows:** {', '.join(self.row_headers)}\n"
+            md += f"**Keywords:** {', '.join(self.keywords)}\n\n"
+
+            # 4. We use bullet points for questions
+            md += "**Can Answer:**\n"
+            for q in self.question_signals:
+                md += f"- {q}\n"
+
+            # 5. We use a blockquote for the fine print so the LLM knows it's a disclaimer
+            if self.fine_print_and_qualifiers and self.fine_print_and_qualifiers.lower() != "none":
+                md += f"\n> **Fine Print/Qualifiers:** {self.fine_print_and_qualifiers}\n"
+
+            return md
+
+class TableChunk(BaseModel):
+    """ Used to store in databse"""
+    table_id: str
+    parent_id:str
+    summary: TableSummary
+
+class ExtractedTable(BaseModel):
+    # 1. The Atomic Parts (Stored Separately)
+    raw_markdown_table: str
+    context_above: str
+    context_below: str
+
+    # 2. The LLM Output (Added later in the pipeline)
+    seo_metadata: TableMetadata | None = None
+
+    @property
+    def extraction_context(self)->str:
+        return f'{self.context_above}\n\n{self.raw_markdown_table}\n\n{self.context_below}'
+
+
+# ---------------------------------------------------------------------------
+# Data structures
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ParentChunk:
+    """A parent chunk with its child documents ready for storage."""
+
+    parent_id: str
+    enriched_text: str
+    metadata: dict[str, Any]
+    children: list[Document] = field(default_factory=list)
 # Required for forward-reference resolution in Python 3.10+
 SyntheticsTestSet.model_rebuild()

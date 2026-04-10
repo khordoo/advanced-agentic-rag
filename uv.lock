@@ -47,12 +47,14 @@ dependencies = [
     { name = "langchain-ollama" },
     { name = "langchain-openai" },
     { name = "langchain-text-splitters" },
+    { name = "langgraph" },
     { name = "more-itertools" },
     { name = "pandas" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
     { name = "ragas" },
     { name = "sentence-transformers" },
+    { name = "tenacity" },
 ]
 
 [package.optional-dependencies]
@@ -87,6 +89,7 @@ requires-dist = [
     { name = "langchain-openai", specifier = ">=1.1.12" },
     { name = "langchain-qdrant", marker = "extra == 'qdrant'", specifier = ">=0.2.0" },
     { name = "langchain-text-splitters", specifier = ">=1.1.1" },
+    { name = "langgraph", specifier = ">=1.1.4" },
     { name = "more-itertools", specifier = ">=11.0.1" },
     { name = "pandas", specifier = ">=2.3.3" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
@@ -96,6 +99,7 @@ requires-dist = [
     { name = "ragas", specifier = ">=0.4.3" },
     { name = "sentence-transformers", specifier = ">=5.3.0" },
     { name = "streamlit", marker = "extra == 'demo'", specifier = ">=1.40" },
+    { name = "tenacity", specifier = ">=9.1.4" },
     { name = "uvicorn", marker = "extra == 'serve'", specifier = ">=0.34" },
 ]
 provides-extras = ["qdrant", "dev", "demo", "serve", "ui"]
