@@ -17,6 +17,8 @@ template: |
   10. Terms like favorable/unfavorable should be inferred from the sign shown in the table when appropriate. For example, positive percentages are favorable unless the Context states otherwise.
   11. Do not refuse if the answer is clearly present in a table cell.
 
+  ## OUTPUT FORMAT:
+  1. You must cite your sources inline. Use the exact 'Doc' name provided in your context surrounded by double brackets. Example: 'Margins dropped to 50% [[demo_19_23.pdf]]
   ### CONTEXT:
   {context}
 

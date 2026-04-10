@@ -47,52 +47,6 @@ class PromptLoader:
             update={"template":self.config.template.format(**kwargs)}
         )
 
-# class PromptLoader:
-#     """Load and render YAML prompt templates shipped with the package."""
-#     prompt_config =None
-#     @classmethod
-#     def load(cls, name: str, **kwargs) -> PromptConfig:
-#         """Load a prompt by *name* (without extension) and render it.
-
-#         Any extra ``**kwargs`` are interpolated into the template string via
-#         ``str.format()``.
-#         """
-#         file_path = _PROMPTS_DIR / f"{name}.yaml"
-#         if not file_path.is_file():
-#             raise FileNotFoundError(f"Prompt template not found: {file_path}")
-
-#         with open(file_path, "r", encoding="utf-8") as fh:
-#             raw_data = yaml.safe_load(fh)
-#         print(f'Raw promt for name{name}:',raw_data)
-#         config = PromptConfig(**raw_data)
-#         config.template = config.template.format(**kwargs)
-#         return config
-
-#     @classmethod
-#     def load_(cls, name: str, **kwargs) -> PromptConfig:
-#         """Load a prompt by *name* (without extension) and render it.
-
-#         Any extra ``**kwargs`` are interpolated into the template string via
-#         ``str.format()``.
-#         """
-#         file_path = _PROMPTS_DIR / f"{name}.yaml"
-#         if not file_path.is_file():
-#             raise FileNotFoundError(f"Prompt template not found: {file_path}")
-
-#         with open(file_path, "r", encoding="utf-8") as fh:
-#             raw_data = yaml.safe_load(fh)
-#         print(f'Raw promt for name{name}:',raw_data)
-#         cls.prompt_config = PromptConfig(**raw_data)
-#         return cls
-
-#     @classmethod
-#     def render(cls,**kargs):
-#         if not cls.prompt_config:
-#             raise ValueError('No promt is loaded. Please Lazy laod the prompt first')
-#         cls.prompt_config.template = cls.prompt_config.template.format(**kargs)
-#         return cls.prompt_config
-
-
 # ---------------------------------------------------------------------------
 # Agent / LLM factory
 # ---------------------------------------------------------------------------
@@ -207,16 +161,12 @@ class TableSummarizer:
     )
     def summarize(self, table_markdown: str) -> str:
         """Generates a concise summary for a single table."""
-        # Interpolate the table into the template
-        print('Attempting to generate summary.....')
+        logger.info("Generating table summary", extra={"table_chars": len(table_markdown)})
         prompt =self.prompt_loader.render(table_markdown=table_markdown)
+        logger.debug("Rendered table summary prompt", extra={"prompt_preview": prompt.template[:200]})
         res = self.llm.invoke(prompt.template)
-        print('RAW Table Summary response ==========================================')
-        print(res.content)
+        logger.debug("LLM returned response", extra={"raw_response": res.content})
         data = json.loads(res.content)
-        print('response:',data)
-        # parsed= TableSummary(**data)
         parsed = TableSummary.model_validate(data)
-        print('completeed summery:',parsed)
-        print('--'*50)
+        logger.info("Table summary generated successfully")
         return parsed.to_markdown()

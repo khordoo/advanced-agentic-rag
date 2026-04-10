@@ -44,7 +44,10 @@ class RAGPipeline:
             ``{"response": str, "contexts": list[dict]}``
             Each context dict has ``{"content": str, "metadata": dict}``.
         """
-        context_docs = self.retriever.hierarchical_search(query, k=10)
+        context_docs = self.retriever.hierarchical_search(
+            query,
+            k=10,
+            top_n=int(self.config.get('RERANK_TOP_N',3)))
         for d in context_docs:
             print(d["content"])
             print('---'*50)
@@ -72,7 +75,7 @@ if __name__ == "__main__":
     query= "According to the 'Net Sales Change Drivers 2024 vs. 2023' table, what was the specific percentage impact of foreign exchange on the net sales growth for the Grooming segment?"
     # query="According to the 'Net Sales Change Drivers 2024 vs. 2023' table, which specific reportable segment experienced a 2% favorable 'Mix' impact on its net sales growth?"
     # "ground_truth": "The Health Care segment experienced a 2% favorable Mix impact on its net sales growth."
-
+    quer="find something about Net Sales Change Drivers?"
     pipeline = RAGPipeline(cfg, provider="aws")
     result = pipeline.run(query)
 

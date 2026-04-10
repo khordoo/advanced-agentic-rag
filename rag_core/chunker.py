@@ -234,36 +234,49 @@ def store_chunks(
 # Helpers
 # ---------------------------------------------------------------------------
 
-def summerize_and_chunk_table(table_makrdowns: list[str], model:TableSummarizer,summerize_enabled=True) -> list[ParentChunk]:
-    print(f'Summerziing the {len(table_makrdowns)} tables...')
+def summerize_and_chunk_table(table_data_list: list[dict], model:TableSummarizer,summerize_enabled=True) -> list[ParentChunk]:
+    logger.info("Summarizing %d tables", len(table_data_list))
     parent_chunks=[]
-    for i,table_md in enumerate(table_makrdowns):
+    for i,table_data in enumerate(table_data_list):
         table_id = f"DATA_TABLE_{i:03d}"
-        table_summary =model.summarize(table_markdown=table_md) if summerize_enabled else table_md
+        raw_md = table_data['markdown']
+
+        base_header = f"[Doc: {table_data['file_name']}] [Section: Data Table] [Location: Page {table_data['page_no']}]"
+
+        logger.debug(
+            "Summarizing table %s from %s page %s",
+            table_id,
+            table_data['file_name'],
+            table_data['page_no'],
+        )
+        table_summary =model.summarize(table_markdown=raw_md) if summerize_enabled else table_data
+        logger.debug("Summary ready for table %s", table_id)
         parent_id = uuid.uuid4().hex
         # Create the Child (The Searchable Vector)
         # We explicitly put the table_id in the text so the vector DB indexes it!
+        # header = f"[Doc: {table_data['file_name']}] [Location: Page {table_data['page_no']}]\n\n"
+        child_text = f"{base_header}[SUMMARY FOR {table_id}]\n\n{table_summary}"
         child_doc = Document(
-                    page_content=f"[SECTION: TABLE SUMMARY FOR {table_id}]\n\n{table_summary}",
+                    page_content=child_text,
                     metadata={
-                        "parent": parent_id, 
-                        "table_id": table_id # Added for strict metadata filtering
+                        "parent": parent_id,
+                        "table_id": table_id, # Added for strict metadata filtering
+                        "page_start":table_data['page_no']
                     }
                 )
         # Create the Parent (The LLM Payload)
         # We append the ID to the top so the LLM has a visual anchor
-        enriched_table_md = f"[{table_id}]\n\n{table_md}"
+        parent_text = f"{base_header}\n[{table_id}]\n\n{raw_md}"
         parent_chunks.append(
             ParentChunk(
                 parent_id=parent_id,
-                enriched_text=enriched_table_md,
+                enriched_text=parent_text,
                 metadata=child_doc.metadata,
                 children=[child_doc],
             )
         )
 
-    # print(f'Parent chunk {len(parent_chunks)}:',parent_chunks[-1])
-    print(f'Parent chunk {len(parent_chunks)}:')
+    logger.info("Created %d table parent chunks", len(parent_chunks))
     return parent_chunks
 
 def _get_clean_name(path: str | Path) -> str:

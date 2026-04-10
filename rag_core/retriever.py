@@ -40,6 +40,12 @@ class Retriever:
         self.reranker = CrossEncoder(
             self.config.get("HF_RERANKER_MODEL", "BAAI/bge-reranker-v2-m3")
         )
+        logger.info(
+            "Retriever initialized",
+            extra={
+                "reranker_model": self.config.get("HF_RERANKER_MODEL", "BAAI/bge-reranker-v2-m3"),
+            },
+        )
 
     # -- convenience constructors ------------------------------------------
 
@@ -72,11 +78,18 @@ class Retriever:
 
     def similarity_search(self, query: str, k: int = 10):
         """Raw vector similarity search."""
-        return self.vector_store.similarity_search(query, k=k)
+        logger.debug("Running similarity search", extra={"query_preview": query[:100], "k": k})
+        results = self.vector_store.similarity_search(query, k=k)
+        logger.info("Similarity search returned %d child chunks", len(results))
+        return results
 
     def rerank(self, query: str, docs, top_n: int | None = None):
         """Re-score documents with a cross-encoder and return the top-N."""
         top_n = top_n or int(self.config.get("RERANK_TOP_N", 3))
+        logger.info(
+            "Reranking docs",
+            extra={"candidates": len(docs), "top_n": top_n},
+        )
         pairs = [(query, doc.page_content) for doc in docs]
         scores = self.reranker.predict(pairs)
         scored = sorted(zip(scores, docs), key=lambda x: x[0], reverse=True)
@@ -102,16 +115,12 @@ class Retriever:
             Each dict has ``{"content": str, "metadata": dict}``.
             This is the primary retrieval method used by :class:`RAGPipeline`.
         """
+        logger.info(
+            "Starting hierarchical search",
+            extra={"query_preview": query[:100], "child_k": k, "rerank_top_n": top_n},
+        )
         child_docs = self.similarity_search(query, k=k)
-        print('Vector Results:============\n')
-        for doc in child_docs:
-            print(doc)
-            print('.....'*30)
         child_docs = self.rerank(query, child_docs, top_n=top_n)
-        print('Reranked docs:===============\n')
-        for doc in child_docs:
-            print(doc)
-            print('.....'*30)
         seen_parents: set[str] = set()
         parent_results: list[dict] = []
         for doc in child_docs:
@@ -138,11 +147,6 @@ class Retriever:
                         "Parent ID %s found in vector DB but missing in document store",
                         parent_id,
                     )
-        print('========='*50)
-        print('****************FULL Parents=================================')
-        for p in parent_results:
-            print(p)
-            print('--'*20)
         logger.info(
             "Hierarchical search: %d children → %d unique parents",
             len(child_docs),

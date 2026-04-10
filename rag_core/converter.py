@@ -53,43 +53,16 @@ def convert_pdf_to_markdown(
     converter = DocumentConverter()
     logger.info("Converting %s to markdown …", input_path.name)
     result = converter.convert(str(input_path))
+
+    file_name = input_path.name
     # Export with page-break placeholders
     raw_markdown = result.document.export_to_markdown(
         page_break_placeholder=PAGE_TMPL
     )
     #redacting tables tp avoic retrivl contamination, Tbales will be seperatly index and added
     raw_markdown=_remove_tables_from_markdown(raw_markdown,result.document)
-
-    # for i, table in enumerate(result.document.tables):
-    #     table_id = f"DATA_TABLE_{i:03d}"
-    #     table_md = table.export_to_markdown()
-    #     # 1. leading and trailing space, but NO newlines!
-    #     placeholder = f" \n(See extracted structured data: {table_id}) "
-
-    #     # 2. Aggressively target the table AND the newlines around it
-    #     # This swallows the paragraph breaks and glues the text together
-    #     if f"\n\n{table_md}\n\n" in raw_markdown:
-    #         raw_markdown = raw_markdown.replace(f"\n\n{table_md}\n\n", placeholder)
-    #     elif f"{table_md}\n\n" in raw_markdown: # Table is at the top of a section
-    #         raw_markdown = raw_markdown.replace(f"{table_md}\n\n", placeholder)
-    #     elif f"\n\n{table_md}" in raw_markdown: # Table is at the bottom of a section
-    #         raw_markdown = raw_markdown.replace(f"\n\n{table_md}", placeholder)
-    #     else:
-    #         # Fallback just in case
-    #         raw_markdown = raw_markdown.replace(table_md, placeholder)
-
     # Replace generic placeholders with numbered markers
     numbered_markdown=_add_page_number_to_markdown(raw_markdown,PAGE_TMPL)
-
-    # parts = raw_markdown.split(PAGE_TMPL)
-    # numbered_markdown = "\n\n".join(
-    #     f"{PAGE_TMPL.format(n=i + 1)}\n{part.strip()}"
-    #     for i, part in enumerate(parts)
-    #     if part.strip()
-    # )
-
-
-
     # Persist to disk (optional)
     if output_path is not None:
         output_path = Path(output_path)
@@ -97,13 +70,16 @@ def convert_pdf_to_markdown(
         output_path.write_text(numbered_markdown, encoding="utf-8")
         logger.info("Markdown written to %s", output_path)
 
-    enriched_tables=_enrich_tables_with_surrounding_text(result.document,table_context_window)
+    enriched_tables=_enrich_tables_with_surrounding_text(
+        result.document,
+        source_path=input_path,
+        table_context_window=table_context_window)
+
     logger.info(f"Completed processing {len(enriched_tables)} Tables")
     return numbered_markdown,enriched_tables
 
 
-
-def _enrich_tables_with_surrounding_text(document: DoclingDocument,table_context_window=3) -> List[str]:
+def _enrich_tables_with_surrounding_text(document: DoclingDocument,source_path:Path,table_context_window=3) -> List[str]:
     # Convert to list so we can look ahead/behind by index
     # Dcouments are genrally small for processing in memeory should be fast
     items = [item for item, _ in document.iterate_items()]
@@ -113,14 +89,15 @@ def _enrich_tables_with_surrounding_text(document: DoclingDocument,table_context
             continue
 
         table_context = []
+        logger.debug("Processing table index %d", i)
 
         # 1. Parent Context (1 item above)
         if i > 0 and isinstance(items[i-1], TextItem):
             table_context.append(items[i-1].text)
 
         # 2. The Table
-        table_context.append(current.export_to_markdown(doc=document))
 
+        table_context.append(current.export_to_markdown(doc=document))
         # 3. Child Context (Greedy look-ahead for footnotes/explanation)
         # Look at the next 3 items, but stop if we hit another Table or a new Heading
         for j in range(i + 1, min(i + (table_context_window+1), len(items))):
@@ -132,10 +109,17 @@ def _enrich_tables_with_surrounding_text(document: DoclingDocument,table_context
                 table_context.append(next_item.text)
                 # Success Logic: If it starts with '(', it's likely a footnote.
                 # If it doesn't, it might be the concluding paragraph.
-
-        enriched_tables.append('\n\n'.join(table_context))
-        # print(enriched_tables[-1])
-        # print('---'*20)
+        page_no = current.prov[0].page_no if current.prov else 'UNKNOWN'
+        table_enriched='\n\n'.join(table_context)
+        enriched_tables.append({
+            'file_name':source_path.name,
+            'source_path':str(source_path),
+            'page_no': page_no,
+            'markdown':table_enriched
+        })
+        logger.debug(
+            "Collected %d context blocks for table index %d", len(table_context), i
+        )
 
     return enriched_tables
 
@@ -146,11 +130,12 @@ def _remove_tables_from_markdown(raw_markdown: str, doc):
     logger.info(f"Removing table started...")
     for i, table in enumerate(doc.tables):
         try:
-            table_id = f"DATA_TABLE_{i:03d}"
+            table_id = f"DATA_TABLE_{i:03d}" #Base 1
 
             table_md = table.export_to_markdown(doc)
-            placeholder = f" \n(See extracted structured data: {table_id}) "
+            placeholder = f" \n(See extracted structured data: [[{table_id}]] "
 
+            #Sanetizing to prevent Markdown splitter create a single line text wit hthe header it
             if f"\n\n{table_md}\n\n" in raw_markdown:
                 raw_markdown = raw_markdown.replace(f"\n\n{table_md}\n\n", placeholder)
             elif f"{table_md}\n\n" in raw_markdown:
@@ -160,7 +145,7 @@ def _remove_tables_from_markdown(raw_markdown: str, doc):
             else:
                 raw_markdown = raw_markdown.replace(table_md, placeholder)
         except Exception as e:
-            logger.warn(f"Failed to remove table: Reason:{e}")
+            logger.warning("Failed to remove table", exc_info=e)
     logger.info(f"Removing table completed: Total tables {len(doc.tables)}")
     return raw_markdown
 
