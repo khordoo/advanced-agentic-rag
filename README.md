@@ -118,13 +118,28 @@ uv run streamlit run examples/streamlit_app.py
 
 ### 4. Production Stack (Docker)
 
-```bash
-cd docker
-docker compose up -d
+The production stack (Qdrant + Langfuse) is managed via the root `Makefile` to ensure the correct environment variables are loaded.
 
-# Qdrant dashboard: http://localhost:6333/dashboard
-# LangFuse UI:      http://localhost:3000
+```bash
+# Start the stack
+make up
+
+# Stop the stack
+make down
+
+# Reset the stack (wipes volumes and re-creates)
+make reset
+
+# Dashboards:
+# Qdrant:   http://localhost:6333/dashboard
+# LangFuse: http://localhost:3000
 ```
+
+**Accessing Langfuse:**
+A default administrator account is automatically created using the values defined in your `.env` file. You can log in with:
+- **Email:** `admin@example.com`
+- **Password:** `SuperSecurePassword123!`
+- **Username:** `Admin`
 
 ## Project Structure
 
