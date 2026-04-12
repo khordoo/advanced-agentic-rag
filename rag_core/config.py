@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import os
 import logging
+from functools import lru_cache
 from pathlib import Path
+from sqlite3.dbapi2 import DatabaseError
 from dotenv import dotenv_values, load_dotenv
+from pydantic import BaseModel
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
 
@@ -98,3 +102,30 @@ def setup_logging():
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         force=True
     )
+
+class QdrantSettings(BaseSettings):
+      url : str = 'http://localhost:6333'
+      embed_model:str = "prithivida/Splade_PP_en_v1"
+      sparse_model: str ="BAAI/bge-small-en-v1.5"
+
+      model_config = SettingsConfigDict(env_prefix='QDRANT_',env_file='.env',extra='ignore')
+
+class PostgresSettings(BaseSettings):
+    user: str = "admin"
+    password: str = "password"
+    host: str = "localhost" # 'core-db' when running inside Docker
+    port: int = 5432
+    rag_db: str = "rag_registry"
+
+    # Pydantic will ONLY look for variables starting with "POSTGRES_"
+    model_config = SettingsConfigDict(env_prefix='POSTGRES_', env_file='.env', extra='ignore')
+
+@lru_cache
+def get_qdrant_settings()->QdrantSettings:
+    logger.info("Reading .env file and caching Qdrant settings...")
+    return QdrantSettings()
+
+@lru_cache
+def get_postgres_settings()->PostgresSettings:
+    logger.info("Reading .env file and caching Qdrant settings...")
+    return PostgresSettings()
