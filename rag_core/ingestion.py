@@ -1,11 +1,11 @@
 import logging
 import os
-import json
 from pathlib import Path
 from rag_core.converter import convert_pdf_to_markdown
-from rag_core.chunker import chunk_markdown, store_chunks
-from rag_core.store import VectorStore, DocumentStore
+from rag_core.chunker import chunk_markdown
 from rag_core.config import load_config, setup_logging
+from rag_core.indexing.base import BaseIndexer
+from rag_core.indexing.qdrant_indexer import QdrantIndexer
 from rag_core.utils import Stopwatch
 from rag_core.agents import TableSummarizer
 from rag_core.chunker import summerize_and_chunk_table
@@ -25,8 +25,7 @@ class IngestionPipeline:
     def __init__(
         self,
         config: dict[str, str],
-        vector_store: VectorStore | None = None,
-        doc_store: DocumentStore | None = None,
+        indexer: BaseIndexer | None = None,
         table_summerizer: TableSummarizer | None = None,
         overwrite: bool = True
     ):
@@ -40,12 +39,10 @@ class IngestionPipeline:
             overwrite: If True, resets the vector store collection before processing.
         """
         self.config = config
-        self.vector_store = vector_store or VectorStore.from_chroma(config)
-        self.doc_store = doc_store or DocumentStore.from_dict()
-        self.table_summerizer= table_summerizer or TableSummarizer()
+        self.indexer = indexer or QdrantIndexer()
+        self.table_summarizer= table_summerizer or TableSummarizer()
         self.markdown_chunker = chunk_markdown
         self.summerize_and_chunk_table = summerize_and_chunk_table
-        self.store_chunk = store_chunks
         self.ingestion_dir = self.config.get('DOCS_DIR', 'docs')
         self.processed_dir = self.config.get('PROCESSED_DOCS_DIR', 'data/processed')
         self.store_persistence_path = self.config.get('DOCUMENT_STORE_PERSIST_PATH')
@@ -60,8 +57,8 @@ class IngestionPipeline:
             }
         )
         if overwrite:
-            self.vector_store.reset_collection()
-            logger.info("Vector DB collection reset")
+            self.indexer.reset_collections()
+            logger.info("Vector and document DB collection reset")
 
     def run(self):
         """
@@ -72,57 +69,60 @@ class IngestionPipeline:
         2. Chunks the Markdown into hierarchical structures.
         3. Persists results into the vector and document stores.
         """
+        #TODO: having a failure list and proper handling of failed files
         logger.info("Starting ingestion run")
+        failed_files = []
+        total_processed = 0
         for file_path in self._iter_files():
-            logger.info("Processing file: %s", file_path)
-            with Stopwatch('Markdown conversion'):
-                markdown, tables = convert_pdf_to_markdown(
-                    input_path=file_path,
-                    table_context_window=self.table_context_window
+            try:
+                logger.info("Processing file: %s", file_path)
+                with Stopwatch('Markdown conversion'):
+                    markdown, tables = convert_pdf_to_markdown(
+                        input_path=file_path,
+                        table_context_window=self.table_context_window
+                    )
+                logger.info(
+                    "Conversion complete",
+                    extra={"markdown_chars": len(markdown), "table_count": len(tables)}
                 )
-            logger.info(
-                "Conversion complete",
-                extra={"markdown_chars": len(markdown), "table_count": len(tables)}
-            )
 
-            table_chunks = self.summerize_and_chunk_table(
-                tables,
-                model=self.table_summerizer,
-                summerize_enabled=self.summarize_tables_enabled,
-            )
-            logger.info("Table summarization complete", extra={"table_chunks": len(table_chunks)})
+                table_chunks = self.summerize_and_chunk_table(
+                    tables,
+                    model=self.table_summarizer,
+                    summerize_enabled=self.summarize_tables_enabled,
+                )
+                logger.info("Table summarization complete", extra={"table_chunks": len(table_chunks)})
 
-            chunks = self.markdown_chunker(
-                markdown=markdown,
-                source_path=file_path,
-                config=self.config
-            )
-            logger.info("Chunked markdown into parent chunks", extra={"parent_chunks": len(chunks)})
+                chunks = self.markdown_chunker(
+                    markdown=markdown,
+                    source_path=file_path,
+                    config=self.config
+                )
+                logger.info("Chunked markdown into parent chunks", extra={"parent_chunks": len(chunks)})
 
-            md_file_name = Path(self.processed_dir) / f"{Path(file_path).stem}.md"
-            md_file_name.parent.mkdir(parents=True, exist_ok=True)
-            md_file_name.write_text(markdown, encoding='utf-8')
-            logger.info("Markdown snapshot stored", extra={"path": str(md_file_name)})
+                md_file_name = Path(self.processed_dir) / f"{Path(file_path).stem}.md"
+                md_file_name.parent.mkdir(parents=True, exist_ok=True)
+                md_file_name.write_text(markdown, encoding='utf-8')
+                logger.info("Markdown snapshot stored", extra={"path": str(md_file_name)})
 
-            total_chunks_before_extend = len(chunks)
-            chunks.extend(table_chunks)
-            logger.info(
-                "Extended chunks with table entries",
-                extra={
-                    "doc_chunks": total_chunks_before_extend,
-                    "table_chunks": len(table_chunks),
-                    "total_chunks": len(chunks)
-                }
-            )
+                total_chunks_before_extend = len(chunks)
+                chunks.extend(table_chunks)
+                logger.info(
+                    "Extended chunks with table entries",
+                    extra={
+                        "doc_chunks": total_chunks_before_extend,
+                        "table_chunks": len(table_chunks),
+                        "total_chunks": len(chunks)
+                    }
+                )
 
-            self.store_chunk(
-                chunks=chunks,
-                vector_store=self.vector_store,
-                doc_store=self.doc_store,
-                persist_path=self.store_persistence_path
-            )
-            logger.info("Persisted chunk batch", extra={"chunk_count": len(chunks)})
-        logger.info("Ingestion run completed")
+                self.indexer.ingest_documents(chunks)
+                total_processed +=1
+            except Exception as e:
+                failed_files.append(file_path)
+                logger.warning(f"Failed to ingest: {e}", extra={"file_path": file_path})
+
+        logger.info(f"Ingestion run completed: Failed files: {len(failed_files)}, Successful files: {total_processed} ")
 
     def _iter_files(self):
         """

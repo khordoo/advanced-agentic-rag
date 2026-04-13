@@ -41,8 +41,9 @@ from langchain_text_splitters import (
 )
 
 from rag_core.converter import PAGE_PATTERN
-from rag_core.schemas import ParentChunk
+from rag_core.schemas import ParentChunk, ChunkMetadata
 from rag_core.agents import TableSummarizer
+from rag_core.indexing.qdrant_indexer import QdrantIndexer
 logger = logging.getLogger(__name__)
 
 # Default header hierarchy for markdown splitting
@@ -165,12 +166,11 @@ def chunk_markdown(
                 )
                 for child_text in child_texts
             ]
-
             all_parent_chunks.append(
                 ParentChunk(
-                    parent_id=parent_id,
+                    id=parent_id,
                     enriched_text=enriched_parent,
-                    metadata=parent_doc.metadata,
+                    metadata=_create_parent_metadata(parent_doc),
                     children=child_docs,
                 )
             )
@@ -185,49 +185,16 @@ def chunk_markdown(
 # ---------------------------------------------------------------------------
 # Storage helpers
 # ---------------------------------------------------------------------------
-
-
-def store_chunks(
-    chunks: list[ParentChunk],
-    vector_store,
-    doc_store: dict[str, dict],
-    persist_path: str | Path | None = None,
-    vectore_store_reset_collection: bool = True
-) -> None:
-    """Store parent/child chunks into a vector store and document store.
-
-    Parameters
-    ----------
-    chunks:
-        Output of :func:`chunk_markdown`.
-    vector_store:
-        Any LangChain-compatible vector store (``InMemoryVectorStore``,
-        ``Chroma``, ``QdrantVectorStore``, …).
-    doc_store:
-        A plain ``dict`` used as the parent document store.
-        Keys are parent IDs, values are ``{"content": ..., "metadata": ...}``.
-    persist_path:
-        If given, pickle-dump *doc_store* to this path after storing.
-    """
-    for chunk in chunks:
-        doc_store[chunk.parent_id] = {
-            "content": chunk.enriched_text,
-            "metadata": json.dumps(chunk.metadata, default=str),
-        }
-        print('******************Storing Chunks*******************************')
-        if chunk.children:
-            print(chunk.children)
-            print('.....'*30)
-            vector_store.add_documents(chunk.children)
-
-    logger.info("Stored %d parent chunks in document store", len(chunks))
-
-    if persist_path is not None:
-        persist_path = Path(persist_path)
-        persist_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(persist_path, "wb") as fh:
-            pickle.dump(doc_store, fh)
-        logger.info("Document store persisted to %s", persist_path)
+def _create_parent_metadata(doc: Document)-> ChunkMetadata:
+    parent_metadata = {
+        "source": doc.metadata.get("source_path",''),
+        "file_name": doc.metadata.get("file_name"),
+        "pages": doc.metadata.get("pages")
+    }
+    for header in HEADER_KEYS:
+        if header_val := doc.metadata.get(header):
+            parent_metadata[header] = header_val
+    return ChunkMetadata(**parent_metadata)
 
 
 # ---------------------------------------------------------------------------
@@ -240,7 +207,6 @@ def summerize_and_chunk_table(table_data_list: list[dict], model:TableSummarizer
     for i,table_data in enumerate(table_data_list):
         table_id = f"DATA_TABLE_{i:03d}"
         raw_md = table_data['markdown']
-
         base_header = f"[Doc: {table_data['file_name']}] [Section: Data Table] [Location: Page {table_data['page_no']}]"
 
         logger.debug(
@@ -250,7 +216,7 @@ def summerize_and_chunk_table(table_data_list: list[dict], model:TableSummarizer
             table_data['page_no'],
         )
         table_summary =model.summarize(table_markdown=raw_md) if summerize_enabled else table_data
-        logger.debug("Summary ready for table %s", table_id)
+        logger.debug(f"Summary ready for table {table_id}. Progress: {(i+1)/len(table_data_list):0.2f}" )
         parent_id = uuid.uuid4().hex
         # Create the Child (The Searchable Vector)
         # We explicitly put the table_id in the text so the vector DB indexes it!
@@ -261,17 +227,24 @@ def summerize_and_chunk_table(table_data_list: list[dict], model:TableSummarizer
                     metadata={
                         "parent": parent_id,
                         "table_id": table_id, # Added for strict metadata filtering
-                        "page_start":table_data['page_no']
+                        "pages":[table_data['page_no']]
                     }
                 )
+
+        parent_metadata={
+              "file_name": table_data['file_name'],
+              "source": table_data['source_path'],
+              "pages": [table_data['page_no']],
+              "table_id": table_id,
+        }
         # Create the Parent (The LLM Payload)
         # We append the ID to the top so the LLM has a visual anchor
         parent_text = f"{base_header}\n[{table_id}]\n\n{raw_md}"
         parent_chunks.append(
             ParentChunk(
-                parent_id=parent_id,
+                id=parent_id,
                 enriched_text=parent_text,
-                metadata=child_doc.metadata,
+                metadata=ChunkMetadata(**parent_metadata),
                 children=[child_doc],
             )
         )

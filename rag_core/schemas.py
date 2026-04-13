@@ -1,11 +1,12 @@
 """Pydantic models shared across the pipeline."""
 
 from __future__ import annotations
-
+from enum import Enum
 from typing import List, Optional,Any
 from langchain_core.documents import Document
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from dataclasses import dataclass, field
+from qdrant_client import  models
 
 class QAPair(BaseModel):
     """A single question-answer pair for evaluation."""
@@ -112,9 +113,40 @@ class ExtractedTable(BaseModel):
 class ParentChunk:
     """A parent chunk with its child documents ready for storage."""
 
-    parent_id: str
+    id: str
     enriched_text: str
-    metadata: dict[str, Any]
+    metadata: ChunkMetadata
     children: list[Document] = field(default_factory=list)
+
+class ChunkMetadata(BaseModel):
+    model_config = ConfigDict(extra='allow')
+    file_name: str
+    source: str  #absolute path/URI of where the document lives
+    pages: list[int]
+
+    scopes: list[str] = Field(default_factory=lambda: ['public']) # data access tags
+    table_id: Optional[str] =None
+
+class VectorDatabasePayloadKeys(str,Enum):
+    SOURCE = 'source'
+    FILE_NAME = 'file_name'
+    PAGE='pages'
+    TABLE_ID='table_id'
+    TEXT='text'
+    PARENT_ID='parent_id'
+    SCOPES='scopes'
+
+PARENT_INDEX_SCHEMA={
+    VectorDatabasePayloadKeys.SOURCE: models.PayloadSchemaType.KEYWORD,
+    VectorDatabasePayloadKeys.FILE_NAME: models.PayloadSchemaType.KEYWORD,
+    VectorDatabasePayloadKeys.PAGE: models.PayloadSchemaType.INTEGER,
+    VectorDatabasePayloadKeys.TABLE_ID: models.PayloadSchemaType.KEYWORD,
+    VectorDatabasePayloadKeys.SCOPES: models.PayloadSchemaType.KEYWORD,
+}
+
+CHILD_INDEX_SCHEMA={
+    VectorDatabasePayloadKeys.PARENT_ID: models.PayloadSchemaType.KEYWORD,
+}
+
 # Required for forward-reference resolution in Python 3.10+
 SyntheticsTestSet.model_rebuild()

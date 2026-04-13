@@ -105,9 +105,9 @@ def setup_logging():
 
 class QdrantSettings(BaseSettings):
       url : str = 'http://localhost:6333'
-      embed_model:str = "prithivida/Splade_PP_en_v1"
-      sparse_model: str ="BAAI/bge-small-en-v1.5"
-
+      embed_model:str = "BAAI/bge-small-en-v1.5"
+      sparse_model: str ="prithivida/Splade_PP_en_v1"
+      collection_namespace:str='docs'
       model_config = SettingsConfigDict(env_prefix='QDRANT_',env_file='.env',extra='ignore')
 
 class PostgresSettings(BaseSettings):
@@ -120,6 +120,18 @@ class PostgresSettings(BaseSettings):
     # Pydantic will ONLY look for variables starting with "POSTGRES_"
     model_config = SettingsConfigDict(env_prefix='POSTGRES_', env_file='.env', extra='ignore')
 
+# --- PIPELINE SETTINGS ---
+
+class IngestionSettings(BaseSettings):
+    """Strictly for tuning how the pipeline processes data."""
+    chunk_size: int = 1000
+    chunk_overlap: int = 200
+    max_retries: int = 3
+    # You can add things like 'enable_ocr' or 'target_folder' here
+
+    model_config = SettingsConfigDict(env_prefix='INGESTION_', env_file='.env', extra='ignore')
+
+
 @lru_cache
 def get_qdrant_settings()->QdrantSettings:
     logger.info("Reading .env file and caching Qdrant settings...")
@@ -129,3 +141,8 @@ def get_qdrant_settings()->QdrantSettings:
 def get_postgres_settings()->PostgresSettings:
     logger.info("Reading .env file and caching Qdrant settings...")
     return PostgresSettings()
+
+@lru_cache()
+def get_ingestion_settings() -> IngestionSettings:
+    logger.info("Reading .env file and caching Indexing pipeline settings...")
+    return IngestionSettings()
