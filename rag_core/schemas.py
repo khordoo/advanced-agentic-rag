@@ -115,7 +115,7 @@ class ParentChunk:
 
     id: str
     enriched_text: str
-    metadata: ChunkMetadata
+    metadata: ParentMetadata
     children: list[Document] = field(default_factory=list)
 
 
@@ -139,14 +139,6 @@ class ParentMetadata(BaseChunkMetadata):
 class ChildMetadata(BaseChunkMetadata):
     parent_id: str
 
-class ChunkMetadata(BaseModel):
-    model_config = ConfigDict(extra='allow')
-    file_name: str
-    source: str  #absolute path/URI of where the document lives
-    pages: list[int]
-
-    scopes: list[str] = Field(default_factory=lambda: ['public']) # data access tags
-    table_id: Optional[str] =None
 
 class VectorDatabasePayloadKeys(str,Enum):
     SOURCE = 'source'

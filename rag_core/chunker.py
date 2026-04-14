@@ -41,7 +41,7 @@ from langchain_text_splitters import (
 )
 
 from rag_core.converter import PAGE_PATTERN
-from rag_core.schemas import ParentChunk, ChunkMetadata, ChildMetadata ,ParentMetadata
+from rag_core.schemas import ParentChunk, ChildMetadata ,ParentMetadata
 from rag_core.agents import TableSummarizer
 from rag_core.indexing.qdrant_indexer import QdrantIndexer
 logger = logging.getLogger(__name__)
@@ -199,7 +199,7 @@ def _create_child_metadata(parent_doc:Document,parent_id:str) -> ChildMetadata:
     return ChildMetadata(**child_metadata)
 
 
-def _create_parent_metadata(doc: Document)-> ChunkMetadata:
+def _create_parent_metadata(doc: Document)-> ParentMetadata:
     parent_metadata = {
         "source": doc.metadata.get("source_path",''),
         "file_name": doc.metadata.get("file_name"),
@@ -208,7 +208,7 @@ def _create_parent_metadata(doc: Document)-> ChunkMetadata:
     for header in HEADER_KEYS:
         if header_val := doc.metadata.get(header):
             parent_metadata[header] = header_val
-    return ChunkMetadata(**parent_metadata)
+    return ParentMetadata(**parent_metadata)
 
 
 # ---------------------------------------------------------------------------
@@ -258,7 +258,7 @@ def summerize_and_chunk_table(table_data_list: list[dict], model:TableSummarizer
             ParentChunk(
                 id=parent_id,
                 enriched_text=parent_text,
-                metadata=ChunkMetadata(**parent_metadata),
+                metadata=ParentMetadata(**parent_metadata),
                 children=[child_doc],
             )
         )
