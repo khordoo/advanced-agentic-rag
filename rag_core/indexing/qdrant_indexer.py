@@ -1,117 +1,174 @@
+"""Qdrant-backed indexer for parent–child document storage.
+
+Manages two collections per namespace:
+  • ``{namespace}_chunks``  – child chunks with dense + sparse vectors
+  • ``{namespace}_parents`` – parent documents stored as payload-only points
+"""
+
+from __future__ import annotations
+
 import logging
 import uuid
-from typing import Any, Dict, List, Iterable
-from qdrant_client import QdrantClient, models
-from rag_core.indexing.base import BaseIndexer
-from rag_core.db.connection_manager import QdrantConnectionManager
-from rag_core.config import get_qdrant_settings, QdrantSettings
-from rag_core.schemas import PARENT_INDEX_SCHEMA, CHILD_INDEX_SCHEMA, ParentChunk
+from typing import Any
 
+from qdrant_client import QdrantClient, models
+
+from rag_core.config import QdrantSettings, get_qdrant_settings
+from rag_core.db.connection_manager import QdrantConnectionManager
+from rag_core.indexing.base import BaseIndexer
+from rag_core.schemas import CHILD_INDEX_SCHEMA, PARENT_INDEX_SCHEMA, ParentChunk
 
 logger = logging.getLogger(__name__)
 
 
 class QdrantIndexer(BaseIndexer):
+    """Indexes :class:`ParentChunk` trees into a pair of Qdrant collections.
 
-    def __init__(self, client: QdrantClient | None = None, settings: QdrantSettings | None = None):
-        self.client = client or QdrantConnectionManager.get_client()
-        self.settings = settings or get_qdrant_settings()
-        namespace = self.settings.collection_namespace  # small chunks for vector
+    Parameters
+    ----------
+    client:
+        Pre-configured ``QdrantClient``.  When *None*, one is obtained via
+        :class:`QdrantConnectionManager`.
+    settings:
+        Qdrant-specific configuration.  Falls back to :func:`get_qdrant_settings`.
+    """
 
-        self.chunk_collection_name = f"{namespace}_chunks"  # e.g., 'docs_chunks'
-        self.parent_collection_name = f"{namespace}_parents"  # e.g., 'docs_parents'
+    def __init__(
+        self,
+        client: QdrantClient | None = None,
+        settings: QdrantSettings | None = None,
+    ) -> None:
+        self._client = client or QdrantConnectionManager.get_client()
+        self._settings = settings or get_qdrant_settings()
 
-        self._initialize_collections()
+        namespace = self._settings.collection_namespace
+        self._chunk_collection = f"{namespace}_chunks"
+        self._parent_collection = f"{namespace}_parents"
 
+        self._ensure_collections()
 
-    def _initialize_collections(self ):
-        self._create_collection(self.chunk_collection_name, CHILD_INDEX_SCHEMA,is_vector=True)
-        self._create_collection(self.parent_collection_name, PARENT_INDEX_SCHEMA, is_vector=False)
+    # ------------------------------------------------------------------
+    # Collection lifecycle
+    # ------------------------------------------------------------------
 
-    # The asterisk means everything after it MUST be passed by name
-    def _create_collection(self, name: str, schema_registry: dict[str, Any],*, is_vector:bool = True):
-        if not self.client.collection_exists(name):
-            logger.info(f"Creating collection '{name}'...")
+    def _ensure_collections(self) -> None:
+        """Ensure both collections exist with the correct schema."""
+        self._create_collection_if_missing(
+            self._chunk_collection, CHILD_INDEX_SCHEMA, vector_enabled=True,
+        )
+        self._create_collection_if_missing(
+            self._parent_collection, PARENT_INDEX_SCHEMA, vector_enabled=False,
+        )
 
-            if is_vector:
-                self.client.create_collection(
-                    collection_name=name,
-                    vectors_config=self.client.get_fastembed_vector_params(),
-                    sparse_vectors_config=self.client.get_fastembed_sparse_vector_params()
-                )
-            else:
-                #document store, no vector search is needed
-                self.client.create_collection(
-                    collection_name=name,
-                    vectors_config={},
-                )
+    def _create_collection_if_missing(
+        self,
+        name: str,
+        schema: dict[str, Any],
+        *,
+        vector_enabled: bool = True,
+    ) -> None:
+        """Create a collection and apply payload indexes when it does not exist."""
+        if self._client.collection_exists(name):
+            return
 
-            #creating index
-            for field_name,field_type in schema_registry.items():
-                self.client.create_payload_index(
-                    collection_name=name,
-                    field_name=field_name,
-                    field_schema=field_type
-                )
-            logger.info(f"Index applied for {name}.")
+        logger.info("Creating collection '%s' (vectors=%s) …", name, vector_enabled)
 
-    def ingest_documents(self, document_blocks:list[ParentChunk]):
-        """Pushes new documents into the vector database using modern upsert."""
-        logger.info(f"Ingesting {len(document_blocks)} chunks into '{self.chunk_collection_name}'...")
-        vector_name = self.client.get_vector_field_name()
-        sparse_vector_name = self.client.get_sparse_vector_field_name()
-        # TODO: pass the chunk object use child text for vector and save parent text in the metadata object or parent id? but we would need a different document store?  or a seperate index in qdrant that only save parents?
-        parent_points=[]
-        child_points=[]
+        if vector_enabled:
+            self._client.create_collection(
+                collection_name=name,
+                vectors_config=self._client.get_fastembed_vector_params(),
+                sparse_vectors_config=self._client.get_fastembed_sparse_vector_params(),
+            )
+        else:
+            self._client.create_collection(
+                collection_name=name,
+                vectors_config={},
+            )
+
+        for field_name, field_type in schema.items():
+            self._client.create_payload_index(
+                collection_name=name,
+                field_name=field_name,
+                field_schema=field_type,
+            )
+        logger.info("Payload indexes applied for '%s'.", name)
+
+    def ingest_documents(self, document_blocks: list[ParentChunk]) -> None:
+        """Upsert parent + child points into Qdrant.
+
+        Each :class:`ParentChunk` produces:
+        * One payload-only point in the *parents* collection.
+        * Multiple child chunks in the *chunks* collection (automatically embedded).
+        """
+        logger.info(
+            "Preparing %d document blocks for ingestion into Qdrant …", len(document_blocks),
+        )
+
+        parent_points: list[models.PointStruct] = []
+        child_texts: list[str] = []
+        child_metadatas: list[dict[str, Any]] = []
+        child_ids: list[str] = []
+
         for block in document_blocks:
+            # 1. Build parent point (vector-less)
             parent_points.append(
                 models.PointStruct(
                     id=block.id,
                     vector={},
-                    payload={'text':block.enriched_text,**block.metadata.model_dump()}
+                    payload={"text": block.enriched_text, **block.metadata.model_dump()},
                 )
             )
+
+            # 2. Build child data for high-level 'add' method
             for child_doc in block.children:
-                child_points.append(
-                    models.PointStruct(
-                        id=(str(uuid.uuid4())),
-                        vector={
-                            # Dense embedding (uses your BAAI model)
-                            vector_name: models.Document(
-                                text=child_doc.page_content,
-                                model=self.settings.embed_model
-                            ),
-                            # Sparse embedding (uses your Splade model)
-                            sparse_vector_name: models.Document(
-                                text=child_doc.page_content,
-                                model=self.settings.sparse_model
-                            )
-                        },
-                        payload=child_doc.metadata
-                    )
-                )
+                child_texts.append(child_doc.page_content)
+                meta = child_doc.metadata.copy()
+                meta["parent_id"] = block.id
+                child_metadatas.append(meta)
+                child_ids.append(str(uuid.uuid4()))
 
-        logger.info(f"Ingesting document chunks into the qdrant database...")
-        self.client.upsert(
-            collection_name=self.chunk_collection_name,
-            points=child_points
+        # Ingest children using high-level API (handles embedding)
+        if child_texts:
+            logger.info("Embedding and ingesting %d child chunks …", len(child_texts))
+            self._client.add(
+                collection_name=self._chunk_collection,
+                documents=child_texts,
+                metadata=child_metadatas,
+                ids=child_ids,
+            )
+
+        # Ingest parents using upsert (already prepared as points)
+        if parent_points:
+            self._upsert(self._parent_collection, parent_points, label="parents")
+
+        logger.info(
+            "Ingestion complete: %d parents, %d child chunks → [%s, %s].",
+            len(parent_points),
+            len(child_texts),
+            self._parent_collection,
+            self._chunk_collection,
         )
-        logger.info(f"Ingesting document parents into the qdrant database...")
-        self.client.upsert(
-            collection_name=self.parent_collection_name,
-            points=parent_points
-        )
-        logger.info(f"Ingestion completed: {len(parent_points)} parents, {len(child_points)} child chunks, into {self.chunk_collection_name} and {self.parent_collection_name} indexes.")
 
-    def reset_collections(self):
-        logger.info(f"Resetting collection indexes...")
-        self._delete_collection(self.chunk_collection_name)
-        self._delete_collection(self.parent_collection_name)
-        self._initialize_collections()
+    def reset_collections(self) -> None:
+        """Drop and recreate both managed collections."""
+        logger.info("Resetting collections …")
+        for name in (self._chunk_collection, self._parent_collection):
+            self._drop_collection(name)
+        self._ensure_collections()
 
-    def _delete_collection(self, collection_name: str):
-        if self.client.collection_exists(collection_name):
-            self.client.delete_collection(collection_name=collection_name)
-            logger.info(f"Deleted collection '{collection_name}'.")
+    def _upsert(
+        self,
+        collection: str,
+        points: list[models.PointStruct],
+        *,
+        label: str,
+    ) -> None:
+        logger.info("Upserting %d %s into '%s' …", len(points), label, collection)
+        self._client.upsert(collection_name=collection, points=points)
+
+    def _drop_collection(self, name: str) -> None:
+        if self._client.collection_exists(name):
+            self._client.delete_collection(collection_name=name)
+            logger.info("Dropped collection '%s'.", name)
         else:
-            logger.info(f"Collection '{collection_name}' does not exist. Deletion skipped.")
+            logger.debug("Collection '%s' does not exist — skipped.", name)
