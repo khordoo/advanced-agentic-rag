@@ -8,7 +8,7 @@ from functools import lru_cache
 from pathlib import Path
 from sqlite3.dbapi2 import DatabaseError
 from dotenv import dotenv_values, load_dotenv
-from pydantic import BaseModel
+from pydantic import BaseModel ,Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
@@ -103,12 +103,35 @@ def setup_logging():
         force=True
     )
 
+
+class SecuritySettings(BaseSettings):
+    """Strictly for RBAC, scopes, and access control baselines."""
+    default_scopes: list[str] = ['public']
+
+    # You can naturally expand this later without polluting your ingestion logic:
+    admin_role: str = "admin"
+    enable_strict_mode: bool = True
+
+    model_config = SettingsConfigDict(env_prefix='SECURITY_', env_file='.env', extra='ignore')
+
+class RetrivalSettings(BaseSettings):
+     top_k:int = Field(default=10,ge=1,le=50,description="Final number of documents to return to the agent.")
+     oversample_factor: int = Field(default=5,ge=1,le=5 ,description="Multiplier for initial retrieval to feed a reranker.")
+     hybrid_alpha: float = Field(default=0.5,ge=0,le=1)
+     # Hybrid Search Weights (0.0 = Sparse only, 1.0 = Dense only)
+     # Most RAG systems perform best around 0.4 to 0.7
+     score_threshold: float = Field(default=0.35,ge=0,le=1) # Don't return results lower than this
+     fetch_parent:bool =True
+
 class QdrantSettings(BaseSettings):
       url : str = 'http://localhost:6333'
       embed_model:str = "BAAI/bge-small-en-v1.5"
       sparse_model: str ="prithivida/Splade_PP_en_v1"
       collection_namespace:str='docs'
+      chunk_collection_name:str = f'{collection_namespace}_chunks'
+      parent_collection_name:str=f'{collection_namespace}_parents'
       model_config = SettingsConfigDict(env_prefix='QDRANT_',env_file='.env',extra='ignore')
+
 
 class PostgresSettings(BaseSettings):
     user: str = "admin"

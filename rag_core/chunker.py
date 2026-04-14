@@ -41,7 +41,7 @@ from langchain_text_splitters import (
 )
 
 from rag_core.converter import PAGE_PATTERN
-from rag_core.schemas import ParentChunk, ChunkMetadata
+from rag_core.schemas import ParentChunk, ChunkMetadata, ChildMetadata ,ParentMetadata
 from rag_core.agents import TableSummarizer
 from rag_core.indexing.qdrant_indexer import QdrantIndexer
 logger = logging.getLogger(__name__)
@@ -159,10 +159,14 @@ def chunk_markdown(
 
             # --- Phase 3: split parent into children -----------------------
             child_texts = child_splitter.split_text(parent_doc.page_content)
+            print('============Child chunks==================')
+            print(child_texts)
+            print('--'*30)
+            child_meta=_create_child_metadata(parent_doc,parent_id).model_dump()
             child_docs = [
                 Document(
                     page_content=header + child_text,
-                    metadata={"parent": parent_id},
+                    metadata=child_meta,
                 )
                 for child_text in child_texts
             ]
@@ -185,6 +189,16 @@ def chunk_markdown(
 # ---------------------------------------------------------------------------
 # Storage helpers
 # ---------------------------------------------------------------------------
+def _create_child_metadata(parent_doc:Document,parent_id:str) -> ChildMetadata:
+    child_metadata = {
+        "source": parent_doc.metadata.get("source_path", ''),
+        "file_name": parent_doc.metadata.get("file_name",''),
+        "pages": parent_doc.metadata.get("pages",''),
+        "parent_id": parent_id,
+    }
+    return ChildMetadata(**child_metadata)
+
+
 def _create_parent_metadata(doc: Document)-> ChunkMetadata:
     parent_metadata = {
         "source": doc.metadata.get("source_path",''),

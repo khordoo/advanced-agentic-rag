@@ -41,9 +41,8 @@ class QdrantIndexer(BaseIndexer):
         self._client = client or QdrantConnectionManager.get_client()
         self._settings = settings or get_qdrant_settings()
 
-        namespace = self._settings.collection_namespace
-        self._chunk_collection = f"{namespace}_chunks"
-        self._parent_collection = f"{namespace}_parents"
+        self._chunk_collection = self._settings.chunk_collection_name
+        self._parent_collection = self._settings.parent_collection_name
 
         self._ensure_collections()
 
@@ -92,6 +91,12 @@ class QdrantIndexer(BaseIndexer):
                 field_schema=field_type,
             )
         logger.info("Payload indexes applied for '%s'.", name)
+    def reset_collections(self) -> None:
+        """Drop and recreate both managed collections."""
+        logger.info("Resetting collections …")
+        for name in (self._chunk_collection, self._parent_collection):
+            self._drop_collection(name)
+        self._ensure_collections()
 
     def ingest_documents(self, document_blocks: list[ParentChunk]) -> None:
         """Upsert parent + child points into Qdrant.
@@ -122,8 +127,8 @@ class QdrantIndexer(BaseIndexer):
             # 2. Build child data for high-level 'add' method
             for child_doc in block.children:
                 child_texts.append(child_doc.page_content)
-                meta = child_doc.metadata.copy()
-                meta["parent_id"] = block.id
+                meta = child_doc.metadata
+                # meta["parent_id"] = block.id
                 child_metadatas.append(meta)
                 child_ids.append(str(uuid.uuid4()))
 
@@ -149,12 +154,7 @@ class QdrantIndexer(BaseIndexer):
             self._chunk_collection,
         )
 
-    def reset_collections(self) -> None:
-        """Drop and recreate both managed collections."""
-        logger.info("Resetting collections …")
-        for name in (self._chunk_collection, self._parent_collection):
-            self._drop_collection(name)
-        self._ensure_collections()
+
 
     def _upsert(
         self,

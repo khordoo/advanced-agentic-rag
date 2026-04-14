@@ -118,6 +118,27 @@ class ParentChunk:
     metadata: ChunkMetadata
     children: list[Document] = field(default_factory=list)
 
+
+class BaseChunkMetadata(BaseModel):
+    model_config = ConfigDict(extra='allow')
+
+    file_name: str
+    source: str
+    pages: list[int]
+
+    # We will remove the hardcoded ['public'] here in the next step!
+    scopes: list[str] =Field(default_factory=lambda: ['public'])
+
+
+# 2. The Parent (Adds Table context if needed)
+class ParentMetadata(BaseChunkMetadata):
+    table_id: Optional[str] = None
+
+
+# 3. The Child (Adds the mandatory link back to the Parent)
+class ChildMetadata(BaseChunkMetadata):
+    parent_id: str
+
 class ChunkMetadata(BaseModel):
     model_config = ConfigDict(extra='allow')
     file_name: str
@@ -136,17 +157,38 @@ class VectorDatabasePayloadKeys(str,Enum):
     PARENT_ID='parent_id'
     SCOPES='scopes'
 
-PARENT_INDEX_SCHEMA={
-    VectorDatabasePayloadKeys.SOURCE: models.PayloadSchemaType.KEYWORD,
-    VectorDatabasePayloadKeys.FILE_NAME: models.PayloadSchemaType.KEYWORD,
-    VectorDatabasePayloadKeys.PAGE: models.PayloadSchemaType.INTEGER,
-    VectorDatabasePayloadKeys.TABLE_ID: models.PayloadSchemaType.KEYWORD,
-    VectorDatabasePayloadKeys.SCOPES: models.PayloadSchemaType.KEYWORD,
+_BASE_INDEX_SCHEMA={
+    VectorDatabasePayloadKeys.SOURCE.value: models.PayloadSchemaType.KEYWORD,
+    VectorDatabasePayloadKeys.FILE_NAME.value: models.PayloadSchemaType.KEYWORD,
+    VectorDatabasePayloadKeys.PAGE.value: models.PayloadSchemaType.INTEGER,
+    VectorDatabasePayloadKeys.SCOPES.value: models.PayloadSchemaType.KEYWORD,
 }
 
-CHILD_INDEX_SCHEMA={
-    VectorDatabasePayloadKeys.PARENT_ID: models.PayloadSchemaType.KEYWORD,
+PARENT_INDEX_SCHEMA={
+    **_BASE_INDEX_SCHEMA,
+    VectorDatabasePayloadKeys.TABLE_ID.value: models.PayloadSchemaType.KEYWORD,
 }
+CHILD_INDEX_SCHEMA={
+    **_BASE_INDEX_SCHEMA,
+    VectorDatabasePayloadKeys.PARENT_ID.value: models.PayloadSchemaType.KEYWORD,
+}
+
+# PARENT_INDEX_SCHEMA={
+#     VectorDatabasePayloadKeys.SOURCE: models.PayloadSchemaType.KEYWORD,
+#     VectorDatabasePayloadKeys.FILE_NAME: models.PayloadSchemaType.KEYWORD,
+#     VectorDatabasePayloadKeys.PAGE: models.PayloadSchemaType.INTEGER,
+#     VectorDatabasePayloadKeys.TABLE_ID: models.PayloadSchemaType.KEYWORD,
+#     VectorDatabasePayloadKeys.SCOPES: models.PayloadSchemaType.KEYWORD,
+# }
+#
+# CHILD_INDEX_SCHEMA={
+#     VectorDatabasePayloadKeys.PARENT_ID: models.PayloadSchemaType.KEYWORD,
+#     VectorDatabasePayloadKeys.SOURCE: models.PayloadSchemaType.KEYWORD,
+#     VectorDatabasePayloadKeys.FILE_NAME: models.PayloadSchemaType.KEYWORD,
+#     VectorDatabasePayloadKeys.PAGE: models.PayloadSchemaType.INTEGER,
+#     VectorDatabasePayloadKeys.TABLE_ID: models.PayloadSchemaType.KEYWORD,
+#     VectorDatabasePayloadKeys.SCOPES: models.PayloadSchemaType.KEYWORD,
+# }
 
 # Required for forward-reference resolution in Python 3.10+
 SyntheticsTestSet.model_rebuild()
