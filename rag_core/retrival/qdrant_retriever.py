@@ -47,7 +47,7 @@ class QdrantRetriever(BaseRetriever):
         limit: int | None = None,
     ) -> list[Document]:
         """Perform a deterministic metadata lookup."""
-        limit= limit or self.retrieval_settings.top_k
+        limit= limit if limit is None else self.retrieval_settings.top_k
         qdrant_filter = self._build_filters(scopes, exact_filters=filters)
 
         points, _ = self._client.scroll(
@@ -58,104 +58,7 @@ class QdrantRetriever(BaseRetriever):
         )
         return [self._point_to_document(p) for p in points]
 
-    def search(
-        self,
-        query: str,
-        limit: int | None = None,
-        score_threshold: float | None = None,
-        scopes: list[str] | None = None,
-        filters: dict[str, Any] | None = None,
-    ) -> list[Document]:
-        """Execute semantic search with parent document reconstruction."""
 
-        actual_limit = limit if limit is not None else self.retrieval_settings.top_k
-        actual_threshold = score_threshold if score_threshold is not None else self.retrieval_settings.score_threshold
-
-        qdrant_filter = self._build_filters(scopes, exact_filters=filters)
-        fetch_limit = actual_limit * self.retrieval_settings.oversample_factor
-
-        # Search child chunks
-        results = self._client.query(
-            collection_name=self._settings.chunk_collection_name,
-            query_text=query,
-            query_filter=qdrant_filter,
-            limit=fetch_limit,
-        )
-
-        # Extract unique parents and their maximum scores
-        unique_parents = self._extract_unique_parents(results=results,
-                                                      limit=actual_limit,
-                                                      score_threshold= actual_threshold)
-        if not unique_parents:
-            return []
-
-        # Batch retrieve parent documents
-        parent_ids = [pid for pid, _ in unique_parents]
-        score_map = dict(unique_parents)
-
-        parent_points = self._client.retrieve(
-            collection_name=self._settings.parent_collection_name,
-            ids=parent_ids,
-            with_payload=True,
-        )
-
-        # Reconstruct documents and sort by retrieval score
-        documents = []
-        for point in parent_points:
-            doc = self._point_to_document(point)
-            # Map score from child back to parent
-            doc.metadata["retrieval_score"] = score_map.get(str(point.id), 0.0)
-            documents.append(doc)
-
-        documents.sort(key=lambda d: d.metadata["retrieval_score"], reverse=True)
-        return documents
-
-    def _build_filters(
-        self,
-        scopes: list[str] | None,
-        exact_filters: dict[str, Any] | None,
-    ) -> models.Filter:
-        """Construct Qdrant Filter from scopes and exact metadata matches."""
-        scopes = scopes or self._default_scopes
-        must_conditions: list[models.Condition] = [
-            models.FieldCondition(
-                key=PayloadKeys.SCOPES.value,
-                match=models.MatchAny(any=scopes),
-            )
-        ]
-
-        if exact_filters:
-            valid_keys = {k.value for k in PayloadKeys if k != PayloadKeys.TEXT}
-            for key, val in exact_filters.items():
-                if key not in valid_keys:
-                    raise KeyError(f"Invalid filter key: {key}. Allowed: {valid_keys}")
-
-                match = models.MatchAny(any=val) if isinstance(val, list) else models.MatchValue(value=val)
-                must_conditions.append(models.FieldCondition(key=key, match=match))
-
-        return models.Filter(must=must_conditions)
-
-    def _extract_unique_parents(
-        self,
-        results: list[models.ScoredPoint],
-        limit: int,
-        score_threshold:float,
-
-    ) -> list[tuple[str, float]]:
-        """Group child chunks by parent_id, keeping the highest score for each."""
-        unique_ids: dict[str, float] = {}
-        for res in results:
-            if res.score < score_threshold:
-                continue
-
-            pid = res.payload.get(PayloadKeys.PARENT_ID.value)
-            if not pid:
-                continue
-
-            unique_ids[pid] = max(unique_ids.get(pid, 0.0), res.score)
-
-        sorted_ids = sorted(unique_ids.items(), key=lambda x: x[1], reverse=True)
-        return sorted_ids[: limit]
 
     def _point_to_document(self, point: models.Record | models.ScoredPoint) -> Document:
         """Convert a Qdrant point back to a LangChain Document."""
@@ -169,36 +72,6 @@ class QdrantRetriever(BaseRetriever):
         return Document(page_content=text, metadata=metadata)
 
 
-    def __init__(
-        self,
-        client: QdrantClient | None = None,
-        settings: QdrantSettings | None = None,
-        retrieval_settings: RetrivalSettings | None = None,
-    ) -> None:
-        super().__init__()
-        self._client = client or QdrantConnectionManager.get_client()
-        self._settings = settings or get_qdrant_settings()
-        self.retrieval_settings = retrieval_settings or RetrivalSettings()
-        self._default_scopes = ["public"]
-
-    def exact_lookup(
-        self,
-        scopes: list[str] | None = None,
-        filters: dict[str, Any] | None = None,
-        limit: int = None,
-    ) -> list[Document]:
-        """Perform a deterministic metadata lookup."""
-        limit= limit or self.retrieval_settings.top_k
-        qdrant_filter = self._build_filters(scopes, exact_filters=filters)
-
-        points, _ = self._client.scroll(
-            collection_name=self._settings.parent_collection_name,
-            scroll_filter=qdrant_filter,
-            limit=limit,
-            with_payload=True,
-        )
-        return [self._point_to_document(p) for p in points]
-
     def search(
         self,
         query: str,
@@ -224,7 +97,7 @@ class QdrantRetriever(BaseRetriever):
 
         # Extract unique parents and their maximum scores
         unique_parents = self._extract_unique_parents(results=results,
-                                                      limit=limit,
+                                                      limit=actual_limit,
                                                       score_threshold= actual_threshold)
         if not unique_parents:
             return []
