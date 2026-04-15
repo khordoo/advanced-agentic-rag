@@ -120,14 +120,23 @@ class ParentChunk:
 
 
 class BaseChunkMetadata(BaseModel):
+    """
+    Base schema for document chunk metadata.
+
+    Attributes:
+        file_name: The original name of the source file.
+        source: The URI or path source of the document.
+        pages: List of page numbers associated with this chunk [1,2] or [1].
+        tags: Categorization labels used for logical grouping (e.g., ['finance', 'legal']).
+        scopes: Access control scopes used for RBAC filtering (defaults to ['public']).
+    """
     model_config = ConfigDict(extra='allow')
 
     file_name: str
     source: str
     pages: list[int]
-
-    # We will remove the hardcoded ['public'] here in the next step!
-    scopes: list[str] =Field(default_factory=lambda: ['public'])
+    tags: list[str] = Field(default_factory=list)
+    scopes: list[str] = Field(default_factory=lambda: ["public"])
 
 
 # 2. The Parent (Adds Table context if needed)
@@ -148,12 +157,14 @@ class VectorDatabasePayloadKeys(str,Enum):
     TEXT='text'
     PARENT_ID='parent_id'
     SCOPES='scopes'
+    TAGS='tags'
 
 _BASE_INDEX_SCHEMA={
     VectorDatabasePayloadKeys.SOURCE.value: models.PayloadSchemaType.KEYWORD,
     VectorDatabasePayloadKeys.FILE_NAME.value: models.PayloadSchemaType.KEYWORD,
     VectorDatabasePayloadKeys.PAGE.value: models.PayloadSchemaType.INTEGER,
     VectorDatabasePayloadKeys.SCOPES.value: models.PayloadSchemaType.KEYWORD,
+    VectorDatabasePayloadKeys.TAGS.value: models.PayloadSchemaType.KEYWORD,
 }
 
 PARENT_INDEX_SCHEMA={
@@ -164,23 +175,6 @@ CHILD_INDEX_SCHEMA={
     **_BASE_INDEX_SCHEMA,
     VectorDatabasePayloadKeys.PARENT_ID.value: models.PayloadSchemaType.KEYWORD,
 }
-
-# PARENT_INDEX_SCHEMA={
-#     VectorDatabasePayloadKeys.SOURCE: models.PayloadSchemaType.KEYWORD,
-#     VectorDatabasePayloadKeys.FILE_NAME: models.PayloadSchemaType.KEYWORD,
-#     VectorDatabasePayloadKeys.PAGE: models.PayloadSchemaType.INTEGER,
-#     VectorDatabasePayloadKeys.TABLE_ID: models.PayloadSchemaType.KEYWORD,
-#     VectorDatabasePayloadKeys.SCOPES: models.PayloadSchemaType.KEYWORD,
-# }
-#
-# CHILD_INDEX_SCHEMA={
-#     VectorDatabasePayloadKeys.PARENT_ID: models.PayloadSchemaType.KEYWORD,
-#     VectorDatabasePayloadKeys.SOURCE: models.PayloadSchemaType.KEYWORD,
-#     VectorDatabasePayloadKeys.FILE_NAME: models.PayloadSchemaType.KEYWORD,
-#     VectorDatabasePayloadKeys.PAGE: models.PayloadSchemaType.INTEGER,
-#     VectorDatabasePayloadKeys.TABLE_ID: models.PayloadSchemaType.KEYWORD,
-#     VectorDatabasePayloadKeys.SCOPES: models.PayloadSchemaType.KEYWORD,
-# }
 
 # Required for forward-reference resolution in Python 3.10+
 SyntheticsTestSet.model_rebuild()

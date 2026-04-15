@@ -75,6 +75,9 @@ class IngestionPipeline:
         total_processed = 0
         for file_path in self._iter_files():
             try:
+                # Get tags dynamically per file (even if it's currently hardcoded)
+                current_tags = self._get_tags_for_file(file_path)
+
                 logger.info("Processing file: %s", file_path)
                 with Stopwatch('Markdown conversion'):
                     markdown, tables = convert_pdf_to_markdown(
@@ -88,6 +91,7 @@ class IngestionPipeline:
 
                 table_chunks = self.summerize_and_chunk_table(
                     tables,
+                    tags=current_tags,
                     model=self.table_summarizer,
                     summerize_enabled=self.summarize_tables_enabled,
                 )
@@ -96,6 +100,7 @@ class IngestionPipeline:
                 chunks = self.markdown_chunker(
                     markdown=markdown,
                     source_path=file_path,
+                    tags=current_tags,
                     config=self.config
                 )
                 logger.info("Chunked markdown into parent chunks", extra={"parent_chunks": len(chunks)})
@@ -123,6 +128,34 @@ class IngestionPipeline:
                 logger.warning(f"Failed to ingest: {e}", extra={"file_path": file_path})
 
         logger.info(f"Ingestion run completed: Failed files: {len(failed_files)}, Successful files: {total_processed} ")
+
+
+    def _get_tags_for_file(self, file_path: str) -> list[str]:
+        """
+        PLACEHOLDER: Extracts or assigns tags for a specific file.
+        TODO: Refactor this to use custom patterns, or LLM classification. Update as needed
+        Currently assigns logical tags based on the file's directory structure.
+
+        Currently returns the immediate parent folder name as a tag.
+        Future iterations may include deeper path analysis or LLM-based categorization.
+
+        Args:
+            file_path: The absolute path to the file being processed.
+
+        Returns:
+            A list of string tags (e.g., ['legal']).
+        """
+        path_obj = Path(file_path)
+        parent_folder = path_obj.parent.name
+
+        # Handle the case where .parent.name might return empty or a dot
+        if not parent_folder or parent_folder == ".":
+            # Fallback to the actual name of the ingestion directory defined in config
+            parent_folder = Path(self.ingestion_dir).name
+
+        # Return as a list with consistent lowercasing
+        return [parent_folder.lower()]
+
 
     def _iter_files(self):
         """

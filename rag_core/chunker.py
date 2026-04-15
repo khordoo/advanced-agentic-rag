@@ -66,6 +66,7 @@ HEADER_KEYS = [v for _, v in HEADERS_TO_SPLIT_ON]
 def chunk_markdown(
     markdown: str,
     source_path: str = "",
+    tags: list[str] | None = None,
     config: dict | None = None,
 ) -> list[ParentChunk]:
     """Split numbered markdown into parent/child chunks.
@@ -76,6 +77,8 @@ def chunk_markdown(
         Page-numbered markdown (output of :func:`rag_core.converter.convert_pdf_to_markdown`).
     source_path:
         Original file path — used for metadata.
+    tags: list[str] | None
+        General purouse tags. e.g fincnce, legal, source like Sharedpoint vs blob etc
     config:
         Config dict with chunk-size settings.
 
@@ -85,6 +88,9 @@ def chunk_markdown(
         Structured chunks ready to be stored.
     """
     config = config or {}
+    if tags is None:
+        tags = []
+
     parent_chunk_size = int(config.get("PARENT_CHUNK_SIZE", 1500))
     parent_chunk_overlap = int(config.get("PARENT_CHUNK_OVERLAP", 150))
     child_chunk_size = int(config.get("CHILD_CHUNK_SIZE", 300))
@@ -116,6 +122,7 @@ def chunk_markdown(
         doc.page_content = PAGE_PATTERN.sub("", doc.page_content).strip()
         doc.metadata["source_path"] = source_path
         doc.metadata["file_name"] = file_name
+        doc.metadata["tags"] = tags
 
     # --- Phase 2: recursive split into parent chunks -----------------------
     parent_splitter = RecursiveCharacterTextSplitter(
@@ -195,6 +202,7 @@ def _create_child_metadata(parent_doc:Document,parent_id:str) -> ChildMetadata:
         "file_name": parent_doc.metadata.get("file_name",''),
         "pages": parent_doc.metadata.get("pages",''),
         "parent_id": parent_id,
+        "tags": parent_doc.metadata.get("tags",[]),
     }
     return ChildMetadata(**child_metadata)
 
@@ -203,7 +211,8 @@ def _create_parent_metadata(doc: Document)-> ParentMetadata:
     parent_metadata = {
         "source": doc.metadata.get("source_path",''),
         "file_name": doc.metadata.get("file_name"),
-        "pages": doc.metadata.get("pages")
+        "pages": doc.metadata.get("pages"),
+        "tags": doc.metadata.get("tags",[]),
     }
     for header in HEADER_KEYS:
         if header_val := doc.metadata.get(header):
@@ -215,8 +224,10 @@ def _create_parent_metadata(doc: Document)-> ParentMetadata:
 # Helpers
 # ---------------------------------------------------------------------------
 
-def summerize_and_chunk_table(table_data_list: list[dict], model:TableSummarizer,summerize_enabled=True) -> list[ParentChunk]:
+def summerize_and_chunk_table(table_data_list: list[dict], model:TableSummarizer,tags:list[str] |None=None,summerize_enabled=True) -> list[ParentChunk]:
     logger.info("Summarizing %d tables", len(table_data_list))
+    if tags is None:
+        tags = []
     parent_chunks=[]
     for i,table_data in enumerate(table_data_list):
         table_id = f"DATA_TABLE_{i:03d}"
@@ -241,7 +252,8 @@ def summerize_and_chunk_table(table_data_list: list[dict], model:TableSummarizer
                     metadata={
                         "parent": parent_id,
                         "table_id": table_id, # Added for strict metadata filtering
-                        "pages":[table_data['page_no']]
+                        "pages":[table_data['page_no']],
+                        "tags": tags,
                     }
                 )
 
@@ -250,6 +262,7 @@ def summerize_and_chunk_table(table_data_list: list[dict], model:TableSummarizer
               "source": table_data['source_path'],
               "pages": [table_data['page_no']],
               "table_id": table_id,
+              "tags": tags,
         }
         # Create the Parent (The LLM Payload)
         # We append the ID to the top so the LLM has a visual anchor

@@ -128,7 +128,6 @@ class QdrantIndexer(BaseIndexer):
             for child_doc in block.children:
                 child_texts.append(child_doc.page_content)
                 meta = child_doc.metadata
-                # meta["parent_id"] = block.id
                 child_metadatas.append(meta)
                 child_ids.append(str(uuid.uuid4()))
 
