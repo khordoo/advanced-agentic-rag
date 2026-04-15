@@ -136,7 +136,7 @@ class BaseChunkMetadata(BaseModel):
     source: str
     pages: list[int]
     tags: list[str] = Field(default_factory=list)
-    scopes: list[str] = Field(default_factory=lambda: ["public"])
+    scopes: list[str] = Field(default_factory=list)
 
 
 # 2. The Parent (Adds Table context if needed)

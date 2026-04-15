@@ -99,7 +99,7 @@ def setup_logging():
     level = getattr(logging,level_name,logging.INFO)
     logging.basicConfig(
         level=level,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
         force=True
     )
 
@@ -150,6 +150,7 @@ class IngestionSettings(BaseSettings):
     chunk_size: int = 1000
     chunk_overlap: int = 200
     max_retries: int = 3
+    ALLOWED_EXTENSIONS: set = {'.pdf', '.md', '.txt'}
     # You can add things like 'enable_ocr' or 'target_folder' here
 
     model_config = SettingsConfigDict(env_prefix='INGESTION_', env_file='.env', extra='ignore')

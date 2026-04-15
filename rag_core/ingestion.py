@@ -1,6 +1,9 @@
 import logging
 import os
 from pathlib import Path
+
+from mcp.server.auth import settings
+
 from rag_core.converter import convert_pdf_to_markdown
 from rag_core.chunker import chunk_markdown
 from rag_core.config import load_config, setup_logging
@@ -9,6 +12,7 @@ from rag_core.indexing.qdrant_indexer import QdrantIndexer
 from rag_core.utils import Stopwatch
 from rag_core.agents import TableSummarizer
 from rag_core.chunker import summerize_and_chunk_table
+from rag_core.config import  IngestionSettings
 setup_logging()
 logger = logging.getLogger(__name__)
 
@@ -25,6 +29,7 @@ class IngestionPipeline:
     def __init__(
         self,
         config: dict[str, str],
+        ingestion_settings: IngestionSettings | None=None,
         indexer: BaseIndexer | None = None,
         table_summerizer: TableSummarizer | None = None,
         overwrite: bool = True
@@ -39,6 +44,7 @@ class IngestionPipeline:
             overwrite: If True, resets the vector store collection before processing.
         """
         self.config = config
+        self.ingestion_settings = ingestion_settings or IngestionSettings()
         self.indexer = indexer or QdrantIndexer()
         self.table_summarizer= table_summerizer or TableSummarizer()
         self.markdown_chunker = chunk_markdown
@@ -77,6 +83,7 @@ class IngestionPipeline:
             try:
                 # Get tags dynamically per file (even if it's currently hardcoded)
                 current_tags = self._get_tags_for_file(file_path)
+                current_scopes = self._get_scopes_for_file(file_path)
 
                 logger.info("Processing file: %s", file_path)
                 with Stopwatch('Markdown conversion'):
@@ -92,6 +99,7 @@ class IngestionPipeline:
                 table_chunks = self.summerize_and_chunk_table(
                     tables,
                     tags=current_tags,
+                    scopes=current_scopes,
                     model=self.table_summarizer,
                     summerize_enabled=self.summarize_tables_enabled,
                 )
@@ -101,6 +109,7 @@ class IngestionPipeline:
                     markdown=markdown,
                     source_path=file_path,
                     tags=current_tags,
+                    scopes=current_scopes,
                     config=self.config
                 )
                 logger.info("Chunked markdown into parent chunks", extra={"parent_chunks": len(chunks)})
@@ -156,20 +165,41 @@ class IngestionPipeline:
         # Return as a list with consistent lowercasing
         return [parent_folder.lower()]
 
+    def _get_scopes_for_file(self, file_path: str) -> list[str]:
+        """
+        Assigns security/access control scopes for a file.
+
+        PLACEHOLDER: Currently defaults to ['public'].
+        TODO: Implement logic to assign 'admin', 'hr', or 'restricted'
+        based on file metadata or source location.
+        """
+        return ["public"]
+
 
     def _iter_files(self):
         """
-        Yields file paths from the ingestion directory, skipping ignored items.
+        Yields file paths from the ingestion directory, skipping ignored items and hidden files.
 
         Yields:
             str: Absolute path to the file.
         """
         for root, _, files in os.walk(self.ingestion_dir):
             for file in files:
-                if file in self._IGNORE_DIR:
-                    logger.debug(f"Ignored: {file}")
+                # Skip hidden/system files (like .gitkeep or .DS_Store)
+                if file.startswith('.'):
                     continue
-                yield os.path.join(root, file)
+
+                # Skip explicitly ignored files/dirs
+                if file in self._IGNORE_DIR:
+                    continue
+
+                # Only yield files that match our supported formats
+                path_obj = Path(file)
+                if path_obj.suffix.lower() in self.ingestion_settings.ALLOWED_EXTENSIONS:
+                    yield os.path.join(root, file)
+                else:
+                    logger.debug("Skipping unsupported file type: %s", file)
+        logger.info(f"Completed iterating through all files in folder: {self.ingestion_dir}")
 
 if __name__ == '__main__':
     cfg = load_config()

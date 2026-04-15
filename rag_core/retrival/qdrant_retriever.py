@@ -38,7 +38,6 @@ class QdrantRetriever(BaseRetriever):
         self._client = client or QdrantConnectionManager.get_client()
         self._settings = settings or get_qdrant_settings()
         self.retrieval_settings = retrieval_settings or RetrivalSettings()
-        self._default_scopes = ["public"]
 
     def exact_lookup(
         self,
@@ -128,13 +127,16 @@ class QdrantRetriever(BaseRetriever):
         exact_filters: dict[str, Any] | None,
     ) -> models.Filter:
         """Construct Qdrant Filter from scopes and exact metadata matches."""
-        scopes = scopes or self._default_scopes
-        must_conditions: list[models.Condition] = [
-            models.FieldCondition(
-                key=PayloadKeys.SCOPES.value,
-                match=models.MatchAny(any=scopes),
-            )
-        ]
+
+        must_conditions: list[models.Condition] =[]
+
+        if scopes is not None:
+            must_conditions.append(
+                models.FieldCondition(
+                    key=PayloadKeys.SCOPES.value,
+                    match=models.MatchAny(any=scopes),
+                )
+        )
 
         if exact_filters:
             valid_keys = {k.value for k in PayloadKeys if k != PayloadKeys.TEXT}
