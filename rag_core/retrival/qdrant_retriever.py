@@ -6,6 +6,7 @@ and retrieves the full parent documents in a single batch.
 
 from __future__ import annotations
 
+
 import logging
 
 from typing import Any
@@ -16,6 +17,7 @@ from qdrant_client import QdrantClient, models
 from rag_core.config import RetrivalSettings, QdrantSettings, get_qdrant_settings
 from rag_core.db.connection_manager import QdrantConnectionManager
 from rag_core.retrival.base import BaseRetriever
+from rag_core.reranking import BaseReranker, LocalReranker
 from rag_core.schemas import (
     VectorDatabasePayloadKeys as PayloadKeys,
     PARENT_INDEX_SCHEMA,
@@ -30,6 +32,7 @@ class QdrantRetriever(BaseRetriever):
     Implements a two-step retrieval process:
     1. Search child chunks for the best matches.
     2. Retrieve corresponding parent documents for the LLM payload.
+    3. Rerank the parent documents based on query relevance.
     """
 
     def __init__(
@@ -37,11 +40,13 @@ class QdrantRetriever(BaseRetriever):
         client: QdrantClient | None = None,
         settings: QdrantSettings | None = None,
         retrieval_settings: RetrivalSettings | None = None,
+        reranker: BaseReranker | None = None,
     ) -> None:
         super().__init__()
         self._client = client or QdrantConnectionManager.get_client()
         self._settings = settings or get_qdrant_settings()
         self.retrieval_settings = retrieval_settings or RetrivalSettings()
+        self.reranker = reranker or LocalReranker()
 
     def exact_lookup(
         self,
@@ -75,21 +80,27 @@ class QdrantRetriever(BaseRetriever):
     def search(
         self,
         query: str,
-        limit: int | None = None,
-        rrf_score_threshold: float | None = None,
+        retrival_top_k: int | None = None,
+        rerank_top_k: int | None = None,
         scopes: list[str] | None = None,
         filters: dict[str, Any] | None = None,
+        rerank: bool = True,
     ) -> list[Document]:
         """Execute hybrid search (dense + sparse RRF) with parent document reconstruction."""
 
-        actual_limit = limit if limit is not None else self.retrieval_settings.top_k
-        actual_threshold = (
-            rrf_score_threshold
-            if rrf_score_threshold is not None
-            else self.retrieval_settings.rrf_score_threshold
+        actual_retrival_top_k = (
+            retrival_top_k
+            if retrival_top_k is not None
+            else self.retrieval_settings.top_k
         )
+
+        # actual_threshold = (
+        #     rrf_score_threshold
+        #     if rrf_score_threshold is not None
+        #     else self.retrieval_settings.rrf_score_threshold
+        # )
         qdrant_filter = self._build_filters(scopes, exact_filters=filters)
-        fetch_limit = actual_limit * self.retrieval_settings.oversample_factor
+        fetch_limit = actual_retrival_top_k * self.retrieval_settings.oversample_factor
 
         # Embed query for both dense and sparse search
         dense_name, *_ = self._client.get_fastembed_vector_params()
@@ -127,15 +138,23 @@ class QdrantRetriever(BaseRetriever):
             limit=fetch_limit,
         )
         results = response.points
-
+        if rerank:
+            actual_rerank_top_k = (
+                rerank_top_k
+                if rerank_top_k is not None
+                else self.retrieval_settings.top_k
+            )
+            results = self._rerank(query, results, top_k=actual_rerank_top_k)
         # Extract unique parents and their maximum scores
-        unique_parents = self._extract_unique_parents(
-            results=results, limit=actual_limit, score_threshold=actual_threshold
+        unique_parents = self._extract_unique_parents_and_filter(
+            results=results,
+            limit=actual_retrival_top_k,
+            # score_threshold=actual_threshold,
         )
         if not unique_parents:
             return []
         logger.info(
-            f"Processed {len(results)} -> {len(unique_parents)} unique parent documents."
+            f"Processed {len(results)} chunks -> {len(unique_parents)} unique parent chunks."
         )
         # Batch retrieve parent documents
         parent_ids = [pid for pid, _ in unique_parents]
@@ -151,11 +170,39 @@ class QdrantRetriever(BaseRetriever):
             doc = self._point_to_document(point)
             # Map score from child back to parent
             normalized_parent_id = str(point.id).replace("-", "")
-            doc.metadata["retrieval_score"] = score_map.get(normalized_parent_id, 0.0)
+            doc.metadata["score"] = score_map.get(normalized_parent_id, 0.0)
             documents.append(doc)
-
-        documents.sort(key=lambda d: d.metadata["retrieval_score"], reverse=True)
+        logger.info(f"Retrieved {len(documents)} parent chunks.")
+        documents.sort(key=lambda d: d.metadata["score"], reverse=True)
         return documents
+
+    def _rerank(
+        self, query: str, points: list[models.ScoredPoint], top_k: int
+    ) -> list[models.ScoredPoint]:
+        docs = [
+            Document(
+                page_content=r.payload["document"],
+                metadata={k: v for k, v in r.payload.items() if k != "document"},
+            )
+            for r in points
+        ]
+        reranked_results = self.reranker.rerank(query, docs)
+
+        reranked_points = [
+            models.ScoredPoint(
+                id=r.metadata["parent_id"],
+                score=r.metadata["rerank_score"],
+                payload={
+                    "id": r.metadata["parent_id"],
+                    # "rerank_score": r.metadata["rerank_score"],
+                    **r.metadata,
+                },
+                version=1,
+            )
+            for r in reranked_results[:top_k]
+        ]
+        logger.info(f"Reranked chunks: {len(docs)} -> {len(reranked_points)}.")
+        return reranked_points
 
     def _build_filters(
         self,
@@ -189,17 +236,17 @@ class QdrantRetriever(BaseRetriever):
 
         return models.Filter(must=must_conditions)
 
-    def _extract_unique_parents(
+    def _extract_unique_parents_and_filter(
         self,
         results: list[models.ScoredPoint],
         limit: int,
-        score_threshold: int,
+        # score_threshold: int,
     ) -> list[tuple[str, float]]:
         """Group child chunks by parent_id, keeping the highest score for each."""
         unique_ids: dict[str, float] = {}
         for res in results:
-            if res.score < score_threshold:
-                continue
+            # if res.score < score_threshold:
+            #     continue
             payload = res.payload or {}
             pid = payload.get(PayloadKeys.PARENT_ID.value, None)
             if not pid:

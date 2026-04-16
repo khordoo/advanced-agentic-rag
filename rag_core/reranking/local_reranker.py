@@ -16,7 +16,9 @@ class LocalReranker(BaseReranker):
 
     def _load_model(self):
         if self._model is None:
-            self._model = CrossEncoder(self._settings.model_name)
+            self._model = CrossEncoder(
+                self._settings.model_name, device=self._settings.resolve_device
+            )
             logger.info(f"Loaded model {self._settings.model_name}")
 
     def rerank(
