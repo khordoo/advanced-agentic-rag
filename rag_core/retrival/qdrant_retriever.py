@@ -79,20 +79,48 @@ class QdrantRetriever(BaseRetriever):
         scopes: list[str] | None = None,
         filters: dict[str, Any] | None = None,
     ) -> list[Document]:
-        """Execute semantic search with parent document reconstruction."""
+        """Execute hybrid search (dense + sparse RRF) with parent document reconstruction."""
 
         actual_limit = limit if limit is not None else self.retrieval_settings.top_k
-        actual_threshold = score_threshold if score_threshold is not None else self.retrieval_settings.score_threshold
+        actual_threshold = score_threshold if score_threshold is not None else self.retrieval_settings.rrf_score_threshold
 
         qdrant_filter = self._build_filters(scopes, exact_filters=filters)
         fetch_limit = actual_limit * self.retrieval_settings.oversample_factor
-        # Search child chunks
-        results = self._client.query(
+
+        # Embed query for both dense and sparse search
+        dense_name, *_ = self._client.get_fastembed_vector_params()
+        sparse_name, *_ = self._client.get_fastembed_sparse_vector_params()
+
+        (_, dense_vector), *_ = self._client._embed_documents(
+            documents=[query],
+            embedding_model_name=self._client.embedding_model_name,
+        )
+        sparse_vector = next(self._client._sparse_embed_documents(
+            documents=[query],
+            embedding_model_name=self._client.sparse_embedding_model_name,
+        ))
+
+        # Hybrid search: prefetch dense + sparse, fuse with RRF
+        response = self._client.query_points(
             collection_name=self._settings.chunk_collection_name,
-            query_text=query,
-            query_filter=qdrant_filter,
+            prefetch=[
+                models.Prefetch(
+                    query=dense_vector,
+                    using=dense_name,
+                    filter=qdrant_filter,
+                    limit=fetch_limit,
+                ),
+                models.Prefetch(
+                    query=sparse_vector,
+                    using=sparse_name,
+                    filter=qdrant_filter,
+                    limit=fetch_limit,
+                ),
+            ],
+            query=models.FusionQuery(fusion=models.Fusion.RRF),
             limit=fetch_limit,
         )
+        results = response.points
 
         # Extract unique parents and their maximum scores
         unique_parents = self._extract_unique_parents(results=results,
@@ -161,7 +189,8 @@ class QdrantRetriever(BaseRetriever):
         for res in results:
             if res.score < score_threshold:
                 continue
-            pid = res.metadata.get(PayloadKeys.PARENT_ID.value, None)
+            payload = res.payload or {}
+            pid = payload.get(PayloadKeys.PARENT_ID.value, None)
             if not pid:
                 continue
 

@@ -121,6 +121,7 @@ class RetrivalSettings(BaseSettings):
      # Hybrid Search Weights (0.0 = Sparse only, 1.0 = Dense only)
      # Most RAG systems perform best around 0.4 to 0.7
      score_threshold: float = Field(default=0.1,ge=0,le=1) # Don't return results lower than this
+     rrf_score_threshold: float = Field(default=0.0, ge=0, le=1, description="Score threshold for RRF hybrid search (rank-based scores are much smaller than cosine).")
      fetch_parent:bool =True
 
 class QdrantSettings(BaseSettings):
