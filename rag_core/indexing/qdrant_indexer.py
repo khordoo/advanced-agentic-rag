@@ -103,7 +103,7 @@ class QdrantIndexer(BaseIndexer):
 
         Each :class:`ParentChunk` produces:
         * One payload-only point in the *parents* collection.
-        * Multiple child chunks in the *chunks* collection (automatically embedded).
+        * Multiple child chunks in the *chunks* collection (embedded via fastembed).
         """
         logger.info(
             "Preparing %d document blocks for ingestion into Qdrant …", len(document_blocks),
@@ -115,33 +115,17 @@ class QdrantIndexer(BaseIndexer):
         child_ids: list[str] = []
 
         for block in document_blocks:
-            # 1. Build parent point (vector-less)
-            parent_points.append(
-                models.PointStruct(
-                    id=block.id,
-                    vector={},
-                    payload={"text": block.enriched_text, **block.metadata.model_dump()},
-                )
-            )
+            parent_points.append(self._build_parent_point(block))
 
-            # 2. Build child data for high-level 'add' method
-            for child_doc in block.children:
-                child_texts.append(child_doc.page_content)
-                meta = child_doc.metadata
-                child_metadatas.append(meta)
+            for child in block.children:
+                child_texts.append(child.page_content)
+                child_metadatas.append(child.metadata)
                 child_ids.append(str(uuid.uuid4()))
 
-        # Ingest children using high-level API (handles embedding)
         if child_texts:
-            logger.info("Embedding and ingesting %d child chunks …", len(child_texts))
-            self._client.add(
-                collection_name=self._chunk_collection,
-                documents=child_texts,
-                metadata=child_metadatas,
-                ids=child_ids,
-            )
+            child_points = self._build_child_points(child_ids, child_texts, child_metadatas)
+            self._upsert(self._chunk_collection, child_points, label="child chunks")
 
-        # Ingest parents using upsert (already prepared as points)
         if parent_points:
             self._upsert(self._parent_collection, parent_points, label="parents")
 
@@ -152,6 +136,55 @@ class QdrantIndexer(BaseIndexer):
             self._parent_collection,
             self._chunk_collection,
         )
+
+    # ------------------------------------------------------------------
+    # Point construction helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _build_parent_point(block: ParentChunk) -> models.PointStruct:
+        """Build a vector-less point for the parents collection."""
+        return models.PointStruct(
+            id=block.id,
+            vector={},
+            payload={"text": block.enriched_text, **block.metadata.model_dump()},
+        )
+
+    def _build_child_points(
+        self,
+        ids: list[str],
+        texts: list[str],
+        metadatas: list[dict[str, Any]],
+    ) -> list[models.PointStruct]:
+        """Embed child chunks via fastembed and return as PointStruct objects."""
+        logger.info("Embedding %d child chunks …", len(texts))
+
+        dense_vectors = list(
+            self._client._embed_documents(
+                documents=texts,
+                embedding_model_name=self._client.embedding_model_name,
+            ),
+        )
+        sparse_vectors = list(
+            self._client._sparse_embed_documents(
+                documents=texts,
+                embedding_model_name=self._client.sparse_embedding_model_name,
+            ),
+        )
+
+        dense_name, *_ = self._client.get_fastembed_vector_params()
+        sparse_name, *_ = self._client.get_fastembed_sparse_vector_params()
+
+        return [
+            models.PointStruct(
+                id=cid,
+                vector={dense_name: dense_vec, sparse_name: sparse_vec},
+                payload={"document": text, **meta},
+            )
+            for cid, (_, dense_vec), sparse_vec, text, meta in zip(
+                ids, dense_vectors, sparse_vectors, texts, metadatas,
+            )
+        ]
 
 
 
