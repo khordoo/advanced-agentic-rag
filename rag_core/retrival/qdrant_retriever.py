@@ -88,7 +88,6 @@ class QdrantRetriever(BaseRetriever):
             if rrf_score_threshold is not None
             else self.retrieval_settings.rrf_score_threshold
         )
-        print(f"==============================Actual threshold: {actual_threshold}")
         qdrant_filter = self._build_filters(scopes, exact_filters=filters)
         fetch_limit = actual_limit * self.retrieval_settings.oversample_factor
 
@@ -209,7 +208,6 @@ class QdrantRetriever(BaseRetriever):
             unique_ids[pid] = max(unique_ids.get(pid, 0.0), res.score)
 
         sorted_ids = sorted(unique_ids.items(), key=lambda x: x[1], reverse=True)
-        print("sorted_ids=", sorted_ids)
         return sorted_ids[:limit]
 
     def _point_to_document(self, point: models.Record | models.ScoredPoint) -> Document:

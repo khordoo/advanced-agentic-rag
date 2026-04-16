@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
-import os
 import logging
+import os
 from functools import lru_cache
 from pathlib import Path
-from sqlite3.dbapi2 import DatabaseError
+
+import torch
+from pydantic import computed_field
+from typing import Literal
 from dotenv import dotenv_values, load_dotenv
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -181,6 +184,42 @@ class RetrivalSettings(BaseSettings):
         ),
     )
     fetch_parent: bool = True
+
+
+class RerankerSettings(BaseSettings):
+    """Configuration settings for the Reranker.
+    We set top_k=10 since childs chunks will have duplicate parent chunks
+    and we want to return at least 5 unique parent chunks to the LLM agent
+    """
+
+    provider: str = "huggingface"
+    model_name: str = "BAAI/bge-reranker-v2-m3"
+    top_k: int = Field(
+        default=3,
+        ge=1,
+        le=50,
+        description="Number of documents to return afterrerank",
+    )
+    device: Literal["cuda", "cpu", "mps", "auto"] = Field(
+        default="auto",
+        description="Device to use for reranking",
+        examples=["cuda", "cpu", "mps", "auto"],
+    )
+    model_config = SettingsConfigDict(
+        env_prefix="RERANK_", env_file=".env", extra="ignore"
+    )
+
+    @computed_field
+    @property
+    def resolve_device(self) -> Literal["cuda", "cpu", "mps"]:
+        if self.device == "auto":
+            if torch.cuda.is_available():
+                return "cuda"
+            elif torch.backends.mps.is_available():
+                return "mps"
+            else:
+                return "cpu"
+        return self.device
 
 
 class QdrantSettings(BaseSettings):
