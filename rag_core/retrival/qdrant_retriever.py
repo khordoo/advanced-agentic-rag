@@ -179,27 +179,31 @@ class QdrantRetriever(BaseRetriever):
     def _rerank(
         self, query: str, points: list[models.ScoredPoint], top_k: int
     ) -> list[models.ScoredPoint]:
+        text_key = PayloadKeys.TEXT.value
         docs = [
             Document(
-                page_content=r.payload["document"],
-                metadata={k: v for k, v in r.payload.items() if k != "document"},
+                page_content=r.payload.get(text_key, ""),
+                metadata={
+                    "_chunk_id": r.id,
+                    **{k: v for k, v in r.payload.items() if k != text_key},
+                },
             )
             for r in points
         ]
-        reranked_results = self.reranker.rerank(query, docs)
+        reranked_results = self.reranker.rerank(query, docs, top_k=top_k)
 
         reranked_points = [
             models.ScoredPoint(
-                id=r.metadata["parent_id"],
+                id=r.metadata["_chunk_id"],
                 score=r.metadata["rerank_score"],
                 payload={
-                    "id": r.metadata["parent_id"],
-                    # "rerank_score": r.metadata["rerank_score"],
-                    **r.metadata,
+                    k: v
+                    for k, v in r.metadata.items()
+                    if k not in ("_chunk_id", "rerank_score")
                 },
                 version=1,
             )
-            for r in reranked_results[:top_k]
+            for r in reranked_results
         ]
         logger.info(f"Reranked chunks: {len(docs)} -> {len(reranked_points)}.")
         return reranked_points
@@ -256,14 +260,3 @@ class QdrantRetriever(BaseRetriever):
 
         sorted_ids = sorted(unique_ids.items(), key=lambda x: x[1], reverse=True)
         return sorted_ids[:limit]
-
-    def _point_to_document(self, point: models.Record | models.ScoredPoint) -> Document:
-        """Convert a Qdrant point back to a LangChain Document."""
-        payload = point.payload or {}
-        text = payload.get(PayloadKeys.TEXT.value, "")
-
-        # Only include metadata fields defined in the schema
-        metadata = {k: v for k, v in payload.items() if k in PARENT_INDEX_SCHEMA}
-        metadata["id"] = point.id
-
-        return Document(page_content=text, metadata=metadata)

@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
 
+from langchain_core.documents import Document
+
 
 class BaseReranker(ABC):
     """
@@ -8,16 +10,17 @@ class BaseReranker(ABC):
 
     @abstractmethod
     def rerank(
-        self, query: str, documents: list[str], top_k: int
-    ) -> list[tuple[str, float]]:
+        self, query: str, documents: list[Document], top_k: int | None = None
+    ) -> list[Document]:
         """
         Rerank documents based on query relevance.
 
         Args:
             query: The query string
-            documents: List of documents to rerank
+            documents: List of LangChain Documents to rerank
+            top_k: Optional limit on the number of results to return
 
         Returns:
-            List of tuples containing (document, score)
+            Reranked list of Documents (with ``rerank_score`` in metadata).
         """
         raise NotImplementedError

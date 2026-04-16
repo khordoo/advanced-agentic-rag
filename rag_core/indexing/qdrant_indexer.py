@@ -16,7 +16,12 @@ from qdrant_client import QdrantClient, models
 from rag_core.config import QdrantSettings, get_qdrant_settings
 from rag_core.db.connection_manager import QdrantConnectionManager
 from rag_core.indexing.base import BaseIndexer
-from rag_core.schemas import CHILD_INDEX_SCHEMA, PARENT_INDEX_SCHEMA, ParentChunk
+from rag_core.schemas import (
+    CHILD_INDEX_SCHEMA,
+    PARENT_INDEX_SCHEMA,
+    ParentChunk,
+    VectorDatabasePayloadKeys as PayloadKeys,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -179,7 +184,7 @@ class QdrantIndexer(BaseIndexer):
             models.PointStruct(
                 id=cid,
                 vector={dense_name: dense_vec, sparse_name: sparse_vec},
-                payload={"document": text, **meta},
+                payload={PayloadKeys.TEXT.value: text, **meta},
             )
             for cid, (_, dense_vec), sparse_vec, text, meta in zip(
                 ids, dense_vectors, sparse_vectors, texts, metadatas,
