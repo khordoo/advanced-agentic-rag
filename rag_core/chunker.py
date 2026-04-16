@@ -41,7 +41,7 @@ from langchain_text_splitters import (
 )
 
 from rag_core.converter import PAGE_PATTERN
-from rag_core.schemas import ParentChunk, ChildMetadata ,ParentMetadata
+from rag_core.schemas import ParentChunk, BaseChunkMetadata, ChildMetadata, ParentMetadata
 from rag_core.agents import TableSummarizer
 from rag_core.indexing.qdrant_indexer import QdrantIndexer
 logger = logging.getLogger(__name__)
@@ -198,30 +198,42 @@ def chunk_markdown(
 # ---------------------------------------------------------------------------
 # Storage helpers
 # ---------------------------------------------------------------------------
-def _create_child_metadata(parent_doc:Document,parent_id:str) -> ChildMetadata:
-    child_metadata = {
-        "source": parent_doc.metadata.get("source_path", ''),
-        "file_name": parent_doc.metadata.get("file_name",''),
-        "pages": parent_doc.metadata.get("pages",''),
-        "parent_id": parent_id,
-        "tags": parent_doc.metadata.get("tags",[]),
-        "scopes": parent_doc.metadata.get("scopes",[]),
-    }
-    return ChildMetadata(**child_metadata)
+
+# Map from schema field name → the key used inside Document.metadata.
+# Only add entries here when the metadata key differs from the schema field.
+_META_KEY_ALIASES: dict[str, str] = {
+    "source": "source_path",
+}
 
 
-def _create_parent_metadata(doc: Document)-> ParentMetadata:
-    parent_metadata = {
-        "source": doc.metadata.get("source_path",''),
-        "file_name": doc.metadata.get("file_name"),
-        "pages": doc.metadata.get("pages"),
-        "tags": doc.metadata.get("tags",[]),
-        "scopes": doc.metadata.get("scopes",[]),
-    }
+def _extract_base_metadata(meta: dict[str, Any]) -> dict[str, Any]:
+    """Pull exactly the fields declared on BaseChunkMetadata from *meta*.
+
+    Key aliases (e.g. schema 'source' ← doc 'source_path') are resolved
+    automatically via ``_META_KEY_ALIASES``.
+    """
+    result: dict[str, Any] = {}
+    for field_name, field_info in BaseChunkMetadata.model_fields.items():
+        lookup_key = _META_KEY_ALIASES.get(field_name, field_name)
+        default = field_info.default if field_info.default is not None else (
+            field_info.default_factory() if field_info.default_factory else None
+        )
+        result[field_name] = meta.get(lookup_key, default)
+    return result
+
+
+def _create_child_metadata(parent_doc: Document, parent_id: str) -> ChildMetadata:
+    base = _extract_base_metadata(parent_doc.metadata)
+    return ChildMetadata(**base, parent_id=parent_id)
+
+
+def _create_parent_metadata(doc: Document) -> ParentMetadata:
+    base = _extract_base_metadata(doc.metadata)
+    # Forward any header keys (h1, h2, h3…) as extra fields
     for header in HEADER_KEYS:
         if header_val := doc.metadata.get(header):
-            parent_metadata[header] = header_val
-    return ParentMetadata(**parent_metadata)
+            base[header] = header_val
+    return ParentMetadata(**base)
 
 
 # ---------------------------------------------------------------------------
@@ -252,27 +264,25 @@ def summerize_and_chunk_table(table_data_list: list[dict], model:TableSummarizer
         parent_id = uuid.uuid4().hex
         # Create the Child (The Searchable Vector)
         # We explicitly put the table_id in the text so the vector DB indexes it!
-        # header = f"[Doc: {table_data['file_name']}] [Location: Page {table_data['page_no']}]\n\n"
         child_text = f"{base_header}[SUMMARY FOR {table_id}]\n\n{table_summary}"
-        child_doc = Document(
-                    page_content=child_text,
-                    metadata={
-                        "parent": parent_id,
-                        "table_id": table_id, # Added for strict metadata filtering
-                        "pages":[table_data['page_no']],
-                        "tags": tags,
-                        "scopes": scopes,
-                    }
-                )
 
-        parent_metadata={
-              "file_name": table_data['file_name'],
-              "source": table_data['source_path'],
-              "pages": [table_data['page_no']],
-              "table_id": table_id,
-              "tags": tags,
-              "scopes": scopes,
+        # Build base metadata from the table dict, reusing the same
+        # schema-driven extraction that text chunks use.
+        table_meta_raw = {
+            "source_path": table_data['source_path'],
+            "file_name":   table_data['file_name'],
+            "pages":       [table_data['page_no']],
+            "tags":        tags,
+            "scopes":      scopes,
         }
+        base = _extract_base_metadata(table_meta_raw)
+
+        child_doc = Document(
+            page_content=child_text,
+            metadata=ChildMetadata(**base, parent_id=parent_id).model_dump(),
+        )
+
+        parent_metadata = {**base, "table_id": table_id}
         # Create the Parent (The LLM Payload)
         # We append the ID to the top so the LLM has a visual anchor
         parent_text = f"{base_header}\n[{table_id}]\n\n{raw_md}"
