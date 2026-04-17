@@ -1,11 +1,12 @@
 """Pydantic models shared across the pipeline."""
 
 from __future__ import annotations
-
+from enum import Enum
 from typing import List, Optional,Any
 from langchain_core.documents import Document
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from dataclasses import dataclass, field
+from qdrant_client import  models
 
 class QAPair(BaseModel):
     """A single question-answer pair for evaluation."""
@@ -112,9 +113,68 @@ class ExtractedTable(BaseModel):
 class ParentChunk:
     """A parent chunk with its child documents ready for storage."""
 
-    parent_id: str
+    id: str
     enriched_text: str
-    metadata: dict[str, Any]
+    metadata: ParentMetadata
     children: list[Document] = field(default_factory=list)
+
+
+class BaseChunkMetadata(BaseModel):
+    """
+    Base schema for document chunk metadata.
+
+    Attributes:
+        file_name: The original name of the source file.
+        source: The URI or path source of the document.
+        pages: List of page numbers associated with this chunk [1,2] or [1].
+        tags: Categorization labels used for logical grouping (e.g., ['finance', 'legal']).
+        scopes: Access control scopes used for RBAC filtering (defaults to ['public']).
+    """
+    model_config = ConfigDict(extra='allow')
+
+    file_name: str
+    source: str
+    pages: list[int]
+    tags: list[str] = Field(default_factory=list)
+    scopes: list[str] = Field(default_factory=list)
+
+
+# 2. The Parent (Adds Table context if needed)
+class ParentMetadata(BaseChunkMetadata):
+    table_id: Optional[str] = None
+
+
+# 3. The Child (Adds the mandatory link back to the Parent)
+class ChildMetadata(BaseChunkMetadata):
+    parent_id: str
+
+
+class VectorDatabasePayloadKeys(str,Enum):
+    SOURCE = 'source'
+    FILE_NAME = 'file_name'
+    PAGE='pages'
+    TABLE_ID='table_id'
+    TEXT='text'
+    PARENT_ID='parent_id'
+    SCOPES='scopes'
+    TAGS='tags'
+
+_BASE_INDEX_SCHEMA={
+    VectorDatabasePayloadKeys.SOURCE.value: models.PayloadSchemaType.KEYWORD,
+    VectorDatabasePayloadKeys.FILE_NAME.value: models.PayloadSchemaType.KEYWORD,
+    VectorDatabasePayloadKeys.PAGE.value: models.PayloadSchemaType.INTEGER,
+    VectorDatabasePayloadKeys.SCOPES.value: models.PayloadSchemaType.KEYWORD,
+    VectorDatabasePayloadKeys.TAGS.value: models.PayloadSchemaType.KEYWORD,
+}
+
+PARENT_INDEX_SCHEMA={
+    **_BASE_INDEX_SCHEMA,
+    VectorDatabasePayloadKeys.TABLE_ID.value: models.PayloadSchemaType.KEYWORD,
+}
+CHILD_INDEX_SCHEMA={
+    **_BASE_INDEX_SCHEMA,
+    VectorDatabasePayloadKeys.PARENT_ID.value: models.PayloadSchemaType.KEYWORD,
+}
+
 # Required for forward-reference resolution in Python 3.10+
 SyntheticsTestSet.model_rebuild()

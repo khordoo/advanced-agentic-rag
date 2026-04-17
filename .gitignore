@@ -31,5 +31,7 @@ Thumbs.db
 
 # Models (downloaded at runtime)
 models/
-gemini.md
-gemini.cmd
+
+# Project conventions
+AGENTS.md
+GEMINI.md

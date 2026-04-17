@@ -41,8 +41,9 @@ from langchain_text_splitters import (
 )
 
 from rag_core.converter import PAGE_PATTERN
-from rag_core.schemas import ParentChunk
+from rag_core.schemas import ParentChunk, BaseChunkMetadata, ChildMetadata, ParentMetadata
 from rag_core.agents import TableSummarizer
+from rag_core.indexing.qdrant_indexer import QdrantIndexer
 logger = logging.getLogger(__name__)
 
 # Default header hierarchy for markdown splitting
@@ -65,6 +66,8 @@ HEADER_KEYS = [v for _, v in HEADERS_TO_SPLIT_ON]
 def chunk_markdown(
     markdown: str,
     source_path: str = "",
+    tags: list[str] | None = None,
+    scopes: list[str] | None = None,
     config: dict | None = None,
 ) -> list[ParentChunk]:
     """Split numbered markdown into parent/child chunks.
@@ -75,6 +78,10 @@ def chunk_markdown(
         Page-numbered markdown (output of :func:`rag_core.converter.convert_pdf_to_markdown`).
     source_path:
         Original file path — used for metadata.
+    tags: list[str] | None
+        General purouse tags. e.g fincnce, legal, source like Sharedpoint vs blob etc
+    scopes: list[str] | None
+         RBAC filters, Assigns security/access control scopes for a file. example ['restricted']
     config:
         Config dict with chunk-size settings.
 
@@ -84,6 +91,10 @@ def chunk_markdown(
         Structured chunks ready to be stored.
     """
     config = config or {}
+    if tags is None:
+        tags = []
+    if scopes is None:
+        scopes = []
     parent_chunk_size = int(config.get("PARENT_CHUNK_SIZE", 1500))
     parent_chunk_overlap = int(config.get("PARENT_CHUNK_OVERLAP", 150))
     child_chunk_size = int(config.get("CHILD_CHUNK_SIZE", 300))
@@ -115,6 +126,8 @@ def chunk_markdown(
         doc.page_content = PAGE_PATTERN.sub("", doc.page_content).strip()
         doc.metadata["source_path"] = source_path
         doc.metadata["file_name"] = file_name
+        doc.metadata["tags"] = tags
+        doc.metadata["scopes"] = scopes
 
     # --- Phase 2: recursive split into parent chunks -----------------------
     parent_splitter = RecursiveCharacterTextSplitter(
@@ -158,19 +171,19 @@ def chunk_markdown(
 
             # --- Phase 3: split parent into children -----------------------
             child_texts = child_splitter.split_text(parent_doc.page_content)
+            child_meta=_create_child_metadata(parent_doc,parent_id).model_dump()
             child_docs = [
                 Document(
                     page_content=header + child_text,
-                    metadata={"parent": parent_id},
+                    metadata=child_meta,
                 )
                 for child_text in child_texts
             ]
-
             all_parent_chunks.append(
                 ParentChunk(
-                    parent_id=parent_id,
+                    id=parent_id,
                     enriched_text=enriched_parent,
-                    metadata=parent_doc.metadata,
+                    metadata=_create_parent_metadata(parent_doc),
                     children=child_docs,
                 )
             )
@@ -186,61 +199,58 @@ def chunk_markdown(
 # Storage helpers
 # ---------------------------------------------------------------------------
 
+# Map from schema field name → the key used inside Document.metadata.
+# Only add entries here when the metadata key differs from the schema field.
+_META_KEY_ALIASES: dict[str, str] = {
+    "source": "source_path",
+}
 
-def store_chunks(
-    chunks: list[ParentChunk],
-    vector_store,
-    doc_store: dict[str, dict],
-    persist_path: str | Path | None = None,
-    vectore_store_reset_collection: bool = True
-) -> None:
-    """Store parent/child chunks into a vector store and document store.
 
-    Parameters
-    ----------
-    chunks:
-        Output of :func:`chunk_markdown`.
-    vector_store:
-        Any LangChain-compatible vector store (``InMemoryVectorStore``,
-        ``Chroma``, ``QdrantVectorStore``, …).
-    doc_store:
-        A plain ``dict`` used as the parent document store.
-        Keys are parent IDs, values are ``{"content": ..., "metadata": ...}``.
-    persist_path:
-        If given, pickle-dump *doc_store* to this path after storing.
+def _extract_base_metadata(meta: dict[str, Any]) -> dict[str, Any]:
+    """Pull exactly the fields declared on BaseChunkMetadata from *meta*.
+
+    Key aliases (e.g. schema 'source' ← doc 'source_path') are resolved
+    automatically via ``_META_KEY_ALIASES``.
     """
-    for chunk in chunks:
-        doc_store[chunk.parent_id] = {
-            "content": chunk.enriched_text,
-            "metadata": json.dumps(chunk.metadata, default=str),
-        }
-        print('******************Storing Chunks*******************************')
-        if chunk.children:
-            print(chunk.children)
-            print('.....'*30)
-            vector_store.add_documents(chunk.children)
+    result: dict[str, Any] = {}
+    for field_name, field_info in BaseChunkMetadata.model_fields.items():
+        lookup_key = _META_KEY_ALIASES.get(field_name, field_name)
+        default = field_info.default if field_info.default is not None else (
+            field_info.default_factory() if field_info.default_factory else None
+        )
+        result[field_name] = meta.get(lookup_key, default)
+    return result
 
-    logger.info("Stored %d parent chunks in document store", len(chunks))
 
-    if persist_path is not None:
-        persist_path = Path(persist_path)
-        persist_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(persist_path, "wb") as fh:
-            pickle.dump(doc_store, fh)
-        logger.info("Document store persisted to %s", persist_path)
+def _create_child_metadata(parent_doc: Document, parent_id: str) -> ChildMetadata:
+    base = _extract_base_metadata(parent_doc.metadata)
+    return ChildMetadata(**base, parent_id=parent_id)
+
+
+def _create_parent_metadata(doc: Document) -> ParentMetadata:
+    base = _extract_base_metadata(doc.metadata)
+    # Forward any header keys (h1, h2, h3…) as extra fields
+    for header in HEADER_KEYS:
+        if header_val := doc.metadata.get(header):
+            base[header] = header_val
+    return ParentMetadata(**base)
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def summerize_and_chunk_table(table_data_list: list[dict], model:TableSummarizer,summerize_enabled=True) -> list[ParentChunk]:
+def summerize_and_chunk_table(table_data_list: list[dict], model:TableSummarizer,tags:list[str] |None=None,scopes: list[str] |None =None,  summerize_enabled=True) -> list[ParentChunk]:
     logger.info("Summarizing %d tables", len(table_data_list))
+    if tags is None:
+        tags = []
+    if scopes is None:
+        scopes = []
+
     parent_chunks=[]
     for i,table_data in enumerate(table_data_list):
         table_id = f"DATA_TABLE_{i:03d}"
         raw_md = table_data['markdown']
-
         base_header = f"[Doc: {table_data['file_name']}] [Section: Data Table] [Location: Page {table_data['page_no']}]"
 
         logger.debug(
@@ -250,28 +260,37 @@ def summerize_and_chunk_table(table_data_list: list[dict], model:TableSummarizer
             table_data['page_no'],
         )
         table_summary =model.summarize(table_markdown=raw_md) if summerize_enabled else table_data
-        logger.debug("Summary ready for table %s", table_id)
+        logger.debug(f"Summary ready for table {table_id}. Progress: {(i+1)/len(table_data_list):0.2f}" )
         parent_id = uuid.uuid4().hex
         # Create the Child (The Searchable Vector)
         # We explicitly put the table_id in the text so the vector DB indexes it!
-        # header = f"[Doc: {table_data['file_name']}] [Location: Page {table_data['page_no']}]\n\n"
         child_text = f"{base_header}[SUMMARY FOR {table_id}]\n\n{table_summary}"
+
+        # Build base metadata from the table dict, reusing the same
+        # schema-driven extraction that text chunks use.
+        table_meta_raw = {
+            "source_path": table_data['source_path'],
+            "file_name":   table_data['file_name'],
+            "pages":       [table_data['page_no']],
+            "tags":        tags,
+            "scopes":      scopes,
+        }
+        base = _extract_base_metadata(table_meta_raw)
+
         child_doc = Document(
-                    page_content=child_text,
-                    metadata={
-                        "parent": parent_id,
-                        "table_id": table_id, # Added for strict metadata filtering
-                        "page_start":table_data['page_no']
-                    }
-                )
+            page_content=child_text,
+            metadata=ChildMetadata(**base, parent_id=parent_id).model_dump(),
+        )
+
+        parent_metadata = {**base, "table_id": table_id}
         # Create the Parent (The LLM Payload)
         # We append the ID to the top so the LLM has a visual anchor
         parent_text = f"{base_header}\n[{table_id}]\n\n{raw_md}"
         parent_chunks.append(
             ParentChunk(
-                parent_id=parent_id,
+                id=parent_id,
                 enriched_text=parent_text,
-                metadata=child_doc.metadata,
+                metadata=ParentMetadata(**parent_metadata),
                 children=[child_doc],
             )
         )

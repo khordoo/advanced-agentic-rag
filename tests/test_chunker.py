@@ -8,7 +8,7 @@ def test_chunk_markdown_returns_parents():
     md = "# Title\n\nSome content here that is long enough to be chunked.\n\n## Section\n\nMore content."
     chunks = chunk_markdown(md, source_path="test.pdf")
     assert len(chunks) >= 1
-    assert all(c.parent_id for c in chunks)
+    assert all(c.id for c in chunks)
 
 
 def test_chunk_markdown_creates_children():
@@ -24,4 +24,4 @@ def test_chunk_markdown_creates_children():
         assert len(chunk.children) >= 1
         # Children should reference their parent
         for child in chunk.children:
-            assert child.metadata["parent"] == chunk.parent_id
+            assert child.metadata["parent"] == chunk.id

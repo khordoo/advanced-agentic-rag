@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "docling>=2.82.0",
+    "fastembed>=0.8.0",
     "langchain-aws>=1.4.2",
     "langchain-chroma>=1.1.0",
     "langchain-core>=1.2.22",
@@ -41,3 +42,8 @@ packages = ["rag_core"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.10",
+]
