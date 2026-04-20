@@ -116,7 +116,19 @@ uv run python examples/03_reranking.py
 uv run streamlit run examples/streamlit_app.py
 ```
 
-### 4. Production Stack (Docker)
+### 4. Interactive Agent & Pipelines
+
+Your complete infrastructure includes a LangGraph orchestrator and data pipelines:
+
+```bash
+# Run the end-to-end ingestion pipeline (Markdown + Chunker + Qdrant)
+uv run rag_core/pipelines/ingestion.py
+
+# Start an interactive chat session with your AI Agent
+uv run rag_core/cli.py
+```
+
+### 5. Production Stack (Docker)
 
 The production stack (Qdrant + Langfuse) is managed via the root `Makefile` to ensure the correct environment variables are loaded.
 
@@ -143,14 +155,18 @@ A default administrator account is automatically created using the values define
 
 ## Project Structure
 
-```
+```text
 advanced-rag/
-├── rag_core/           # Shared library (pip-installable)
-│   ├── converter.py    # PDF → Markdown
+├── rag_core/           # Shared core directory
+│   ├── cli.py          # Interactive AI Agent Terminal
 │   ├── chunker.py      # Markdown → parent/child chunks
-│   ├── retriever.py    # Hierarchical search + reranking
-│   ├── pipeline.py     # End-to-end RAG pipeline
-│   ├── agents.py       # LLM factory + prompt loader
+│   ├── converter.py    # PDF → Markdown
+│   ├── agents.py       # LLM factory models
+│   ├── pipelines/      # End-to-End pipelines (e.g. ingestion.py)
+│   ├── genetation/     # LangGraph agent orchestration & tools
+│   ├── retrival/       # Vector DB retrieval logic
+│   ├── indexing/       # Vector DB indexing logic
+│   ├── reranking/      # Reranking integrations
 │   └── prompts/        # YAML prompt templates
 ├── examples/           # Learning track (zero infra)
 ├── evaluation/         # RAGAS evaluation + QA generation

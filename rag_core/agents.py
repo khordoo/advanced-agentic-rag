@@ -151,7 +151,7 @@ class TableSummarizer:
         model: Optional[BaseChatModel] = None,
         prompt: AgentPrompt | None = None,
     ):
-        self.llm = model or AgentFactory.create(provider="lmstudio")
+        self.llm = model or AgentFactory.create(provider="aws")
         # Load our 'table_summary' prompt once
         self.prompt = prompt or AgentPrompt.from_yaml("table_summary")
 
@@ -169,14 +169,17 @@ class TableSummarizer:
     )
     def summarize(self, table_markdown: str) -> str:
         """Generates a concise summary for a single table."""
+        print("starting summarization")
         logger.info(
             "Generating table summary", extra={"table_chars": len(table_markdown)}
         )
         messages = self.prompt.chat_template.invoke({"table_markdown": table_markdown})
+        print("===Tables messages:", messages.to_messages())
         logger.debug(
             "Rendered table summary prompt",
             extra={"prompt_preview": str(messages.to_messages()[0].content[:200])},
         )
+        print("===Tables messages:", messages.to_messages())
         res = self.llm.invoke(messages.to_messages())
         logger.debug("LLM returned response", extra={"raw_response": res.content})
         data = json.loads(res.content)
