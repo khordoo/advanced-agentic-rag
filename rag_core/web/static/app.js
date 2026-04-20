@@ -331,48 +331,141 @@
   function renderMarkdownWithCitations(text, citations) {
     if (!text) return "";
 
+    const normalizedText = normalizeMarkdownInput(text);
+
     // Build a lookup for quick citation existence check
     const citationIndices = new Set(citations.map((c) => c.document_index));
 
-    let html = escapeHtml(text);
+    // Parse the full markdown to HTML using marked.js
+    // This provides robust support for tables, lists, bold, etc.
+    let html = void 0;
+    if (typeof marked !== "undefined") {
+      html = marked.parse(normalizedText);
+    } else {
+      html = escapeHtml(normalizedText).replace(/\n/g, "<br>");
+    }
 
-    // Code blocks first (protect from further processing)
-    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
-    // Inline code
-    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-    // Bold
-    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-    // Italic
-    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-    // Unordered lists
-    html = html.replace(/^[-•] (.+)$/gm, '<li>$1</li>');
-    html = html.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>');
-    // Ordered lists
-    html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
-    // Blockquote
-    html = html.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
+    html = wrapTablesInContainers(html);
+    html = highlightInlineCitations(html, citationIndices, citations);
 
-    // ── Inline citation highlights ──
-    // Match [1], [2], etc. and render as interactive citation badges
-    html = html.replace(/\[(\d+)\]/g, (match, numStr) => {
-      const num = parseInt(numStr, 10);
-      if (citationIndices.has(num)) {
-        // Find the citation for tooltip data
-        const cit = citations.find((c) => c.document_index === num);
-        const tooltip = cit
-          ? `${cit.file_name}${cit.page_number != null && cit.page_number !== 0 ? `, p.${cit.page_number}` : ""}`
-          : "";
-        return `<span class="inline-citation" data-citation="${num}" title="${escapeHtml(tooltip)}">${numStr}</span>`;
+    return `<div class="markdown-content">${html}</div>`;
+  }
+
+  function configureMarkdownParser() {
+    if (typeof marked === "undefined") return;
+
+    marked.setOptions({
+      gfm: true,
+      breaks: true,
+    });
+  }
+
+  function normalizeMarkdownInput(text) {
+    let normalized = String(text).replace(/\r\n?/g, "\n");
+
+    if (!normalized.includes("\n") && normalized.includes("\\n")) {
+      normalized = normalized.replace(/\\n/g, "\n");
+    }
+
+    const fencedMarkdown = normalized.match(/^\s*```(?:markdown|md)?\s*\n([\s\S]*?)\n```\s*$/i);
+    if (fencedMarkdown) {
+      normalized = fencedMarkdown[1];
+    }
+
+    // Tables are easier for parsers to detect when preceded by a blank line.
+    normalized = normalized.replace(
+      /([^\n])\n(\|[^\n]+\|)\n(\|[\s:|-]+\|)/g,
+      "$1\n\n$2\n$3"
+    );
+
+    return normalized;
+  }
+
+  function wrapTablesInContainers(html) {
+    if (!html || !html.includes("<table")) return html;
+
+    const root = document.createElement("div");
+    root.innerHTML = html;
+
+    root.querySelectorAll("table").forEach((tableEl) => {
+      if (tableEl.parentElement && tableEl.parentElement.classList.contains("markdown-table-wrap")) {
+        return;
       }
-      return match; // Not a known citation, leave as-is
+
+      const wrapper = document.createElement("div");
+      wrapper.className = "markdown-table-wrap";
+      tableEl.parentNode.insertBefore(wrapper, tableEl);
+      wrapper.appendChild(tableEl);
     });
 
-    // Paragraphs (double newlines)
-    html = html.replace(/\n\n/g, '</p><p>');
-    // Single newlines → <br>
-    html = html.replace(/\n/g, '<br>');
+    return root.innerHTML;
+  }
 
-    return `<p>${html}</p>`;
+  function highlightInlineCitations(html, citationIndices, citations) {
+    if (!html || citationIndices.size === 0) return html;
+
+    const root = document.createElement("div");
+    root.innerHTML = html;
+
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const candidateNodes = [];
+
+    while (walker.nextNode()) {
+      const node = walker.currentNode;
+      if (!node.nodeValue || !node.nodeValue.includes("[")) continue;
+      if (!/\[(\d+)\]/.test(node.nodeValue)) continue;
+      if (node.parentElement && (node.parentElement.closest("code") || node.parentElement.closest("pre"))) {
+        continue;
+      }
+      candidateNodes.push(node);
+    }
+
+    candidateNodes.forEach((node) => {
+      const content = node.nodeValue;
+      const pattern = /\[(\d+)\]/g;
+      let lastIndex = 0;
+      let hasMatch = false;
+      const fragment = document.createDocumentFragment();
+
+      for (let match = pattern.exec(content); match; match = pattern.exec(content)) {
+        const [fullMatch, indexStr] = match;
+        const startIndex = match.index;
+        const indexNum = Number.parseInt(indexStr, 10);
+
+        if (startIndex > lastIndex) {
+          fragment.append(document.createTextNode(content.slice(lastIndex, startIndex)));
+        }
+
+        if (citationIndices.has(indexNum)) {
+          const citation = citations.find((c) => c.document_index === indexNum);
+          const tooltip = citation
+            ? `${citation.file_name}${citation.page_number != null && citation.page_number !== 0 ? `, p.${citation.page_number}` : ""}`
+            : "";
+
+          const badge = document.createElement("span");
+          badge.className = "inline-citation";
+          badge.dataset.citation = String(indexNum);
+          badge.title = tooltip;
+          badge.textContent = indexStr;
+          fragment.append(badge);
+        } else {
+          fragment.append(document.createTextNode(fullMatch));
+        }
+
+        lastIndex = startIndex + fullMatch.length;
+        hasMatch = true;
+      }
+
+      if (!hasMatch) return;
+
+      if (lastIndex < content.length) {
+        fragment.append(document.createTextNode(content.slice(lastIndex)));
+      }
+
+      node.parentNode.replaceChild(fragment, node);
+    });
+
+    return root.innerHTML;
   }
 
   // ── Thinking indicator ────────────────────────────────
@@ -460,5 +553,6 @@
   }
 
   // ── Init ──────────────────────────────────────────────
+  configureMarkdownParser();
   startNewConversation();
 })();
