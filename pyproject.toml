@@ -6,7 +6,9 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "docling>=2.82.0",
+    "fastapi>=0.115",
     "fastembed>=0.8.0",
+    "grandalf>=0.8",
     "langchain-aws>=1.4.2",
     "langchain-chroma>=1.1.0",
     "langchain-core>=1.2.22",
@@ -23,6 +25,7 @@ dependencies = [
     "ragas>=0.4.3",
     "sentence-transformers>=5.3.0",
     "tenacity>=9.1.4",
+    "uvicorn>=0.34",
 ]
 
 [project.optional-dependencies]

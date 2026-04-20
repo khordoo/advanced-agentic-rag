@@ -1,7 +1,7 @@
 """RAGAS-based evaluation pipeline for the Advanced RAG system."""
 
 from __future__ import annotations
-
+import re
 import json
 import logging
 
@@ -21,7 +21,7 @@ from ragas.run_config import RunConfig
 
 from rag_core.agents import AgentFactory
 from rag_core.config import load_config
-from rag_core.pipeline import RAGPipeline
+from rag_core.pipelines.pipeline import RAGPipeline
 
 logger = logging.getLogger(__name__)
 
@@ -36,19 +36,22 @@ def build_evaluation_set(
     test_cases: list[dict],
     config: dict,
     provider: str = "aws",
+    prompt_name: str = "rag_eval",
 ) -> EvaluationDataset:
     """Run RAG on each test case and build a RAGAS evaluation dataset."""
-    rag = RAGPipeline(config, provider=provider)
+    rag = RAGPipeline(config, provider=provider, prompt_name=prompt_name)
     samples = []
 
     for idx, case in enumerate(test_cases):
         rag_out = rag.run(case["question"])
+        # remvoe file name references from the response, RAGAS penalizes for this
+        rag_out["response"] = re.sub(r"\s*\[\[.*?\]\]", "", rag_out["response"])
         samples.append(
             {
                 "user_input": case["question"],
                 "reference": case["ground_truth"],
                 "response": rag_out["response"],
-                "retrieved_contexts": [c["content"] for c in rag_out["contexts"]],
+                "retrieved_contexts": [c.page_content for c in rag_out["contexts"]],
             }
         )
         logger.info("Completed test case %d/%d", idx + 1, len(test_cases))
@@ -62,6 +65,7 @@ def run_eval(
     judge_provider: str = "aws",
 ):
     """Run RAGAS metrics on the evaluation dataset."""
+    # model_name = "zai.glm-5"
     max_requests = int(config.get("LLM_MAX_PARALLEL_REQUEST", 4))
     ragas_config = RunConfig(timeout=60, max_retries=3, max_workers=max_requests)
 
@@ -69,7 +73,9 @@ def run_eval(
     ragas_llm = LangchainLLMWrapper(llm_judge)
 
     hf_emb = HuggingFaceEmbeddings(
-        model_name=config.get("HF_EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
+        model_name=config.get(
+            "HF_EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"
+        )
     )
     ragas_emb = LangchainEmbeddingsWrapper(hf_emb)
 
@@ -91,12 +97,16 @@ def run_eval(
     return result
 
 
-def run_eval_pipeline(config: dict | None = None, provider: str = "aws"):
+def run_eval_pipeline(
+    config: dict | None = None, provider: str = "aws", prompt_name: str = "rag_eval"
+):
     """End-to-end: load QA set → run RAG → evaluate → save results."""
     config = config or load_config()
 
     test_cases = load_evaluation_qa(config["SYNTHETIC_QA_PERSIST_PATH"])
-    eval_dataset = build_evaluation_set(test_cases, config, provider=provider)
+    eval_dataset = build_evaluation_set(
+        test_cases, config, provider=provider, prompt_name=prompt_name
+    )
     result = run_eval(eval_dataset, config)
 
     print(result)

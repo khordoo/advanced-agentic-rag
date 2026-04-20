@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import logging
 
-from rag_core.agents import AgentFactory, PromptLoader
-from rag_core.retriever import Retriever
+from rag_core.agents import AgentFactory
+from rag_core.retrival.qdrant_retriever import QdrantRetriever
+from rag_core.reranking import BaseReranker, LocalReranker
+from rag_core.prompts import AgentPrompt
+
 
 logger = logging.getLogger(__name__)
 
@@ -28,11 +31,15 @@ class RAGPipeline:
         self,
         config: dict,
         provider: str = "aws",
-        retriever: Retriever | None = None,
+        retriever: QdrantRetriever | None = None,
+        prompt_name: str = "rag_qa",
+        # reranker: BaseReranker | None = None,
     ) -> None:
         self.config = config
-        self.llm = AgentFactory.create(provider, config=config)
-        self.retriever = retriever or Retriever.from_chroma(config)
+        self.llm = AgentFactory.get_judge_model(provider, config=config)
+        self.retriever = retriever or QdrantRetriever()
+        self.prompt_template = PromptLoader.load(prompt_name)
+        # self.reranker = reranker or LocalReranker()
         logger.info("RAG pipeline initialised (provider=%s)", provider)
 
     def run(self, query: str) -> dict:
@@ -44,15 +51,20 @@ class RAGPipeline:
             ``{"response": str, "contexts": list[dict]}``
             Each context dict has ``{"content": str, "metadata": dict}``.
         """
-        context_docs = self.retriever.hierarchical_search(
-            query,
-            k=10,
-            top_n=int(self.config.get('RERANK_TOP_N',3)))
+        # context_docs = self.retriever.hierarchical_search(
+        #     query,
+        #     k=10,
+        #     top_n=int(self.config.get('RERANK_TOP_N',3)))
+        context_docs = self.retriever.search(query, rerank=True)
+        # print("---" * 50)
+        # print(context_docs)
+        # print("---" * 50)
         for d in context_docs:
-            print(d["content"])
-            print('---'*50)
-        context_text = "\n\n----\n\n".join(d["content"] for d in context_docs)
-        prompt = PromptLoader.load("rag_qa").render(context=context_text, question=query)
+            print(d.metadata["score"])
+            print("---" * 50)
+        context_text = "\n\n----\n\n".join(d.page_content for d in context_docs)
+        prompt = self.prompt_template.render(context=context_text, question=query)
+
         response = self.llm.invoke(prompt.template)
 
         return {
@@ -71,17 +83,18 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     cfg = load_config()
 
-    # query = "What are the key differentiators mentioned in the company's integrated strategy?"
-    query= "According to the 'Net Sales Change Drivers 2024 vs. 2023' table, what was the specific percentage impact of foreign exchange on the net sales growth for the Grooming segment?"
-    # query="According to the 'Net Sales Change Drivers 2024 vs. 2023' table, which specific reportable segment experienced a 2% favorable 'Mix' impact on its net sales growth?"
+    query = "What are the key differentiators mentioned in the company's integrated strategy?"
+    # query = "According to the 'Net Sales Change Drivers 2024 vs. 2023' table, what was the specific percentage impact of foreign exchange on the net sales growth for the Grooming segment?"
+    # query = "According to the 'Net Sales Change Drivers 2024 vs. 2023' table, which specific reportable segment experienced a 2% favorable 'Mix' impact on its net sales growth?"
     # "ground_truth": "The Health Care segment experienced a 2% favorable Mix impact on its net sales growth."
-    quer="find something about Net Sales Change Drivers?"
-    pipeline = RAGPipeline(cfg, provider="aws")
+    # quer = "find something about Net Sales Change Drivers?"
+
+    pipeline = RAGPipeline(cfg, retriever=QdrantRetriever(), provider="aws")
     result = pipeline.run(query)
 
     print("\n--- Response ---")
     print(result["response"])
-    print('----Sources-----------')
-    for r in result['contexts']:
-        print(r['metadata'])
+    print("----Sources-----------")
+    for r in result["contexts"]:
+        print(r.metadata)
     print(f"\n({len(result['contexts'])} context chunks used)")

@@ -8,7 +8,7 @@ from threading import Lock
 from qdrant_client import QdrantClient
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from rag_core.config import QdrantSettings, get_qdrant_settings
+from rag_core.core.config import QdrantSettings, get_qdrant_settings
 from rag_core.exceptions import VectorDatabseConnectionError
 
 logger = logging.getLogger(__name__)

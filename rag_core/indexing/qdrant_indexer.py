@@ -13,7 +13,7 @@ from typing import Any
 
 from qdrant_client import QdrantClient, models
 
-from rag_core.config import QdrantSettings, get_qdrant_settings
+from rag_core.core.config import QdrantSettings, get_qdrant_settings
 from rag_core.db.connection_manager import QdrantConnectionManager
 from rag_core.indexing.base import BaseIndexer
 from rag_core.schemas import (
@@ -58,10 +58,14 @@ class QdrantIndexer(BaseIndexer):
     def _ensure_collections(self) -> None:
         """Ensure both collections exist with the correct schema."""
         self._create_collection_if_missing(
-            self._chunk_collection, CHILD_INDEX_SCHEMA, vector_enabled=True,
+            self._chunk_collection,
+            CHILD_INDEX_SCHEMA,
+            vector_enabled=True,
         )
         self._create_collection_if_missing(
-            self._parent_collection, PARENT_INDEX_SCHEMA, vector_enabled=False,
+            self._parent_collection,
+            PARENT_INDEX_SCHEMA,
+            vector_enabled=False,
         )
 
     def _create_collection_if_missing(
@@ -96,6 +100,7 @@ class QdrantIndexer(BaseIndexer):
                 field_schema=field_type,
             )
         logger.info("Payload indexes applied for '%s'.", name)
+
     def reset_collections(self) -> None:
         """Drop and recreate both managed collections."""
         logger.info("Resetting collections …")
@@ -111,7 +116,8 @@ class QdrantIndexer(BaseIndexer):
         * Multiple child chunks in the *chunks* collection (embedded via fastembed).
         """
         logger.info(
-            "Preparing %d document blocks for ingestion into Qdrant …", len(document_blocks),
+            "Preparing %d document blocks for ingestion into Qdrant …",
+            len(document_blocks),
         )
 
         parent_points: list[models.PointStruct] = []
@@ -128,7 +134,9 @@ class QdrantIndexer(BaseIndexer):
                 child_ids.append(str(uuid.uuid4()))
 
         if child_texts:
-            child_points = self._build_child_points(child_ids, child_texts, child_metadatas)
+            child_points = self._build_child_points(
+                child_ids, child_texts, child_metadatas
+            )
             self._upsert(self._chunk_collection, child_points, label="child chunks")
 
         if parent_points:
@@ -187,11 +195,13 @@ class QdrantIndexer(BaseIndexer):
                 payload={PayloadKeys.TEXT.value: text, **meta},
             )
             for cid, (_, dense_vec), sparse_vec, text, meta in zip(
-                ids, dense_vectors, sparse_vectors, texts, metadatas,
+                ids,
+                dense_vectors,
+                sparse_vectors,
+                texts,
+                metadatas,
             )
         ]
-
-
 
     def _upsert(
         self,

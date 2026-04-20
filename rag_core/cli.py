@@ -1,0 +1,77 @@
+"""Interactive CLI for communicating with the RAG agent graph."""
+
+import json
+import logging
+from langchain_core.messages import HumanMessage, AIMessage
+
+from rag_core.agents import AgentFactory
+from rag_core.core.config import setup_logging
+from rag_core.core.telemetry import get_observability_callbacks
+from rag_core.genetation.graph import RagGraphFactory
+from rag_core.genetation.parsers import extract_clean_json
+from rag_core.prompts.loader import AgentPrompt
+
+setup_logging()
+logger = logging.getLogger(__name__)
+
+
+def run_chat_loop():
+    logger.info("Initializing Agent Prompt & LLM...")
+    agent_prompt = AgentPrompt.from_yaml("rag_qa")
+    reasoning_llm = AgentFactory.create(
+        provider="aws", model_name="amazon.nova-pro-v1:0"
+    )
+    fast_llm = AgentFactory.create(provider="aws", model_name="amazon.nova-micro-v1:0")
+    app = RagGraphFactory.build(reasoning_llm=reasoning_llm, fast_llm=fast_llm)
+
+    messages = []
+    print("\n========================================================")
+    print("🤖 Interactive RAG Session Started. Type 'exit' to quit.")
+    print("========================================================\n")
+
+    langfuse_callbacks = get_observability_callbacks()
+
+    while True:
+        try:
+            query = input("\nUser > ")
+        except (EOFError, KeyboardInterrupt):
+            print("\nExiting...")
+            break
+
+        if query.lower() in ["exit", "quit", "q"]:
+            break
+        if not query.strip():
+            continue
+
+        if not messages:
+            prompt = agent_prompt.chat_template.invoke({"question": query})
+            logger.debug("Initial Prompt generated:\n%s", prompt)
+            messages = prompt.to_messages()
+        else:
+            messages.append(HumanMessage(content=query))
+
+        logger.info("Invoking LangGraph execution...")
+        res = app.invoke(
+            {"messages": messages},
+            config={
+                "callbacks": langfuse_callbacks,
+                "metadata": {"env": "local", "app": "cli-langgraph-test"},
+            },
+        )
+
+        messages = res["messages"]
+        response_content = messages[-1].content
+        logger.info("Execution complete.")
+
+        try:
+            formated = extract_clean_json(response_content)
+            print("\n----- Agent Response -----")
+            print(json.dumps(formated, indent=2))
+            messages.append(AIMessage(content=json.dumps(formated)))
+        except Exception as e:
+            logger.error("Failed to parse JSON response: %s", e)
+            logger.error("Raw Agent Response:\n%s", response_content)
+
+
+if __name__ == "__main__":
+    run_chat_loop()

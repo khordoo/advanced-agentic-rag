@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Advanced RAG — Intelligent Chat</title>
+  <meta name="description" content="A professional AI chat interface for querying documents with an advanced RAG pipeline." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="app-container">
+
+    <!-- ── Sidebar ──────────────────────────────────────────── -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <div class="logo-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+              <path d="M12 2L2 7l10 5 10-5-10-5z" fill="url(#g1)" />
+              <path d="M2 17l10 5 10-5" stroke="url(#g2)" stroke-width="2" fill="none" />
+              <path d="M2 12l10 5 10-5" stroke="url(#g2)" stroke-width="2" fill="none" />
+              <defs>
+                <linearGradient id="g1" x1="2" y1="2" x2="22" y2="12">
+                  <stop stop-color="#6366f1" />
+                  <stop offset="1" stop-color="#a78bfa" />
+                </linearGradient>
+                <linearGradient id="g2" x1="2" y1="12" x2="22" y2="22">
+                  <stop stop-color="#818cf8" />
+                  <stop offset="1" stop-color="#c4b5fd" />
+                </linearGradient>
+              </defs>
+            </svg>
+          </div>
+          <span class="logo-text">Advanced RAG</span>
+        </div>
+      </div>
+
+      <button class="new-chat-btn" id="newChatBtn" title="Start a new conversation">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+        New Conversation
+      </button>
+
+      <div class="session-list" id="sessionList">
+        <div class="session-section-title">History</div>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="model-badge">
+          <span class="status-dot"></span>
+          Nova Pro v1 · LangGraph
+        </div>
+      </div>
+    </aside>
+
+    <!-- ── Main Chat Area ───────────────────────────────────── -->
+    <main class="chat-main">
+      <!-- Top bar -->
+      <header class="chat-header">
+        <button class="hamburger-btn" id="sidebarToggle" aria-label="Toggle sidebar">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
+          </svg>
+        </button>
+        <h1 class="chat-title" id="chatTitle">New Conversation</h1>
+        <div class="header-actions">
+          <button class="icon-btn" id="clearBtn" title="Clear conversation">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- Messages container -->
+      <div class="messages-container" id="messagesContainer">
+        <!-- Welcome screen -->
+        <div class="welcome-screen" id="welcomeScreen">
+          <div class="welcome-icon">
+            <svg width="56" height="56" viewBox="0 0 24 24" fill="none">
+              <path d="M12 2L2 7l10 5 10-5-10-5z" fill="url(#wg1)" opacity="0.9" />
+              <path d="M2 17l10 5 10-5" stroke="url(#wg2)" stroke-width="1.5" fill="none" />
+              <path d="M2 12l10 5 10-5" stroke="url(#wg2)" stroke-width="1.5" fill="none" />
+              <defs>
+                <linearGradient id="wg1" x1="2" y1="2" x2="22" y2="12">
+                  <stop stop-color="#6366f1" /><stop offset="1" stop-color="#a78bfa" />
+                </linearGradient>
+                <linearGradient id="wg2" x1="2" y1="12" x2="22" y2="22">
+                  <stop stop-color="#818cf8" /><stop offset="1" stop-color="#c4b5fd" />
+                </linearGradient>
+              </defs>
+            </svg>
+          </div>
+          <h2 class="welcome-title">What can I help you with?</h2>
+          <p class="welcome-subtitle">Ask any question about your documents — I'll search, retrieve, and synthesize an answer using advanced multi-agent RAG.</p>
+          <div class="suggestion-grid">
+            <button class="suggestion-card" data-query="List the three specific macroeconomic factors that caused the Gillette intangible asset impairment.">
+              <span class="suggestion-icon">📊</span>
+              <span class="suggestion-text">Gillette impairment factors</span>
+            </button>
+            <button class="suggestion-card" data-query="Detail the complete timeline of the limited market portfolio restructuring in Enterprise Markets.">
+              <span class="suggestion-icon">📅</span>
+              <span class="suggestion-text">Restructuring timeline</span>
+            </button>
+            <button class="suggestion-card" data-query="What were the key financial highlights for the fiscal year 2024?">
+              <span class="suggestion-icon">💰</span>
+              <span class="suggestion-text">Fiscal year highlights</span>
+            </button>
+            <button class="suggestion-card" data-query="Summarize the risk factors mentioned in the annual report.">
+              <span class="suggestion-icon">⚠️</span>
+              <span class="suggestion-text">Risk factors summary</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Input area -->
+      <div class="input-area">
+        <form class="input-form" id="chatForm">
+          <div class="input-wrapper">
+            <textarea
+              id="messageInput"
+              class="message-input"
+              placeholder="Ask a question about your documents..."
+              rows="1"
+              autofocus
+            ></textarea>
+            <button type="submit" class="send-btn" id="sendBtn" disabled>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
+              </svg>
+            </button>
+          </div>
+          <div class="input-footer">
+            <span class="powered-by">Powered by LangGraph · Amazon Nova Pro · Qdrant Hybrid Search</span>
+          </div>
+        </form>
+      </div>
+    </main>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

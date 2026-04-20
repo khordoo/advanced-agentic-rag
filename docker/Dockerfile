@@ -16,4 +16,4 @@ COPY rag_core/ rag_core/
 COPY evaluation/ evaluation/
 
 # Default command (override in docker-compose)
-CMD ["uv", "run", "python", "-m", "rag_core.pipeline"]
+CMD ["uv", "run", "python", "-m", "rag_core.pipelines.pipeline"]
