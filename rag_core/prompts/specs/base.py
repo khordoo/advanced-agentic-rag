@@ -2,6 +2,7 @@ from pydantic import BaseModel, Field
 from typing import List
 import json
 
+
 class Citation(BaseModel):
     document_index: int = Field(
         ..., description="The index of the document in the retrieved documents list"
