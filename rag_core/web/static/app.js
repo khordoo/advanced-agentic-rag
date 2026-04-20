@@ -21,7 +21,7 @@
   // ── State ─────────────────────────────────────────────
   let currentSessionId = null;
   let isStreaming       = false;
-  let sessions         = {}; // { id: { title, messages: [{role, content, sources}] } }
+  let sessions         = {}; // { id: { title, messages: [{role, content, citations}] } }
 
   // ── Sidebar toggle (mobile) ───────────────────────────
   sidebarToggle.addEventListener("click", () => {
@@ -180,13 +180,13 @@
               // Remove thinking indicator
               thinkingEl.remove();
 
-              // Add assistant message
+              // Add assistant message with citations
               const session = sessions[sessionId];
               if (session) {
                 session.messages.push({
                   role: "assistant",
                   content: data.content,
-                  sources: data.sources || [],
+                  citations: data.citations || [],
                 });
                 renderMessages(session.messages);
               }
@@ -254,17 +254,15 @@
       // Bubble
       const bubble = document.createElement("div");
       bubble.className = `message-bubble${msg.isError ? " error-bubble" : ""}`;
-      bubble.innerHTML = renderMarkdown(msg.content);
 
-      // Sources
-      if (msg.sources && msg.sources.length > 0) {
-        const sourcesEl = document.createElement("div");
-        sourcesEl.className = "sources-section";
-        sourcesEl.innerHTML = `
-          <div class="sources-title">📎 Sources</div>
-          <div>${msg.sources.map((s) => `<span class="source-tag">${escapeHtml(typeof s === "string" ? s : s.source || s.file || JSON.stringify(s))}</span>`).join("")}</div>
-        `;
-        bubble.appendChild(sourcesEl);
+      // Render content with inline citation highlights
+      const citations = msg.citations || [];
+      bubble.innerHTML = renderMarkdownWithCitations(msg.content, citations);
+
+      // Render citations footer if we have any
+      if (citations.length > 0) {
+        const citationFooter = buildCitationFooter(citations);
+        bubble.appendChild(citationFooter);
       }
 
       group.appendChild(avatar);
@@ -275,6 +273,106 @@
     });
 
     scrollToBottom();
+  }
+
+  // ── Citation rendering ────────────────────────────────
+
+  /**
+   * Build the citation reference footer section.
+   * Each citation: { document_index, file_name, page_number }
+   */
+  function buildCitationFooter(citations) {
+    const section = document.createElement("div");
+    section.className = "citations-section";
+
+    const title = document.createElement("div");
+    title.className = "citations-title";
+    title.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+        <line x1="16" y1="13" x2="8" y2="13"/>
+        <line x1="16" y1="17" x2="8" y2="17"/>
+        <polyline points="10 9 9 9 8 9"/>
+      </svg>
+      References
+    `;
+    section.appendChild(title);
+
+    const list = document.createElement("div");
+    list.className = "citations-list";
+
+    citations.forEach((cit) => {
+      const idx  = cit.document_index ?? "?";
+      const file = cit.file_name ?? "unknown";
+      const page = cit.page_number;
+
+      const card = document.createElement("div");
+      card.className = "citation-card";
+
+      card.innerHTML = `
+        <span class="citation-badge">${escapeHtml(String(idx))}</span>
+        <div class="citation-details">
+          <span class="citation-filename">${escapeHtml(file)}</span>
+          ${page != null ? `<span class="citation-page">Page ${escapeHtml(String(page))}</span>` : ""}
+        </div>
+      `;
+
+      list.appendChild(card);
+    });
+
+    section.appendChild(list);
+    return section;
+  }
+
+  /**
+   * Render markdown text and highlight inline citation markers like [1], [2].
+   */
+  function renderMarkdownWithCitations(text, citations) {
+    if (!text) return "";
+
+    // Build a lookup for quick citation existence check
+    const citationIndices = new Set(citations.map((c) => c.document_index));
+
+    let html = escapeHtml(text);
+
+    // Code blocks first (protect from further processing)
+    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+    // Inline code
+    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+    // Bold
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    // Italic
+    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    // Unordered lists
+    html = html.replace(/^[-•] (.+)$/gm, '<li>$1</li>');
+    html = html.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>');
+    // Ordered lists
+    html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+    // Blockquote
+    html = html.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
+
+    // ── Inline citation highlights ──
+    // Match [1], [2], etc. and render as interactive citation badges
+    html = html.replace(/\[(\d+)\]/g, (match, numStr) => {
+      const num = parseInt(numStr, 10);
+      if (citationIndices.has(num)) {
+        // Find the citation for tooltip data
+        const cit = citations.find((c) => c.document_index === num);
+        const tooltip = cit
+          ? `${cit.file_name}${cit.page_number != null ? `, p.${cit.page_number}` : ""}`
+          : "";
+        return `<span class="inline-citation" data-citation="${num}" title="${escapeHtml(tooltip)}">${numStr}</span>`;
+      }
+      return match; // Not a known citation, leave as-is
+    });
+
+    // Paragraphs (double newlines)
+    html = html.replace(/\n\n/g, '</p><p>');
+    // Single newlines → <br>
+    html = html.replace(/\n/g, '<br>');
+
+    return `<p>${html}</p>`;
   }
 
   // ── Thinking indicator ────────────────────────────────
@@ -359,34 +457,6 @@
     const div = document.createElement("div");
     div.textContent = str;
     return div.innerHTML;
-  }
-
-  /** Very lightweight markdown → HTML (bold, italic, code, lists, paragraphs). */
-  function renderMarkdown(text) {
-    if (!text) return "";
-    let html = escapeHtml(text);
-
-    // Code blocks
-    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
-    // Inline code
-    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-    // Bold
-    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-    // Italic
-    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-    // Unordered lists
-    html = html.replace(/^[-•] (.+)$/gm, '<li>$1</li>');
-    html = html.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>');
-    // Ordered lists
-    html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
-    // Blockquote
-    html = html.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
-    // Paragraphs (double newlines)
-    html = html.replace(/\n\n/g, '</p><p>');
-    // Single newlines → <br>
-    html = html.replace(/\n/g, '<br>');
-
-    return `<p>${html}</p>`;
   }
 
   // ── Init ──────────────────────────────────────────────

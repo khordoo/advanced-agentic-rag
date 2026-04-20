@@ -109,20 +109,21 @@ async def chat(request: Request):
             response_content = messages[-1].content
             logger.info("Graph execution complete for session=%s", session_id)
 
-            # Try parsing structured JSON response
+            # Try parsing structured JSON response (RagFinalResponseSchema)
             try:
                 formatted = extract_clean_json(response_content)
                 answer = formatted.get("answer", json.dumps(formatted, indent=2))
-                sources = formatted.get("sources", [])
+                # Citations come as {document_index, file_name, page_number}
+                citations = formatted.get("citations", [])
                 messages.append(AIMessage(content=json.dumps(formatted)))
             except Exception:
                 answer = response_content
-                sources = []
+                citations = []
                 messages.append(AIMessage(content=response_content))
 
             _sessions[session_id] = messages
 
-            yield f"data: {json.dumps({'type': 'answer', 'content': answer, 'sources': sources})}\n\n"
+            yield f"data: {json.dumps({'type': 'answer', 'content': answer, 'citations': citations})}\n\n"
             yield "data: [DONE]\n\n"
 
         except Exception as e:
