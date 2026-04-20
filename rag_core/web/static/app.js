@@ -314,7 +314,7 @@
         <span class="citation-badge">${escapeHtml(String(idx))}</span>
         <div class="citation-details">
           <span class="citation-filename">${escapeHtml(file)}</span>
-          ${page != null ? `<span class="citation-page">Page ${escapeHtml(String(page))}</span>` : ""}
+          ${page != null && page !== 0 ? `<span class="citation-page">Page ${escapeHtml(String(page))}</span>` : ""}
         </div>
       `;
 
@@ -360,7 +360,7 @@
         // Find the citation for tooltip data
         const cit = citations.find((c) => c.document_index === num);
         const tooltip = cit
-          ? `${cit.file_name}${cit.page_number != null ? `, p.${cit.page_number}` : ""}`
+          ? `${cit.file_name}${cit.page_number != null && cit.page_number !== 0 ? `, p.${cit.page_number}` : ""}`
           : "";
         return `<span class="inline-citation" data-citation="${num}" title="${escapeHtml(tooltip)}">${numStr}</span>`;
       }

@@ -16,7 +16,7 @@ from rag_core.agents import AgentFactory
 from rag_core.core.config import setup_logging
 from rag_core.core.telemetry import get_observability_callbacks
 from rag_core.genetation.graph import RagGraphFactory
-from rag_core.genetation.parsers import extract_clean_json
+from rag_core.genetation.parsers import parse_agent_response
 from rag_core.prompts.loader import AgentPrompt
 
 setup_logging()
@@ -107,13 +107,12 @@ async def chat(request: Request):
             response_content = messages[-1].content
             logger.info("Graph execution complete for session=%s", session_id)
 
-            # Try parsing structured JSON response (RagFinalResponseSchema)
+            # Try parsing structured response (Markdown → RagFinalResponseSchema)
             try:
-                formatted = extract_clean_json(response_content)
-                answer = formatted.get("answer", json.dumps(formatted, indent=2))
-                # Citations come as {document_index, file_name, page_number}
-                citations = formatted.get("citations", [])
-                messages.append(AIMessage(content=json.dumps(formatted)))
+                result = parse_agent_response(response_content)
+                answer = result.answer
+                citations = [c.model_dump() for c in result.citations]
+                messages.append(AIMessage(content=result.model_dump_json()))
             except Exception:
                 answer = response_content
                 citations = []
