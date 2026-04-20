@@ -21,7 +21,7 @@ from ragas.run_config import RunConfig
 
 from rag_core.agents import AgentFactory
 from rag_core.config import load_config
-from rag_core.pipeline import RAGPipeline
+from rag_core.pipelines.pipeline import RAGPipeline
 
 logger = logging.getLogger(__name__)
 

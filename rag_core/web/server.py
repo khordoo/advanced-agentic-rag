@@ -42,9 +42,7 @@ async def lifespan(app: FastAPI):
     reasoning_llm = AgentFactory.create(
         provider="aws", model_name="amazon.nova-pro-v1:0"
     )
-    fast_llm = AgentFactory.create(
-        provider="aws", model_name="amazon.nova-micro-v1:0"
-    )
+    fast_llm = AgentFactory.create(provider="aws", model_name="amazon.nova-micro-v1:0")
     _app_graph = RagGraphFactory.build(reasoning_llm=reasoning_llm, fast_llm=fast_llm)
     _langfuse_callbacks = get_observability_callbacks()
     logger.info("✅  RAG graph ready.")

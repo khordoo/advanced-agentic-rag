@@ -40,6 +40,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "docling" },
+    { name = "fastapi" },
     { name = "fastembed" },
     { name = "grandalf" },
     { name = "langchain-aws" },
@@ -58,6 +59,7 @@ dependencies = [
     { name = "ragas" },
     { name = "sentence-transformers" },
     { name = "tenacity" },
+    { name = "uvicorn" },
 ]
 
 [package.optional-dependencies]
@@ -88,6 +90,7 @@ dev = [
 requires-dist = [
     { name = "chainlit", marker = "extra == 'ui'", specifier = ">=2.5" },
     { name = "docling", specifier = ">=2.82.0" },
+    { name = "fastapi", specifier = ">=0.115" },
     { name = "fastapi", marker = "extra == 'serve'", specifier = ">=0.115" },
     { name = "fastembed", specifier = ">=0.8.0" },
     { name = "grandalf", specifier = ">=0.8" },
@@ -111,6 +114,7 @@ requires-dist = [
     { name = "sentence-transformers", specifier = ">=5.3.0" },
     { name = "streamlit", marker = "extra == 'demo'", specifier = ">=1.40" },
     { name = "tenacity", specifier = ">=9.1.4" },
+    { name = "uvicorn", specifier = ">=0.34" },
     { name = "uvicorn", marker = "extra == 'serve'", specifier = ">=0.34" },
 ]
 provides-extras = ["qdrant", "dev", "demo", "serve", "ui"]

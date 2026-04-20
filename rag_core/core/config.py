@@ -193,7 +193,7 @@ class RerankerSettings(BaseSettings):
     """
 
     provider: str = "huggingface"
-    model_name: str = "BAAI/bge-reranker-v2-m3"
+    model_name: str = "jinaai/jina-reranker-v1-turbo-en"  # "cross-encoder/ms-marco-MiniLM-L-6-v2"  # "BAAI/bge-reranker-v2-m3"
     top_k: int = Field(
         default=3,
         ge=1,
