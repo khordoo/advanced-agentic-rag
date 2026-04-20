@@ -1,7 +1,7 @@
 from typing import List
 import logging
 from rag_core.reranking.base import BaseReranker
-from rag_core.config import RerankerSettings
+from rag_core.core.config import RerankerSettings
 from sentence_transformers import CrossEncoder
 from langchain_core.documents import Document
 

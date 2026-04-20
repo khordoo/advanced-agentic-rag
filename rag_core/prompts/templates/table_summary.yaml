@@ -1,7 +1,7 @@
 name: "table_json_indexer"
 description: "Transforms structured markdown tables and context into a precise JSON metadata object for Hybrid Search indexing."
 temperature: 0.0
-template: |
+system_template: |
   You are an AI Data Architect building a Hybrid Search index. Your task is to convert a Markdown Table and its surrounding context into a strict JSON object.
 
   ### CRITICAL RULES:
@@ -51,11 +51,6 @@ template: |
     "fine_print_and_qualifiers": "Comparisons as a percentage of net sales."
   }}
 
-  ### ACTUAL CHUNK TO PROCESS:
-  <INPUT_DOCUMENT>
-  {table_markdown}
-  </INPUT_DOCUMENT>
-
   ## OUTPUT SCHEMA:
   Return a JSON object with exactly these keys and no others:
 
@@ -69,3 +64,8 @@ template: |
       "fine_print_and_qualifiers": string
     }}
   Output ONLY valid JSON
+user_template: |
+  ### ACTUAL CHUNK TO PROCESS:
+  <INPUT_DOCUMENT>
+  {table_markdown}
+  </INPUT_DOCUMENT>

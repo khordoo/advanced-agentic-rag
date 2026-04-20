@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 from enum import Enum
-from typing import List, Optional,Any
+from typing import List, Optional, Any
 from langchain_core.documents import Document
 from pydantic import BaseModel, Field, ConfigDict
 from dataclasses import dataclass, field
-from qdrant_client import  models
+from qdrant_client import models
+from langchain_core.prompts import ChatPromptTemplate
+
 
 class QAPair(BaseModel):
     """A single question-answer pair for evaluation."""
@@ -35,60 +37,94 @@ class QARecord(BaseModel):
     refusal: Optional[str] = None
 
 
-
-
 class PromptConfig(BaseModel):
     """Parsed YAML prompt template."""
 
     name: str
     description: Optional[str] = None
     temperature: float = 0.2
-    template: str
+    system_template: str | None = None
+    user_template: str
+    output_schema: str | None = None
 
-#------------- Ingestion -------------------
+    @property
+    def chat_template(self) -> ChatPromptTemplate:
+        """Dynamically builds the LangChain template from the raw strings."""
+        messages = []
+
+        if self.system_template:
+            messages.append(("system", self.system_template))
+        if self.output_schema:
+            messages.append(("system", self.output_schema))
+
+        messages.append(("user", self.user_template))
+
+        return ChatPromptTemplate.from_messages(messages)
+
+
+# ------------- Ingestion -------------------
 # --- 1. The Pydantic Schema (The Contract) ---
 class TableSummary(BaseModel):
     """Schema for the LLM to geenrate a sumary of the table"""
-    table_title: str = Field(description="The exact name or number of the table (e.g., 'Table 4.1'). If none, write 'Unnamed Table'.")
-    retrieval_summary: str = Field(description="A concise 2-sentence summary of the core trends, anomalies, or totals in the table.")
-    column_headers: list[str] = Field(description="Extract every column header across the top of the table.")
-    row_headers: list[str] = Field(description="Extract the main row categories down the left side of the table.")
-    keywords: list[str] = Field(description="5-7 highly specific entities, financial metrics, or jargon terms found in the data.")
-    question_signals: list[str] = Field(description="3 highly specific questions a user might ask which this table perfectly answers. Frame them exactly how a human would type a search query.")
+
+    table_title: str = Field(
+        description="The exact name or number of the table (e.g., 'Table 4.1'). If none, write 'Unnamed Table'."
+    )
+    retrieval_summary: str = Field(
+        description="A concise 2-sentence summary of the core trends, anomalies, or totals in the table."
+    )
+    column_headers: list[str] = Field(
+        description="Extract every column header across the top of the table."
+    )
+    row_headers: list[str] = Field(
+        description="Extract the main row categories down the left side of the table."
+    )
+    keywords: list[str] = Field(
+        description="5-7 highly specific entities, financial metrics, or jargon terms found in the data."
+    )
+    question_signals: list[str] = Field(
+        description="3 highly specific questions a user might ask which this table perfectly answers. Frame them exactly how a human would type a search query."
+    )
     fine_print_and_qualifiers: str = Field(
-            description="Extract any footnotes, captions, or fine print from the surrounding context that change how the numbers should be interpreted (e.g., 'Unaudited', 'Dollars in thousands', 'Excludes Q4'). If none exist, write 'None'."
-        )
+        description="Extract any footnotes, captions, or fine print from the surrounding context that change how the numbers should be interpreted (e.g., 'Unaudited', 'Dollars in thousands', 'Excludes Q4'). If none exist, write 'None'."
+    )
 
     def to_markdown(self) -> str:
-            """Converts the JSON state into an atomic, Agent-friendly Markdown block."""
+        """Converts the JSON state into an atomic, Agent-friendly Markdown block."""
 
-            # 1. We use a single H3 for the main title to group it under the document's H2s
-            md = f"### Data Table: {self.table_title}\n\n"
+        # 1. We use a single H3 for the main title to group it under the document's H2s
+        md = f"### Data Table: {self.table_title}\n\n"
 
-            # 2. We use bold text for keys to prevent accidental chunking
-            md += f"**Summary:** {self.retrieval_summary}\n\n"
+        # 2. We use bold text for keys to prevent accidental chunking
+        md += f"**Summary:** {self.retrieval_summary}\n\n"
 
-            # 3. We join lists with commas for token-dense readability
-            md += f"**Columns:** {', '.join(self.column_headers)}\n"
-            md += f"**Rows:** {', '.join(self.row_headers)}\n"
-            md += f"**Keywords:** {', '.join(self.keywords)}\n\n"
+        # 3. We join lists with commas for token-dense readability
+        md += f"**Columns:** {', '.join(self.column_headers)}\n"
+        md += f"**Rows:** {', '.join(self.row_headers)}\n"
+        md += f"**Keywords:** {', '.join(self.keywords)}\n\n"
 
-            # 4. We use bullet points for questions
-            md += "**Can Answer:**\n"
-            for q in self.question_signals:
-                md += f"- {q}\n"
+        # 4. We use bullet points for questions
+        md += "**Can Answer:**\n"
+        for q in self.question_signals:
+            md += f"- {q}\n"
 
-            # 5. We use a blockquote for the fine print so the LLM knows it's a disclaimer
-            if self.fine_print_and_qualifiers and self.fine_print_and_qualifiers.lower() != "none":
-                md += f"\n> **Fine Print/Qualifiers:** {self.fine_print_and_qualifiers}\n"
+        # 5. We use a blockquote for the fine print so the LLM knows it's a disclaimer
+        if (
+            self.fine_print_and_qualifiers
+            and self.fine_print_and_qualifiers.lower() != "none"
+        ):
+            md += f"\n> **Fine Print/Qualifiers:** {self.fine_print_and_qualifiers}\n"
 
-            return md
+        return md
+
 
 class TableChunk(BaseModel):
-    """ Used to store in databse"""
+    """Used to store in databse"""
+
     table_id: str
-    parent_id:str
+    parent_id: str
     summary: TableSummary
+
 
 class ExtractedTable(BaseModel):
     # 1. The Atomic Parts (Stored Separately)
@@ -100,8 +136,10 @@ class ExtractedTable(BaseModel):
     seo_metadata: TableMetadata | None = None
 
     @property
-    def extraction_context(self)->str:
-        return f'{self.context_above}\n\n{self.raw_markdown_table}\n\n{self.context_below}'
+    def extraction_context(self) -> str:
+        return (
+            f"{self.context_above}\n\n{self.raw_markdown_table}\n\n{self.context_below}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -130,7 +168,8 @@ class BaseChunkMetadata(BaseModel):
         tags: Categorization labels used for logical grouping (e.g., ['finance', 'legal']).
         scopes: Access control scopes used for RBAC filtering (defaults to ['public']).
     """
-    model_config = ConfigDict(extra='allow')
+
+    model_config = ConfigDict(extra="allow")
 
     file_name: str
     source: str
@@ -149,17 +188,18 @@ class ChildMetadata(BaseChunkMetadata):
     parent_id: str
 
 
-class VectorDatabasePayloadKeys(str,Enum):
-    SOURCE = 'source'
-    FILE_NAME = 'file_name'
-    PAGE='pages'
-    TABLE_ID='table_id'
-    TEXT='text'
-    PARENT_ID='parent_id'
-    SCOPES='scopes'
-    TAGS='tags'
+class VectorDatabasePayloadKeys(str, Enum):
+    SOURCE = "source"
+    FILE_NAME = "file_name"
+    PAGE = "pages"
+    TABLE_ID = "table_id"
+    TEXT = "text"
+    PARENT_ID = "parent_id"
+    SCOPES = "scopes"
+    TAGS = "tags"
 
-_BASE_INDEX_SCHEMA={
+
+_BASE_INDEX_SCHEMA = {
     VectorDatabasePayloadKeys.SOURCE.value: models.PayloadSchemaType.KEYWORD,
     VectorDatabasePayloadKeys.FILE_NAME.value: models.PayloadSchemaType.KEYWORD,
     VectorDatabasePayloadKeys.PAGE.value: models.PayloadSchemaType.INTEGER,
@@ -167,11 +207,11 @@ _BASE_INDEX_SCHEMA={
     VectorDatabasePayloadKeys.TAGS.value: models.PayloadSchemaType.KEYWORD,
 }
 
-PARENT_INDEX_SCHEMA={
+PARENT_INDEX_SCHEMA = {
     **_BASE_INDEX_SCHEMA,
     VectorDatabasePayloadKeys.TABLE_ID.value: models.PayloadSchemaType.KEYWORD,
 }
-CHILD_INDEX_SCHEMA={
+CHILD_INDEX_SCHEMA = {
     **_BASE_INDEX_SCHEMA,
     VectorDatabasePayloadKeys.PARENT_ID.value: models.PayloadSchemaType.KEYWORD,
 }

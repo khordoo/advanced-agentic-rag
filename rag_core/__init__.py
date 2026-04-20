@@ -7,7 +7,8 @@ from rag_core.converter import convert_pdf_to_markdown
 from rag_core.chunker import chunk_markdown
 from rag_core.retriever import Retriever
 from rag_core.pipeline import RAGPipeline
-from rag_core.agents import AgentFactory, PromptLoader
+from rag_core.agents import AgentFactory
+from rag_core.prompts import AgentPrompt
 from rag_core.schemas import QAPair, SyntheticsTestSet, QARecord, PromptConfig
 
 __all__ = [
@@ -16,7 +17,7 @@ __all__ = [
     "Retriever",
     "RAGPipeline",
     "AgentFactory",
-    "PromptLoader",
+    "AgentPrompt",
     "QAPair",
     "SyntheticsTestSet",
     "QARecord",

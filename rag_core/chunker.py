@@ -41,9 +41,15 @@ from langchain_text_splitters import (
 )
 
 from rag_core.converter import PAGE_PATTERN
-from rag_core.schemas import ParentChunk, BaseChunkMetadata, ChildMetadata, ParentMetadata
+from rag_core.schemas import (
+    ParentChunk,
+    BaseChunkMetadata,
+    ChildMetadata,
+    ParentMetadata,
+)
 from rag_core.agents import TableSummarizer
 from rag_core.indexing.qdrant_indexer import QdrantIndexer
+
 logger = logging.getLogger(__name__)
 
 # Default header hierarchy for markdown splitting
@@ -53,9 +59,6 @@ HEADERS_TO_SPLIT_ON = [
     ("###", "h3"),
 ]
 HEADER_KEYS = [v for _, v in HEADERS_TO_SPLIT_ON]
-
-
-
 
 
 # ---------------------------------------------------------------------------
@@ -171,7 +174,7 @@ def chunk_markdown(
 
             # --- Phase 3: split parent into children -----------------------
             child_texts = child_splitter.split_text(parent_doc.page_content)
-            child_meta=_create_child_metadata(parent_doc,parent_id).model_dump()
+            child_meta = _create_child_metadata(parent_doc, parent_id).model_dump()
             child_docs = [
                 Document(
                     page_content=header + child_text,
@@ -195,6 +198,7 @@ def chunk_markdown(
     )
     return all_parent_chunks
 
+
 # ---------------------------------------------------------------------------
 # Storage helpers
 # ---------------------------------------------------------------------------
@@ -215,8 +219,10 @@ def _extract_base_metadata(meta: dict[str, Any]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for field_name, field_info in BaseChunkMetadata.model_fields.items():
         lookup_key = _META_KEY_ALIASES.get(field_name, field_name)
-        default = field_info.default if field_info.default is not None else (
-            field_info.default_factory() if field_info.default_factory else None
+        default = (
+            field_info.default
+            if field_info.default is not None
+            else (field_info.default_factory() if field_info.default_factory else None)
         )
         result[field_name] = meta.get(lookup_key, default)
     return result
@@ -240,27 +246,38 @@ def _create_parent_metadata(doc: Document) -> ParentMetadata:
 # Helpers
 # ---------------------------------------------------------------------------
 
-def summerize_and_chunk_table(table_data_list: list[dict], model:TableSummarizer,tags:list[str] |None=None,scopes: list[str] |None =None,  summerize_enabled=True) -> list[ParentChunk]:
+
+def summerize_and_chunk_table(
+    table_data_list: list[dict],
+    model: TableSummarizer,
+    tags: list[str] | None = None,
+    scopes: list[str] | None = None,
+    summerize_enabled=True,
+) -> list[ParentChunk]:
     logger.info("Summarizing %d tables", len(table_data_list))
     if tags is None:
         tags = []
     if scopes is None:
         scopes = []
 
-    parent_chunks=[]
-    for i,table_data in enumerate(table_data_list):
+    parent_chunks = []
+    for i, table_data in enumerate(table_data_list):
         table_id = f"DATA_TABLE_{i:03d}"
-        raw_md = table_data['markdown']
+        raw_md = table_data["markdown"]
         base_header = f"[Doc: {table_data['file_name']}] [Section: Data Table] [Location: Page {table_data['page_no']}]"
 
         logger.debug(
             "Summarizing table %s from %s page %s",
             table_id,
-            table_data['file_name'],
-            table_data['page_no'],
+            table_data["file_name"],
+            table_data["page_no"],
         )
-        table_summary =model.summarize(table_markdown=raw_md) if summerize_enabled else table_data
-        logger.debug(f"Summary ready for table {table_id}. Progress: {(i+1)/len(table_data_list):0.2f}" )
+        table_summary = (
+            model.summarize(table_markdown=raw_md) if summerize_enabled else table_data
+        )
+        logger.debug(
+            f"Summary ready for table {table_id}. Progress: {(i + 1) / len(table_data_list):0.2f}"
+        )
         parent_id = uuid.uuid4().hex
         # Create the Child (The Searchable Vector)
         # We explicitly put the table_id in the text so the vector DB indexes it!
@@ -269,11 +286,11 @@ def summerize_and_chunk_table(table_data_list: list[dict], model:TableSummarizer
         # Build base metadata from the table dict, reusing the same
         # schema-driven extraction that text chunks use.
         table_meta_raw = {
-            "source_path": table_data['source_path'],
-            "file_name":   table_data['file_name'],
-            "pages":       [table_data['page_no']],
-            "tags":        tags,
-            "scopes":      scopes,
+            "source_path": table_data["source_path"],
+            "file_name": table_data["file_name"],
+            "pages": [table_data["page_no"]],
+            "tags": tags,
+            "scopes": scopes,
         }
         base = _extract_base_metadata(table_meta_raw)
 
@@ -297,6 +314,7 @@ def summerize_and_chunk_table(table_data_list: list[dict], model:TableSummarizer
 
     logger.info("Created %d table parent chunks", len(parent_chunks))
     return parent_chunks
+
 
 def _get_clean_name(path: str | Path) -> str:
     return os.path.basename(str(path))
