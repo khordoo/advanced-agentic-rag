@@ -8,7 +8,7 @@ from rag_core.agents import AgentFactory
 from rag_core.core.config import setup_logging
 from rag_core.core.telemetry import get_observability_callbacks
 from rag_core.genetation.graph import RagGraphFactory
-from rag_core.genetation.parsers import extract_clean_json
+from rag_core.genetation.parsers import parse_agent_response
 from rag_core.prompts.loader import AgentPrompt
 
 setup_logging()
@@ -64,12 +64,12 @@ def run_chat_loop():
         logger.info("Execution complete.")
 
         try:
-            formated = extract_clean_json(response_content)
+            result = parse_agent_response(response_content)
             print("\n----- Agent Response -----")
-            print(json.dumps(formated, indent=2))
-            messages.append(AIMessage(content=json.dumps(formated)))
+            print(result.model_dump_json(indent=2))
+            messages.append(AIMessage(content=result.model_dump_json()))
         except Exception as e:
-            logger.error("Failed to parse JSON response: %s", e)
+            logger.error("Failed to parse response: %s", e)
             logger.error("Raw Agent Response:\n%s", response_content)
 
 

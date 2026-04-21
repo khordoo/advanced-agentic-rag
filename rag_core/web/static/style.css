@@ -30,6 +30,10 @@
   --border-subtle:  rgba(255, 255, 255, 0.06);
   --border-default: rgba(255, 255, 255, 0.10);
   --border-accent:  rgba(99, 102, 241, 0.30);
+  --table-border:   rgba(148, 163, 184, 0.30);
+  --table-header-bg: rgba(148, 163, 184, 0.10);
+  --table-row-alt:  rgba(148, 163, 184, 0.05);
+  --table-row-hover: rgba(129, 140, 248, 0.10);
 
   /* Glassmorphism */
   --glass-bg:    rgba(28, 28, 40, 0.60);
@@ -726,6 +730,9 @@ body {
 .message-bubble p { margin-bottom: 8px; }
 .message-bubble p:last-child { margin-bottom: 0; }
 
+.message-bubble .markdown-content > :first-child { margin-top: 0; }
+.message-bubble .markdown-content > :last-child { margin-bottom: 0; }
+
 .message-bubble code {
   font-family: var(--font-mono);
   font-size: 0.82em;
@@ -769,4 +776,43 @@ body {
   background: rgba(239, 68, 68, 0.08) !important;
   border-color: rgba(239, 68, 68, 0.20) !important;
   color: #fca5a5 !important;
+}
+
+/* ── Markdown Tables ───────────────────────────────────── */
+.message-bubble .markdown-table-wrap {
+  margin: 14px 0;
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+  background: var(--bg-surface);
+  border: 1px solid var(--table-border);
+}
+
+.message-bubble table {
+  width: 100%;
+  min-width: 420px;
+  border-collapse: collapse;
+  margin: 0;
+  font-size: 0.9em;
+  background: transparent;
+}
+
+.message-bubble th,
+.message-bubble td {
+  padding: 10px 14px;
+  text-align: left;
+  border: 1px solid var(--table-border);
+}
+
+.message-bubble th {
+  background-color: var(--table-header-bg);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.message-bubble tbody tr:nth-child(even) td {
+  background-color: var(--table-row-alt);
+}
+
+.message-bubble tr:hover td {
+  background-color: var(--table-row-hover);
 }

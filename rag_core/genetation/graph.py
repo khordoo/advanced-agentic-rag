@@ -22,7 +22,7 @@ from rag_core.genetation.tools import AgentToolFactory
 from rag_core.genetation.nodes import NodeName, GraphNodes
 from rag_core.genetation.state import RagState
 from rag_core.prompts.loader import AgentPrompt
-from rag_core.genetation.parsers import extract_clean_json
+from rag_core.genetation.parsers import parse_agent_response
 from rag_core.core.telemetry import get_observability_callbacks
 
 
@@ -135,9 +135,9 @@ if __name__ == "__main__":
         print("=======" * 20)
         print("-----Final-----------")
         try:
-            formated = extract_clean_json(response_content)
-            print(formated)
-            messages.append(AIMessage(content=json.dumps(formated)))
+            result = parse_agent_response(response_content)
+            print(result.model_dump_json(indent=2))
+            messages.append(AIMessage(content=result.model_dump_json()))
         except Exception as e:
             print("--" * 20)
             print("Error: ", e)
