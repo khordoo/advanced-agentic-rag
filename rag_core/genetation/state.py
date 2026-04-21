@@ -10,9 +10,11 @@ from langchain_core.messages import BaseMessage
 class RagState(TypedDict):
     # query:str
     messages: Annotated[list[BaseMessage], add_messages]
-    active_context: list[str]
+    retrieved_context: list[Document]
     source_docs: list[Document]
     token_budget: int
     iteration_count: int
     max_iterations: int
     route: str
+    is_grounded: bool
+    revision_attempts: int

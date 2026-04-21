@@ -1,3 +1,4 @@
+import json
 from langchain_core.documents import Document
 from pydantic import BaseModel, Field
 from pydantic.v1.errors import NoneIsAllowedError
@@ -36,24 +37,34 @@ class AgentToolFactory:
 
     def _semantic_search(self, query: str) -> list[Document]:
         docs = self.retriever.search(query=query)
-        return docs
+        return self._format_docs(docs)
 
     def _page_lookup(self, file_name: str, page_number: int):
         filters = {
             PayloadSchema.FILE_NAME.value: file_name,
             PayloadSchema.PAGE.value: [page_number],
         }
-        return self.retriever.exact_lookup(filters=filters)
+        docs = self.retriever.exact_lookup(filters=filters)
+        return self._format_docs(docs)
 
     def _table_lookup(self, table_id: str, file_name: str):
         filters = {
             PayloadSchema.FILE_NAME.value: file_name,
             PayloadSchema.TABLE_ID.value: table_id,
         }
-        return self.retriever.exact_lookup(filters=filters)
+        docs = self.retriever.exact_lookup(filters=filters)
+        return self._format_docs(docs)
+
+    def _format_docs(self, docs: list[Document]) -> str:
+        doc_dicts = [
+            {"page_content": doc.page_content, "metadata": doc.metadata} for doc in docs
+        ]
+        return json.dumps(doc_dicts)
 
     @classmethod
-    def create_tools(cls, retriever: BaseRetriever | None=None) -> list[StructuredTool]:
+    def create_tools(
+        cls, retriever: BaseRetriever | None = None
+    ) -> list[StructuredTool]:
         instance = cls(retriever or QdrantRetriever())
         return instance._get_tools()
 
@@ -81,6 +92,7 @@ class AgentToolFactory:
             ]
         return self._tools
 
-if __name__=="__main__":
-    tools= AgentToolFactory.create_tools()
+
+if __name__ == "__main__":
+    tools = AgentToolFactory.create_tools()
     print(tools)

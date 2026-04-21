@@ -112,7 +112,10 @@ if __name__ == "__main__":
             continue
 
         if not messages:
-            prompt = agent_prompt.chat_template.invoke({"question": query})
+            # Critial: Reseting the Source should to empty list in the first invocation
+            prompt = agent_prompt.chat_template.invoke(
+                {"question": query, "source_docs": []}
+            )
             print("=============Full PROMPT============\n")
             print(prompt)
             print("--" * 20)
