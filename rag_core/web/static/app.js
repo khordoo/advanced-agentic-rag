@@ -6,22 +6,22 @@
   "use strict";
 
   // ── DOM References ────────────────────────────────────
-  const sidebar        = document.getElementById("sidebar");
-  const sidebarToggle  = document.getElementById("sidebarToggle");
-  const newChatBtn     = document.getElementById("newChatBtn");
-  const sessionList    = document.getElementById("sessionList");
-  const chatTitle      = document.getElementById("chatTitle");
+  const sidebar = document.getElementById("sidebar");
+  const sidebarToggle = document.getElementById("sidebarToggle");
+  const newChatBtn = document.getElementById("newChatBtn");
+  const sessionList = document.getElementById("sessionList");
+  const chatTitle = document.getElementById("chatTitle");
   const messagesContainer = document.getElementById("messagesContainer");
-  const welcomeScreen  = document.getElementById("welcomeScreen");
-  const chatForm       = document.getElementById("chatForm");
-  const messageInput   = document.getElementById("messageInput");
-  const sendBtn        = document.getElementById("sendBtn");
-  const clearBtn       = document.getElementById("clearBtn");
+  const welcomeScreen = document.getElementById("welcomeScreen");
+  const chatForm = document.getElementById("chatForm");
+  const messageInput = document.getElementById("messageInput");
+  const sendBtn = document.getElementById("sendBtn");
+  const clearBtn = document.getElementById("clearBtn");
 
   // ── State ─────────────────────────────────────────────
   let currentSessionId = null;
-  let isStreaming       = false;
-  let sessions         = {}; // { id: { title, messages: [{role, content, citations}] } }
+  let isStreaming = false;
+  let sessions = {}; // { id: { title, messages: [{role, content, citations}] } }
 
   // ── Sidebar toggle (mobile) ───────────────────────────
   sidebarToggle.addEventListener("click", () => {
@@ -31,9 +31,9 @@
   // Close sidebar when clicking outside on mobile
   document.addEventListener("click", (e) => {
     if (window.innerWidth <= 768 &&
-        sidebar.classList.contains("open") &&
-        !sidebar.contains(e.target) &&
-        !sidebarToggle.contains(e.target)) {
+      sidebar.classList.contains("open") &&
+      !sidebar.contains(e.target) &&
+      !sidebarToggle.contains(e.target)) {
       sidebar.classList.remove("open");
     }
   });
@@ -282,10 +282,10 @@
    * Each citation: { document_index, file_name, page_number }
    */
   function buildCitationFooter(citations) {
-    const section = document.createElement("div");
+    const section = document.createElement("details");
     section.className = "citations-section";
 
-    const title = document.createElement("div");
+    const title = document.createElement("summary");
     title.className = "citations-title";
     title.innerHTML = `
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -295,7 +295,8 @@
         <line x1="16" y1="17" x2="8" y2="17"/>
         <polyline points="10 9 9 9 8 9"/>
       </svg>
-      References
+      <span>References</span>
+      <span class="citations-count">${escapeHtml(String(citations.length))}</span>
     `;
     section.appendChild(title);
 
@@ -303,12 +304,19 @@
     list.className = "citations-list";
 
     citations.forEach((cit) => {
-      const idx  = cit.document_index ?? "?";
+      const idx = cit.document_index ?? "?";
       const file = cit.file_name ?? "unknown";
       const page = cit.page_number;
+      const sourceUrl = String(cit.source_url || "").trim();
+      const sourceHref = normalizeCitationHref(sourceUrl);
 
-      const card = document.createElement("div");
-      card.className = "citation-card";
+      const card = document.createElement(sourceHref ? "a" : "div");
+      card.className = sourceHref ? "citation-card citation-card-link" : "citation-card";
+      if (sourceHref) {
+        card.href = sourceHref;
+        card.target = "_blank";
+        card.rel = "noopener noreferrer";
+      }
 
       card.innerHTML = `
         <span class="citation-badge">${escapeHtml(String(idx))}</span>
@@ -438,15 +446,18 @@
 
         if (citationIndices.has(indexNum)) {
           const citation = citations.find((c) => c.document_index === indexNum);
-          const tooltip = citation
-            ? `${citation.file_name}${citation.page_number != null && citation.page_number !== 0 ? `, p.${citation.page_number}` : ""}`
-            : "";
+          const sourceUrl = String(citation?.source_url || "").trim();
+          const sourceHref = normalizeCitationHref(sourceUrl);
 
-          const badge = document.createElement("span");
-          badge.className = "inline-citation";
+          const badge = document.createElement(sourceHref ? "a" : "span");
+          badge.className = sourceHref ? "inline-citation is-link" : "inline-citation";
           badge.dataset.citation = String(indexNum);
-          badge.title = tooltip;
           badge.textContent = indexStr;
+          if (sourceHref) {
+            badge.href = sourceHref;
+            badge.target = "_blank";
+            badge.rel = "noopener noreferrer";
+          }
           fragment.append(badge);
         } else {
           fragment.append(document.createTextNode(fullMatch));
@@ -544,6 +555,30 @@
     requestAnimationFrame(() => {
       messagesContainer.scrollTop = messagesContainer.scrollHeight;
     });
+  }
+
+  function normalizeCitationHref(sourceUrl) {
+    if (!sourceUrl) return "";
+
+    try {
+      const parsed = new URL(sourceUrl);
+      if (["http:", "https:", "file:"].includes(parsed.protocol)) {
+        return parsed.href;
+      }
+      return "";
+    } catch (_err) {
+      // Fall back to a local file URL for absolute filesystem paths.
+    }
+
+    if (sourceUrl.startsWith("/")) {
+      return `file://${encodeURI(sourceUrl)}`;
+    }
+
+    if (/^[a-zA-Z]:[\\/]/.test(sourceUrl)) {
+      return `file:///${encodeURI(sourceUrl.replace(/\\/g, "/"))}`;
+    }
+
+    return "";
   }
 
   function escapeHtml(str) {
