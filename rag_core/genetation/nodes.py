@@ -3,7 +3,12 @@ import json
 from langgraph.prebuilt import ToolNode
 from langchain_core.tools import BaseTool
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import BaseMessage, AIMessage, ToolMessage, SystemMessage
+from langchain_core.messages import (
+    BaseMessage,
+    AIMessage,
+    ToolMessage,
+    HumanMessage,
+)
 from langchain_core.documents import Document
 from rag_core.genetation.state import RagState
 from rag_core.prompts.specs.rag_verifier import RagVerifierResponse
@@ -18,7 +23,7 @@ from tenacity import (
     retry_if_exception_type,
 )
 
-# from rag_core.schemas.llm import FinalAnswer
+
 from langfuse import observe
 from rag_core.core.config import setup_logging, get_generation_settings
 from rag_core.core.telemetry import init_langfuse_client
@@ -64,7 +69,7 @@ class GraphNodes:
 
     @observe(name=NodeName.GENERAL_ASSISTANT_AGENT, as_type="agent")
     def execute_general_assistant_agent(self, state: RagState) -> dict:
-        logger.info("Executing Agent node...")
+        logger.info("Executing General Assistant Agent node...")
         agent_prompt = AgentPrompt.from_yaml("general_assistant")
         current_user_query = state["messages"][-1].content
         prompt = agent_prompt.chat_template.invoke({"question": current_user_query})
@@ -75,34 +80,11 @@ class GraphNodes:
 
     @observe(name=NodeName.PRIMARY_RAG_AGENT, as_type="agent")
     def execute_primary_rag_agent(self, state: RagState) -> dict:
-        logger.info("Executing Agent node...")
-        print("--------------Len of source docs", len(state["source_docs"]))
+        logger.info("Executing Primary RAG Agent node...")
+        logger.debug("Source docs count: %d", len(state["source_docs"]))
         response = self.reasoning_llm.invoke(state["messages"])
-        if state["source_docs"] and state.get("self_correction_attempts", 0) < 4:
-            response = """
-            **P&G’s five integrated strategic choices for long-term value creation are:**
-
-            1. Geographic expansion into emerging markets
-            2. Premium pricing across all product categories
-            3. Large-scale acquisition of competitor brands
-            4. Reducing dependence on digital channels
-            5. Centralizing all regional business units under one global division [1]
-
-            **In the Beauty segment, the main factors behind the change in net sales in fiscal 2024 were:**
-
-            - **Pricing:** Negative impact of 2%
-            - **Foreign exchange:** Favorable impact of 3%
-            - **Mix:** Favorable impact of 2%
-            - **Volume:** Increased mid-single digits [2]
-
-            ### Sources
-            [1] report.pdf (Page 2)
-            [2] report.pdf (Page 5)
-
-            """
         iteration_count = state.get("iteration_count", 0)
-        print("------------Agent Iteration count", iteration_count)
-        logger.info("Agent response received.")
+        logger.info("Agent response received. Iteration: %d", iteration_count)
         return {"messages": [response], "iteration_count": iteration_count + 1}
 
     @observe(name=NodeName.SELF_CORRECTING_AGENT, as_type="evaluator")
@@ -138,10 +120,10 @@ class GraphNodes:
             result = fetch_and_parse_grade()
             is_grounded = result.grounded
             reason = result.reason
-            logger.info(f"Verifier response parsed successfully: {result}")
+            logger.info("Verifier response parsed successfully: %s", result)
 
         except ValueError as e:
-            logger.error(f"Verifier failed to format even after retries: {e}")
+            logger.error("Verifier failed to format even after retries: %s", e)
             is_grounded = False
             reason = "The verifier could not validate the formatting. Please ensure strict adherence to the facts."
 
@@ -153,7 +135,7 @@ class GraphNodes:
                 "self_correction_attempts": current_attempts + 1,
             }
         else:
-            logger.warning(f"Hallucination detected. Reason: {reason}")
+            logger.warning("Hallucination detected. Reason: %s", reason)
             feedback_msg = (
                 f"Your previous answer was rejected by the verifier. "
                 f"Reason: {reason}. Please rewrite your final response using ONLY the provided documents."
@@ -165,7 +147,7 @@ class GraphNodes:
                     reason=feedback_msg,
                 ),
                 "self_correction_attempts": current_attempts + 1,
-                "messages": [feedback_msg],
+                "messages": [HumanMessage(content=feedback_msg)],
             }
 
     @observe(name=NodeName.FALLBACK_HANDLER, as_type="generation")
@@ -185,18 +167,16 @@ class GraphNodes:
     @observe(name=NodeName.INTENT_ROUTER_AGENT, as_type="agent")
     def execute_intent_router_agent(self, state: RagState) -> dict:
         """Fast triage agent to classify intent."""
-        # Grab the user's latest message
-        print("-------------------Executing Intent Router node-------------------")
+        logger.info("Executing Intent Router node...")
         user_query = state["messages"][-1].content
         agent_prompt = AgentPrompt.from_yaml("intent_router")
         prompt = agent_prompt.chat_template.invoke({"question": user_query})
         response = self.fast_llm.invoke(prompt.to_messages())
         intent = response.content.strip().upper()
-        print("----------Intent", intent)
-        # Save the route decision to the state so the graph knows where to go
+        logger.info("Classified intent: %s", intent)
         return {
             "intent_route": intent,
-            "source_docs": [],  # clean slate for a new query,
+            "source_docs": [],
             "iteration_count": 0,
             "self_correction_attempts": 0,
         }
@@ -205,17 +185,15 @@ class GraphNodes:
     def route_after_triage(self, state: RagState) -> str:
         """Reads the intent from the state and returns the name of the next node."""
         if "GENERAL_ASSISTANT" in state.get("intent_route", ""):
-            print("-----------Routing to : ", NodeName.GENERAL_ASSISTANT_AGENT)
+            logger.info("Routing to: %s", NodeName.GENERAL_ASSISTANT_AGENT)
             return NodeName.GENERAL_ASSISTANT_AGENT
-        print("----------------routing to : ", NodeName.PRIMARY_RAG_AGENT)
-        # Default to your heavy reasoning agent if it's not explicitly chitchat
+        logger.info("Routing to: %s", NodeName.PRIMARY_RAG_AGENT)
         return NodeName.PRIMARY_RAG_AGENT
 
     @observe(name=NodeName.TOOLS, as_type="tool")
     def execute_tools(self, state: RagState) -> dict:
-        print("-------------------Executing Tool Execution node-------------------")
-        print("tool calls", state["messages"][-1].tool_calls)
         logger.info("Executing Tool Execution node...")
+        logger.debug("Tool calls: %s", state["messages"][-1].tool_calls)
 
         tool_result = self.tool_executor.invoke({"messages": state["messages"]})
 
@@ -232,11 +210,11 @@ class GraphNodes:
 
                 except json.JSONDecodeError:
                     logger.error("Failed to parse tool output as JSON.")
-        print("-------------------Tool Execution node Completed-------------------")
+        logger.info("Tool Execution node completed. Extracted %d documents.", len(raw_docs))
         existing_docs = state.get("source_docs", [])
         return {
             "messages": tool_result["messages"],
-            "source_docs": existing_docs + raw_docs,  # Keep for verifier
+            "source_docs": existing_docs + raw_docs,
         }
 
     @observe(name=NodeName.POST_PROCESSING, as_type="tool")
@@ -248,15 +226,16 @@ class GraphNodes:
     @observe(name=NodeName.TOOL_ROUTER, as_type="evaluator")
     def tool_router(self, state: RagState) -> str:
         iteration_count = state.get("iteration_count", 0)
-        print("------------Tool Iteration count", iteration_count)
-        if iteration_count > self.max_iterations:
+        logger.debug("Tool iteration count: %d", iteration_count)
+        if iteration_count >= self.max_iterations:
             logger.info(
-                f"Max iterations reached: {iteration_count}. Routing to FALLBACK_HANDLER."
+                "Max iterations reached: %d. Routing to FALLBACK_HANDLER.",
+                iteration_count,
             )
             return NodeName.FALLBACK_HANDLER
 
         last_message = self._get_last_message(state)
-        has_tool_calls: bool = bool(getattr(last_message, "tool_calls", None))
+        has_tool_calls = bool(getattr(last_message, "tool_calls", None))
 
         if has_tool_calls:
             logger.info("Router: Detected tool calls. Routing to %s", NodeName.TOOLS)
@@ -266,25 +245,28 @@ class GraphNodes:
         return NodeName.FINISH
 
     def verifier_router(self, state: RagState) -> str:
-        print("------------verifier_response", state.get("verifier_response", {}))
-        print(
-            "------------verifier_response",
-            state.get("verifier_response").grounded,
-        )
         verifier_resp = state.get("verifier_response")
         if not verifier_resp:
+            logger.debug("No verifier response in state. Routing to FINISH.")
             return NodeName.FINISH
+
+        logger.debug("Verifier response — grounded: %s", verifier_resp.grounded)
         if verifier_resp.grounded:
             return NodeName.FINISH
+
         current_attempts = state.get("self_correction_attempts", 0)
         if current_attempts >= self.max_self_correction_attempts:
             logger.warning(
-                f"Max verifier attempts reached: {current_attempts}. Finishing."
+                "Max verifier attempts reached: %d. Routing to FALLBACK_HANDLER.",
+                current_attempts,
             )
             return NodeName.FALLBACK_HANDLER
         else:
             logger.info(
-                f"Verifier attempts not reached: {current_attempts}. Routing to {NodeName.PRIMARY_RAG_AGENT}",
+                "Verifier attempts: %d/%d. Routing to %s.",
+                current_attempts,
+                self.max_self_correction_attempts,
+                NodeName.PRIMARY_RAG_AGENT,
             )
             return NodeName.PRIMARY_RAG_AGENT
 

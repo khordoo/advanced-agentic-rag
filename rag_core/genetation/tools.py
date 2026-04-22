@@ -1,7 +1,6 @@
 import json
 from langchain_core.documents import Document
 from pydantic import BaseModel, Field
-from pydantic.v1.errors import NoneIsAllowedError
 from rag_core.retrival.base import BaseRetriever
 from rag_core.retrival.qdrant_retriever import QdrantRetriever
 from rag_core.schemas import VectorDatabasePayloadKeys as PayloadSchema
@@ -12,7 +11,7 @@ class Query(BaseModel):
     query: str = Field(description="The query to be answered")
 
 
-class SeachToolSchema(BaseModel):
+class SearchToolSchema(BaseModel):
     query: str = Field(description="The query to be answered")
 
 
@@ -75,7 +74,7 @@ class AgentToolFactory:
                     func=self._semantic_search,
                     name="semantic_search",
                     description="Semantic search tool to find relevant documents",
-                    args_schema=SeachToolSchema,
+                    args_schema=SearchToolSchema,
                 ),
                 StructuredTool.from_function(
                     func=self._page_lookup,
@@ -91,8 +90,3 @@ class AgentToolFactory:
                 ),
             ]
         return self._tools
-
-
-if __name__ == "__main__":
-    tools = AgentToolFactory.create_tools()
-    print(tools)
