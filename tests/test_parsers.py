@@ -82,6 +82,25 @@ def test_mixed_sources():
     print("  PASSED\n")
 
 
+def test_file_id_style_citations():
+    """Parser handles sanitised file_id values (folder_stem_NNN.ext)."""
+    md = (
+        "Revenue grew 15% [1]. Details in [2].\n\n"
+        "### Sources\n"
+        "[1] q3_earnings_report_472.pdf (Page 8)\n"
+        "[2] q4_earnings_report_831.pdf"
+    )
+    result = parse_markdown_response(md)
+    print("Test 7 (file_id-style citations):")
+    print(result.model_dump_json(indent=2))
+    assert len(result.citations) == 2
+    assert result.citations[0].file_name == "q3_earnings_report_472.pdf"
+    assert result.citations[0].page_number == 8
+    assert result.citations[1].file_name == "q4_earnings_report_831.pdf"
+    assert result.citations[1].page_number == 0
+    print("  PASSED\n")
+
+
 if __name__ == "__main__":
     test_markdown_with_citations()
     test_no_sources()
@@ -89,4 +108,5 @@ if __name__ == "__main__":
     test_json_fallback()
     test_code_fenced_markdown()
     test_mixed_sources()
+    test_file_id_style_citations()
     print("✅ All tests passed!")

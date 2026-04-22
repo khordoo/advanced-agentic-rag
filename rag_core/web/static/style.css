@@ -403,6 +403,11 @@ body {
   transition: all var(--transition-fast);
   line-height: 1;
   letter-spacing: 0;
+  text-decoration: none;
+}
+
+.inline-citation.is-link {
+  cursor: pointer;
 }
 
 .inline-citation:hover {
@@ -428,11 +433,58 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   margin-bottom: 8px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(99,102,241,0.06);
+  border: 1px solid rgba(99,102,241,0.12);
+  transition: all var(--transition-fast);
+}
+
+.citations-title::-webkit-details-marker {
+  display: none;
+}
+
+.citations-section:not([open]) .citations-title {
+  margin-bottom: 0;
+}
+
+.citations-title:hover {
+  background: rgba(99,102,241,0.10);
+  border-color: rgba(99,102,241,0.22);
+}
+
+.citations-title::after {
+  content: "⌄";
+  margin-left: 8px;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--accent-300);
+  line-height: 1;
+  transform: translateY(-1px);
+  transition: transform var(--transition-fast);
+}
+
+.citations-section[open] .citations-title::after {
+  transform: translateY(-1px) rotate(180deg);
 }
 
 .citations-title svg {
   color: var(--accent-400);
   opacity: 0.8;
+}
+
+.citations-count {
+  margin-left: auto;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgba(99,102,241,0.12);
+  color: var(--accent-300);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0;
 }
 
 .citations-list {
@@ -450,6 +502,11 @@ body {
   border: 1px solid rgba(99,102,241,0.12);
   border-radius: var(--radius-sm);
   transition: all var(--transition-fast);
+}
+
+.citation-card-link {
+  text-decoration: none;
+  cursor: pointer;
 }
 
 .citation-card:hover {
@@ -485,6 +542,16 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.citation-filename[href] {
+  text-decoration: none;
+  color: var(--accent-200);
+}
+
+.citation-filename[href]:hover {
+  text-decoration: underline;
+  color: var(--accent-300);
 }
 
 .citation-page {

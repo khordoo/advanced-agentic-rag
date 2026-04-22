@@ -23,7 +23,8 @@ PAGE_PATTERN = re.compile(_pattern_str)
 def convert_pdf_to_markdown(
     input_path: str | Path,
     output_path: str | Path | None = None,
-    table_context_window: int = 3
+    table_context_window: int = 3,
+    file_id: str | None = None,
 ) -> tuple[str, list]:
     """Convert a PDF file to page-numbered Markdown.
 
@@ -73,13 +74,15 @@ def convert_pdf_to_markdown(
     enriched_tables=_enrich_tables_with_surrounding_text(
         result.document,
         source_path=input_path,
-        table_context_window=table_context_window)
+        table_context_window=table_context_window,
+        file_id=file_id,
+    )
 
     logger.info(f"Completed processing {len(enriched_tables)} Tables")
     return numbered_markdown,enriched_tables
 
 
-def _enrich_tables_with_surrounding_text(document: DoclingDocument,source_path:Path,table_context_window=3) -> List[str]:
+def _enrich_tables_with_surrounding_text(document: DoclingDocument,source_path:Path,table_context_window=3, file_id: str | None = None) -> List[str]:
     # Convert to list so we can look ahead/behind by index
     # Dcouments are genrally small for processing in memeory should be fast
     items = [item for item, _ in document.iterate_items()]
@@ -112,7 +115,7 @@ def _enrich_tables_with_surrounding_text(document: DoclingDocument,source_path:P
         page_no = current.prov[0].page_no if current.prov else 'UNKNOWN'
         table_enriched='\n\n'.join(table_context)
         enriched_tables.append({
-            'file_name':source_path.name,
+            'file_name': file_id or source_path.name,
             'source_path':str(source_path),
             'page_no': page_no,
             'markdown':table_enriched
