@@ -19,16 +19,19 @@ class RagGraphFactory:
     def build(
         cls,
         reasoning_llm: BaseChatModel | None = None,
+        verifier_llm: BaseChatModel | None = None,
         fast_llm: BaseChatModel | None = None,
         tools: list[StructuredTool] | None = None,
     ):
         logger.info("Initializing the graph")
         env = os.getenv("ENV", "dev")
         reasoning_llm = reasoning_llm or AgentFactory.get_default_model()
+        verifier_llm = verifier_llm or AgentFactory.get_default_model()
         fast_llm = fast_llm or AgentFactory.get_default_model()
         tools = tools or AgentToolFactory.create_tools()
         graph_nodes = GraphNodes(
             reasoning_llm=reasoning_llm,
+            verifier_llm=verifier_llm,
             fast_llm=fast_llm,
             tools=tools,
         )
@@ -46,6 +49,7 @@ class RagGraphFactory:
         graph.add_node(
             NodeName.SELF_CORRECTING_AGENT, graph_nodes.execute_self_correcting_agent
         )
+        graph.add_node(NodeName.POST_PROCESSING, graph_nodes.execute_post_processing)
         graph.add_node(NodeName.FALLBACK_HANDLER, graph_nodes.execute_fallback_handler)
         graph.add_node(NodeName.TOOLS, graph_nodes.execute_tools)
         graph.add_conditional_edges(
@@ -71,12 +75,13 @@ class RagGraphFactory:
             path_map={
                 NodeName.PRIMARY_RAG_AGENT: NodeName.PRIMARY_RAG_AGENT,
                 NodeName.FALLBACK_HANDLER: NodeName.FALLBACK_HANDLER,
-                NodeName.FINISH: END,
+                NodeName.FINISH: NodeName.POST_PROCESSING,
             },
         )
         graph.add_edge(NodeName.TOOLS, NodeName.PRIMARY_RAG_AGENT)
         graph.add_edge(NodeName.GENERAL_ASSISTANT_AGENT, END)
         graph.add_edge(NodeName.FALLBACK_HANDLER, END)
+        graph.add_edge(NodeName.POST_PROCESSING, END)
         graph.set_entry_point(NodeName.INTENT_ROUTER_AGENT)
 
         g = graph.compile()
@@ -84,4 +89,3 @@ class RagGraphFactory:
             logger.info("Graph ASCII Layout: \n%s", g.get_graph().draw_ascii())
         logger.info("Graph initialized successfully")
         return g
-

@@ -1,7 +1,8 @@
 import json
 import logging
 from enum import StrEnum
-
+from pathlib import Path
+from urllib.parse import urlparse
 from pydantic import ValidationError
 from langgraph.prebuilt import ToolNode
 from langchain_core.tools import BaseTool
@@ -10,6 +11,7 @@ from langchain_core.messages import (
     AIMessage,
     ToolMessage,
     HumanMessage,
+    BaseMessage,
 )
 from langchain_core.documents import Document
 from rag_core.genetation.state import RagState
@@ -17,6 +19,7 @@ from rag_core.prompts.specs.rag_verifier import RagVerifierResponse
 from rag_core.prompts.loader import AgentPrompt
 from rag_core.prompts.specs.base import RagFinalResponseSchema
 from rag_core.prompts.specs.intent_router import IntentCategory, IntentRouterResponse
+from rag_core.genetation.parsers import parse_agent_response
 from tenacity import (
     retry,
     stop_after_attempt,
@@ -54,12 +57,14 @@ class GraphNodes:
     def __init__(
         self,
         reasoning_llm: BaseChatModel,
+        verifier_llm: BaseChatModel,
         fast_llm: BaseChatModel,
         tools: list[BaseTool],
         max_iterations: int = None,
         max_self_correction_attempts: int = None,
     ) -> None:
         self.fast_llm = fast_llm
+        self.verifier_llm = verifier_llm
         self.reasoning_llm = reasoning_llm.bind_tools(tools)
         self.tool_executor = ToolNode(tools)
         self.max_iterations = max_iterations or settings.max_agent_iterations
@@ -94,6 +99,8 @@ class GraphNodes:
         documents = state.get("source_docs", [])
         generated_answer = state["messages"][-1].content
         current_attempts = state.get("self_correction_attempts", 0)
+        logger.info("Generated answer: %s", generated_answer)
+        logger.info("Current self correction attempts: %d", current_attempts)
 
         agent_prompt = AgentPrompt.from_yaml("rag_verifier")
         prompt = agent_prompt.chat_template.invoke(
@@ -111,7 +118,7 @@ class GraphNodes:
         )
         def fetch_and_parse_grade():
             logger.info("Invoking Verifier LLM...")
-            response = self.fast_llm.invoke(prompt.to_messages())
+            response = self.verifier_llm.invoke(prompt.to_messages())
             # This will throw a ValueError if the LLM output is garbage
             return RagVerifierResponse.model_validate_json(response.content)
 
@@ -244,11 +251,43 @@ class GraphNodes:
             "source_docs": existing_docs + raw_docs,
         }
 
+    @staticmethod
+    def _extract_display_name(source: str) -> str:
+        """Extract the human-readable filename from a source path or URL.
+
+        Works with filesystem paths ('docs/Annual Report.pdf')
+        and URLs ('https://example.com/Annual Report.pdf').
+        Always returns the last path segment.
+        """
+        parsed = urlparse(source)
+        path = parsed.path if parsed.scheme else source
+        return Path(path).name or source
+
     @observe(name=NodeName.POST_PROCESSING, as_type="tool")
-    def post_process(self, state: RagState) -> RagState:
+    def execute_post_processing(self, state: RagState) -> dict:
         logger.info("Executing Post-Processing node...")
-        # Currently a pass-through
-        return state
+        try:
+            parsed_response = parse_agent_response(state["messages"][-1].content)
+
+            # Build lookup from actual retrieved documents and enrich citations
+            docs = state.get("source_docs", [])
+            docs_lookup = {doc.metadata["file_name"]: doc for doc in docs}
+            for citation in parsed_response.citations:
+                doc = docs_lookup.get(citation.file_name)
+                if doc:
+                    source = doc.metadata.get("source", "")
+                    citation.source_url = source
+                    citation.file_name = self._extract_display_name(source)
+
+            logger.info(
+                "Post-Processing node completed. Parsed response: %s", parsed_response
+            )
+            return {"messages": [AIMessage(content=parsed_response.model_dump_json())]}
+        except Exception as e:
+            logger.error("Post-processing failed, returning raw response: %s", e)
+            raw_content = state["messages"][-1].content if state.get("messages") else ""
+            fallback = RagFinalResponseSchema(answer=raw_content, citations=[])
+            return {"messages": [AIMessage(content=fallback.model_dump_json())]}
 
     @observe(name=NodeName.TOOL_ROUTER, as_type="evaluator")
     def tool_router(self, state: RagState) -> str:
