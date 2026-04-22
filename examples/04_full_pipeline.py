@@ -27,7 +27,7 @@ from rag_core.chunker import chunk_markdown, store_chunks
 from rag_core.config import load_config
 from rag_core.converter import convert_pdf_to_markdown
 from rag_core.retriever import Retriever
-from rag_core.pipeline import RAGPipeline
+from rag_core.pipelines.pipeline import RAGPipeline
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(name)s | %(message)s")
 logger = logging.getLogger(__name__)
