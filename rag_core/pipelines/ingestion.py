@@ -9,7 +9,7 @@ from rag_core.chunker import chunk_markdown
 from rag_core.core.config import load_config, setup_logging
 from rag_core.indexing.base import BaseIndexer
 from rag_core.indexing.qdrant_indexer import QdrantIndexer
-from rag_core.utils import Stopwatch
+from rag_core.utils import Stopwatch, generate_file_id
 from rag_core.agents import TableSummarizer
 from rag_core.chunker import summerize_and_chunk_table
 from rag_core.core.config import IngestionSettings
@@ -91,10 +91,19 @@ class IngestionPipeline:
                 current_scopes = self._get_scopes_for_file(file_path)
 
                 logger.info("Processing file: %s", file_path)
+
+                # Generate a unique, sanitised file identifier
+                file_id = generate_file_id(file_path, self.ingestion_dir)
+                logger.info(
+                    "Generated file identity",
+                    extra={"file_id": file_id, "original": file_path},
+                )
+
                 with Stopwatch("Markdown conversion"):
                     markdown, tables = convert_pdf_to_markdown(
                         input_path=file_path,
                         table_context_window=self.table_context_window,
+                        file_id=file_id,
                     )
                 logger.info(
                     "Conversion complete",
@@ -119,6 +128,7 @@ class IngestionPipeline:
                     tags=current_tags,
                     scopes=current_scopes,
                     config=self.config,
+                    file_id=file_id,
                 )
                 logger.info(
                     "Chunked markdown into parent chunks",
