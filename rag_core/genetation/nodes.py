@@ -1,5 +1,8 @@
-import logging
 import json
+import logging
+from enum import StrEnum
+
+from pydantic import ValidationError
 from langgraph.prebuilt import ToolNode
 from langchain_core.tools import BaseTool
 from langchain_core.language_models import BaseChatModel
@@ -12,9 +15,9 @@ from langchain_core.messages import (
 from langchain_core.documents import Document
 from rag_core.genetation.state import RagState
 from rag_core.prompts.specs.rag_verifier import RagVerifierResponse
-from enum import StrEnum
 from rag_core.prompts.loader import AgentPrompt
 from rag_core.prompts.specs.base import RagFinalResponseSchema
+from rag_core.prompts.specs.intent_router import IntentCategory, IntentRouterResponse
 from rag_core.genetation.parsers import extract_clean_json
 from tenacity import (
     retry,
@@ -22,7 +25,6 @@ from tenacity import (
     wait_exponential,
     retry_if_exception_type,
 )
-
 
 from langfuse import observe
 from rag_core.core.config import setup_logging, get_generation_settings
@@ -170,10 +172,35 @@ class GraphNodes:
         logger.info("Executing Intent Router node...")
         user_query = state["messages"][-1].content
         agent_prompt = AgentPrompt.from_yaml("intent_router")
-        prompt = agent_prompt.chat_template.invoke({"question": user_query})
-        response = self.fast_llm.invoke(prompt.to_messages())
-        intent = response.content.strip().upper()
-        logger.info("Classified intent: %s", intent)
+        prompt = agent_prompt.chat_template.invoke(
+            {
+                "question": user_query,
+                "intent_categories": IntentCategory.get_categories(),
+            }
+        )
+
+        @retry(
+            stop=stop_after_attempt(3),
+            wait=wait_exponential(multiplier=1, min=1, max=5),
+            retry=retry_if_exception_type(
+                (json.decoder.JSONDecodeError, ValidationError)
+            ),
+            reraise=True,
+        )
+        def execute_agent(prompt):
+            response = self.fast_llm.invoke(prompt.to_messages())
+            intent_json = json.loads(response.content)
+            parsed = IntentRouterResponse.model_validate(intent_json)
+            logger.debug("Intent router response: %s", parsed.model_dump_json())
+            logger.info("Classified intent: %s", parsed.intent)
+            return parsed.intent
+
+        try:
+            intent = execute_agent(prompt)
+        except Exception as e:
+            logger.error("Intent router failed to format even after retries: %s", e)
+            intent = IntentCategory.GENERAL_ASSISTANT.value
+
         return {
             "intent_route": intent,
             "source_docs": [],
@@ -184,7 +211,7 @@ class GraphNodes:
     @observe(name=NodeName.INTENT_ROUTER, as_type="evaluator")
     def route_after_triage(self, state: RagState) -> str:
         """Reads the intent from the state and returns the name of the next node."""
-        if "GENERAL_ASSISTANT" in state.get("intent_route", ""):
+        if IntentCategory.GENERAL_ASSISTANT.value == state.get("intent_route", ""):
             logger.info("Routing to: %s", NodeName.GENERAL_ASSISTANT_AGENT)
             return NodeName.GENERAL_ASSISTANT_AGENT
         logger.info("Routing to: %s", NodeName.PRIMARY_RAG_AGENT)
@@ -210,7 +237,9 @@ class GraphNodes:
 
                 except json.JSONDecodeError:
                     logger.error("Failed to parse tool output as JSON.")
-        logger.info("Tool Execution node completed. Extracted %d documents.", len(raw_docs))
+        logger.info(
+            "Tool Execution node completed. Extracted %d documents.", len(raw_docs)
+        )
         existing_docs = state.get("source_docs", [])
         return {
             "messages": tool_result["messages"],

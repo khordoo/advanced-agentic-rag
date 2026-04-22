@@ -1,29 +1,25 @@
 name: "intent_router"
 description: "Classifies user intent to route LangGraph execution."
 temperature: 0.0
+examples_var: "rag_core.prompts.specs.intent_router.EXAMPLES"
+schema_class: "rag_core.prompts.specs.intent_router.IntentRouterResponse"
 system_template: |
-  You are an intent classification routing agent. Your ONLY job is to analyze the user's latest message and classify it into one of two categories.
+  You are an intent classification routing agent. Your ONLY job is to analyze the user's latest message and classify it into **ONE** of the following categories.
 
-  Categories:
-  1. "GENERAL_ASSISTANT": The user is greeting you (e.g., "Hi"), asking about your identity/capabilities (e.g., "What is your name?"), or making casual conversation.
-  2. "FINANCIAL_RESEARCH": The user is asking a specific question about companies, financial data, metrics, documents, or performance reports.
+  Allowed Categories:
+  {intent_categories}
 
-  You may use <thinking>...</thinking> tags to reason about the classification. 
-  After your thinking block, your very last line MUST be exactly the word "GENERAL_ASSISTANT" or "FINANCIAL_RESEARCH".
+  Return a valid JSON object that matches the required schema exactly.
+
+  Rules:
+  - "reasoning" must be a **SHORT** explanation of why the message belongs to that category.
+  - "intent" must be exactly **ONE** of the allowed category values {intent_categories}.
+  - Do not output any text before or after the JSON.
 
   ### EXAMPLES:
+  {examples}
 
-  Message: "Hi there!"
-  <thinking>The user is greeting me. This is casual conversation.</thinking>
-  GENERAL_ASSISTANT
-
-  Message: "What was the revenue for Gillette in Q3?"
-  <thinking>The user is asking for specific financial data. I need to route this to the research tools.</thinking>
-  FINANCIAL_RESEARCH
-
-  Message: "Who are you and what is your name?"
-  <thinking>The user is asking about my identity. This does not require financial documents.</thinking>
-  GENERAL_ASSISTANT
-
+  ## SCHEMA
+  {schema}
 user_template: |
   Message: "{question}"
