@@ -58,6 +58,10 @@ class RagGraphFactory:
             NodeName.GENERAL_ASSISTANT_AGENT,
             graph_nodes.execute_general_assistant_agent,
         )
+        graph.add_node(
+            NodeName.SELF_CORRECTING_AGENT, graph_nodes.execute_self_correcting_agent
+        )
+        graph.add_node(NodeName.FALLBACK_HANDLER, graph_nodes.execute_fallback_handler)
         graph.add_node(NodeName.TOOLS, graph_nodes.execute_tools)
         graph.add_conditional_edges(
             NodeName.INTENT_ROUTER_AGENT,
@@ -70,10 +74,24 @@ class RagGraphFactory:
         graph.add_conditional_edges(
             NodeName.PRIMARY_RAG_AGENT,
             path=graph_nodes.tool_router,
-            path_map={NodeName.TOOLS: NodeName.TOOLS, NodeName.FINISH: END},
+            path_map={
+                NodeName.TOOLS: NodeName.TOOLS,
+                NodeName.FINISH: NodeName.SELF_CORRECTING_AGENT,
+                NodeName.FALLBACK_HANDLER: NodeName.FALLBACK_HANDLER,
+            },
+        )
+        graph.add_conditional_edges(
+            NodeName.SELF_CORRECTING_AGENT,
+            path=graph_nodes.verifier_router,
+            path_map={
+                NodeName.PRIMARY_RAG_AGENT: NodeName.PRIMARY_RAG_AGENT,
+                NodeName.FALLBACK_HANDLER: NodeName.FALLBACK_HANDLER,
+                NodeName.FINISH: END,
+            },
         )
         graph.add_edge(NodeName.TOOLS, NodeName.PRIMARY_RAG_AGENT)
         graph.add_edge(NodeName.GENERAL_ASSISTANT_AGENT, END)
+        graph.add_edge(NodeName.FALLBACK_HANDLER, END)
         graph.set_entry_point(NodeName.INTENT_ROUTER_AGENT)
 
         g = graph.compile()
@@ -112,10 +130,7 @@ if __name__ == "__main__":
             continue
 
         if not messages:
-            # Critial: Reseting the Source should to empty list in the first invocation
-            prompt = agent_prompt.chat_template.invoke(
-                {"question": query, "source_docs": []}
-            )
+            prompt = agent_prompt.chat_template.invoke({"question": query})
             print("=============Full PROMPT============\n")
             print(prompt)
             print("--" * 20)

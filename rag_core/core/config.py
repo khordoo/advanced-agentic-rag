@@ -264,6 +264,18 @@ class IngestionSettings(BaseSettings):
     )
 
 
+class GenerationSettings(BaseSettings):
+    model_provider: str = "aws"
+    reasoning_model: str = "amazon.nova-pro-v1:0"
+    verifier_model: str = "amazon.nova-micro-v1:0"
+    fast_model: str = "amazon.nova-micro-v1:0"
+    max_agent_iterations: int = 3
+    max_self_correction_attempts: int = 3
+    model_config = SettingsConfigDict(
+        env_prefix="GENERATION_", env_file=".env", extra="ignore"
+    )
+
+
 @lru_cache
 def get_qdrant_settings() -> QdrantSettings:
     logger.info("Reading .env file and caching Qdrant settings...")
@@ -280,3 +292,9 @@ def get_postgres_settings() -> PostgresSettings:
 def get_ingestion_settings() -> IngestionSettings:
     logger.info("Reading .env file and caching Indexing pipeline settings...")
     return IngestionSettings()
+
+
+@lru_cache()
+def get_generation_settings() -> GenerationSettings:
+    logger.info("Reading .env file and caching Generation pipeline settings...")
+    return GenerationSettings()

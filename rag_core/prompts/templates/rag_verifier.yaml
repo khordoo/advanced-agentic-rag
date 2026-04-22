@@ -15,7 +15,9 @@ system_template: |
   {examples}
   
   ### OUTPUT FORMAT:
-  You must output only a valid JSON object matching this schema:
+  Do NOT wrap it in a 'properties' key.
+  Do NOY waro it in ```json ... ``` block.
+  Return a JSON object with exactly these keys and no others:
   {schema}
 user_template: |
   DOCUMENTS: {documents}
