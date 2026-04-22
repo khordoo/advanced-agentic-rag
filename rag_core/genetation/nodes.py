@@ -263,21 +263,79 @@ class GraphNodes:
         path = parsed.path if parsed.scheme else source
         return Path(path).name or source
 
+    @staticmethod
+    def _get_doc_source(doc: Document) -> str:
+        """Return the best available source reference from document metadata."""
+        metadata = doc.metadata or {}
+        return (
+            metadata.get("source_url")
+            or metadata.get("source")
+            or metadata.get("source_path")
+            or ""
+        )
+
+    @staticmethod
+    def _find_source_doc(
+        citation_file_name: str,
+        docs_lookup: dict[str, Document],
+        docs: list[Document],
+    ) -> Document | None:
+        """Find the source document matching a citation's file_name.
+
+        Tries exact match on file_id first, then on display name,
+        then falls back to case-insensitive substring match.
+        """
+        # 1. Exact match on sanitized file_id (e.g. "annual_report_draft_219.pdf")
+        doc = docs_lookup.get(citation_file_name)
+        if doc:
+            return doc
+
+        # 2. Case-insensitive exact match
+        doc = docs_lookup.get(citation_file_name.lower())
+        if doc:
+            return doc
+
+        # 3. Substring match: citation name appears in doc's file_name or display name
+        citation_lower = citation_file_name.lower()
+        for doc in docs:
+            fn = doc.metadata.get("file_name", "").lower()
+            source = GraphNodes._get_doc_source(doc)
+            display = Path(source).name.lower() if source else ""
+            if citation_lower in fn or citation_lower in display:
+                return doc
+
+        return None
+
     @observe(name=NodeName.POST_PROCESSING, as_type="tool")
     def execute_post_processing(self, state: RagState) -> dict:
         logger.info("Executing Post-Processing node...")
         try:
             parsed_response = parse_agent_response(state["messages"][-1].content)
 
-            # Build lookup from actual retrieved documents and enrich citations
+            # Build lookup from actual retrieved documents keyed by
+            # file_id, display name, and case-insensitive variants
             docs = state.get("source_docs", [])
-            docs_lookup = {doc.metadata["file_name"]: doc for doc in docs}
+            docs_lookup: dict[str, Document] = {}
+            for doc in docs:
+                fn = doc.metadata.get("file_name", "")
+                if fn:
+                    docs_lookup[fn] = doc
+                    docs_lookup[fn.lower()] = doc
+                source = self._get_doc_source(doc)
+                display_name = self._extract_display_name(source)
+                if display_name:
+                    docs_lookup[display_name] = doc
+                    docs_lookup[display_name.lower()] = doc
+
             for citation in parsed_response.citations:
-                doc = docs_lookup.get(citation.file_name)
+                doc = self._find_source_doc(
+                    citation.file_name, docs_lookup, docs
+                )
                 if doc:
-                    source = doc.metadata.get("source", "")
+                    source = self._get_doc_source(doc)
                     citation.source_url = source
-                    citation.file_name = self._extract_display_name(source)
+                    if source:
+                        citation.file_name = self._extract_display_name(source)
 
             logger.info(
                 "Post-Processing node completed. Parsed response: %s", parsed_response

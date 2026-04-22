@@ -86,22 +86,28 @@ class IngestionPipeline:
         total_processed = 0
         for file_path in self._iter_files():
             try:
+                absolute_file_path = str(Path(file_path).resolve())
+
                 # Get tags dynamically per file (even if it's currently hardcoded)
                 current_tags = self._get_tags_for_file(file_path)
                 current_scopes = self._get_scopes_for_file(file_path)
 
-                logger.info("Processing file: %s", file_path)
+                logger.info("Processing file: %s", absolute_file_path)
 
                 # Generate a unique, sanitised file identifier
                 file_id = generate_file_id(file_path, self.ingestion_dir)
                 logger.info(
                     "Generated file identity",
-                    extra={"file_id": file_id, "original": file_path},
+                    extra={
+                        "file_id": file_id,
+                        "original": file_path,
+                        "absolute_path": absolute_file_path,
+                    },
                 )
 
                 with Stopwatch("Markdown conversion"):
                     markdown, tables = convert_pdf_to_markdown(
-                        input_path=file_path,
+                        input_path=absolute_file_path,
                         table_context_window=self.table_context_window,
                         file_id=file_id,
                     )
@@ -124,7 +130,7 @@ class IngestionPipeline:
 
                 chunks = self.markdown_chunker(
                     markdown=markdown,
-                    source_path=file_path,
+                    source_path=absolute_file_path,
                     tags=current_tags,
                     scopes=current_scopes,
                     config=self.config,
