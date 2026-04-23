@@ -31,7 +31,11 @@ from tenacity import (
 )
 
 from langfuse import observe
-from rag_core.core.config import setup_logging, get_generation_settings
+from rag_core.core.config import (
+    setup_logging,
+    get_generation_settings,
+    GenerationSettings,
+)
 from rag_core.core.telemetry import init_langfuse_client
 
 setup_logging()
@@ -39,7 +43,6 @@ logger = logging.getLogger(__name__)
 
 # Initialise the Langfuse SDK singleton so @observe decorators send traces
 init_langfuse_client()
-settings = get_generation_settings()
 
 
 class NodeName(StrEnum):
@@ -63,23 +66,21 @@ class GraphNodes:
         verifier_llm: BaseChatModel,
         fast_llm: BaseChatModel,
         tools: list[BaseTool],
-        max_iterations: int = None,
-        max_self_correction_attempts: int = None,
+        settings: GenerationSettings | None = None,
     ) -> None:
+        self.settings = settings or get_generation_settings()
         self.fast_llm = fast_llm
         self.verifier_llm = verifier_llm
         self.reasoning_llm = reasoning_llm.bind_tools(tools)
         self.tool_executor = ToolNode(tools)
-        self.max_iterations = max_iterations or settings.max_agent_iterations
-        self.max_self_correction_attempts = (
-            max_self_correction_attempts or settings.max_self_correction_attempts
-        )
 
     @observe(name=NodeName.GENERAL_ASSISTANT_AGENT, as_type="agent")
     def execute_general_assistant_agent(self, state: RagState) -> dict:
         logger.info("Executing General Assistant Agent node...")
         agent_prompt = AgentPrompt.from_package("general_assistant")
-        current_user_query = state["messages"][-3:]
+        current_user_query = state["messages"][
+            -self.settings.general_assistant_lookback :
+        ]
         prompt = agent_prompt.chat_template.invoke({"question": current_user_query})
         response = self.fast_llm.invoke(prompt.to_messages())
         logger.info("Agent response received: %s", response)
@@ -187,7 +188,7 @@ class GraphNodes:
     def execute_intent_router_agent(self, state: RagState) -> dict:
         """Fast triage agent to classify intent."""
         logger.info("Executing Intent Router node...")
-        user_query = state["messages"][-3:]
+        user_query = state["messages"][-self.settings.intent_router_lookback :]
         agent_prompt = AgentPrompt.from_package("intent_router")
         prompt = agent_prompt.chat_template.invoke(
             {
@@ -361,7 +362,7 @@ class GraphNodes:
     def tool_router(self, state: RagState) -> str:
         iteration_count = state.get("iteration_count", 0)
         logger.debug("Tool iteration count: %d", iteration_count)
-        if iteration_count >= self.max_iterations:
+        if iteration_count >= self.settings.max_agent_iterations:
             logger.info(
                 "Max iterations reached: %d. Routing to FALLBACK_HANDLER.",
                 iteration_count,
@@ -389,7 +390,7 @@ class GraphNodes:
             return NodeName.FINISH
 
         current_attempts = state.get("self_correction_attempts", 0)
-        if current_attempts >= self.max_self_correction_attempts:
+        if current_attempts >= self.settings.max_self_correction_attempts:
             logger.warning(
                 "Max verifier attempts reached: %d. Routing to FALLBACK_HANDLER.",
                 current_attempts,
@@ -399,7 +400,7 @@ class GraphNodes:
             logger.info(
                 "Verifier attempts: %d/%d. Routing to %s.",
                 current_attempts,
-                self.max_self_correction_attempts,
+                self.settings.max_self_correction_attempts,
                 NodeName.PRIMARY_RAG_AGENT,
             )
             return NodeName.PRIMARY_RAG_AGENT
