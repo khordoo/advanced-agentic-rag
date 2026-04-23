@@ -6,7 +6,6 @@ import logging
 
 from rag_core.agents import AgentFactory
 from rag_core.retrival.qdrant_retriever import QdrantRetriever
-from rag_core.reranking import BaseReranker, LocalReranker
 from rag_core.prompts import AgentPrompt
 
 
@@ -38,7 +37,7 @@ class RAGPipeline:
         self.config = config
         self.llm = AgentFactory.get_judge_model(provider, config=config)
         self.retriever = retriever or QdrantRetriever()
-        self.prompt_template = PromptLoader.load(prompt_name)
+        self.prompt_template = AgentPrompt.from_package(prompt_name).chat_template
         # self.reranker = reranker or LocalReranker()
         logger.info("RAG pipeline initialised (provider=%s)", provider)
 
@@ -63,9 +62,15 @@ class RAGPipeline:
             print(d.metadata["score"])
             print("---" * 50)
         context_text = "\n\n----\n\n".join(d.page_content for d in context_docs)
-        prompt = self.prompt_template.render(context=context_text, question=query)
+        runtime_vars = {"context": context_text, "question": query}
+        prompt_inputs = {
+            key: value
+            for key, value in runtime_vars.items()
+            if key in self.prompt_template.input_variables
+        }
+        prompt = self.prompt_template.invoke(prompt_inputs)
 
-        response = self.llm.invoke(prompt.template)
+        response = self.llm.invoke(prompt.to_messages())
 
         return {
             "response": response.content,

@@ -8,8 +8,9 @@ import logging
 import pickle
 import time
 
-from rag_core.agents import AgentFactory, PromptLoader
-from rag_core.config import load_config
+from rag_core.agents import AgentFactory
+from rag_core.core.config import load_config
+from rag_core.prompts import AgentPrompt
 from rag_core.schemas import SyntheticsTestSet
 
 logger = logging.getLogger(__name__)
@@ -17,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 async def _invoke_for_chunk(
     llm,
-    messages: list[dict],
+    messages: list,
     parent_id: str,
     semaphore: asyncio.Semaphore,
 ) -> SyntheticsTestSet:
@@ -56,8 +57,8 @@ async def generate_questions_async(config: dict | None = None):
     logger.info("Loaded %d parent docs from %s", len(document_store), store_path)
 
     schema = SyntheticsTestSet.model_json_schema()
-    prompt_template = PromptLoader.load("qa_gen", schema=json.dumps(schema), context="")
-    system_prompt = prompt_template.template
+    json_schema = json.dumps(schema)
+    prompt_template = AgentPrompt.from_package("evaluation_qa_generator").chat_template
 
     llm = AgentFactory.get_judge_model(config=config)
     semaphore = asyncio.Semaphore(int(config.get("LLM_MAX_PARALLEL_REQUEST", 3)))
@@ -68,10 +69,10 @@ async def generate_questions_async(config: dict | None = None):
         if len(content) < 300:
             continue
 
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Document Texts:\n\n{content}"},
-        ]
+        prompt = prompt_template.invoke(
+            {"json_schema": json_schema, "document_text": content}
+        )
+        messages = prompt.to_messages()
         tasks.append(_invoke_for_chunk(llm, messages, parent_id, semaphore))
 
     t0 = time.time()
@@ -93,11 +94,7 @@ def run_question_generation(config: dict | None = None):
     config = config or load_config()
     results = asyncio.run(generate_questions_async(config))
 
-    qa_pairs = [
-        qa.model_dump(exclude={"refusal"})
-        for r in results
-        for qa in r.items
-    ]
+    qa_pairs = [qa.model_dump(exclude={"refusal"}) for r in results for qa in r.items]
     save_qa_pairs(config["SYNTHETIC_QA_PERSIST_PATH"], qa_pairs)
     return qa_pairs
 

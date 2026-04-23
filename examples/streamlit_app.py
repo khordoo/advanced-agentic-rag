@@ -779,12 +779,20 @@ elif page == "🔍 Search & Chat":
     llm_answer = None
 
     try:
-        from rag_core.agents import AgentFactory, PromptLoader
+        from rag_core.agents import AgentFactory
+        from rag_core.prompts import AgentPrompt
 
         context_text = "\n\n----\n\n".join(
             p.get("content", "") for p in parent_results
         )
-        prompt = PromptLoader.load("primary_rag_agent", context=context_text, question=query)
+        prompt_template = AgentPrompt.from_package("primary_rag_agent").chat_template
+        runtime_vars = {"context": context_text, "question": query}
+        prompt_inputs = {
+            key: value
+            for key, value in runtime_vars.items()
+            if key in prompt_template.input_variables
+        }
+        prompt = prompt_template.invoke(prompt_inputs)
 
         provider_map = {
             "LM Studio": "lmstudio",
@@ -801,7 +809,7 @@ elif page == "🔍 Search & Chat":
             
             with st.spinner(f"Generating answer via {provider_name}..."):
                 llm = AgentFactory.create(provider_id, model_name=model_name, config=cfg)
-                response = llm.invoke(prompt.template)
+                response = llm.invoke(prompt.to_messages())
                 llm_answer = response.content
         else:
             st.info(
