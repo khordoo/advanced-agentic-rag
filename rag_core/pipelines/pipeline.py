@@ -32,7 +32,7 @@ class RAGPipeline:
         config: dict,
         provider: str = "aws",
         retriever: QdrantRetriever | None = None,
-        prompt_name: str = "rag_qa",
+        prompt_name: str = "primary_rag_agent",
         # reranker: BaseReranker | None = None,
     ) -> None:
         self.config = config

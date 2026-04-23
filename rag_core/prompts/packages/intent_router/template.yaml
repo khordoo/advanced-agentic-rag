@@ -1,8 +1,6 @@
 name: "intent_router"
 description: "Classifies user intent to route LangGraph execution."
 temperature: 0.0
-examples_var: "rag_core.prompts.specs.intent_router.EXAMPLES"
-schema_class: "rag_core.prompts.specs.intent_router.IntentRouterResponse"
 system_template: |
   You are an intent classification routing agent. Your ONLY job is to analyze the user's latest message and classify it into **ONE** of the following categories.
 

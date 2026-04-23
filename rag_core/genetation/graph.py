@@ -6,6 +6,7 @@ from langchain_core.tools import StructuredTool
 from langchain_core.language_models import BaseChatModel
 
 from rag_core.agents import AgentFactory
+from rag_core.core.config import GenerationSettings
 from rag_core.genetation.tools import AgentToolFactory
 from rag_core.genetation.nodes import NodeName, GraphNodes
 from rag_core.genetation.state import RagState
@@ -22,6 +23,7 @@ class RagGraphFactory:
         verifier_llm: BaseChatModel | None = None,
         fast_llm: BaseChatModel | None = None,
         tools: list[StructuredTool] | None = None,
+        settings: GenerationSettings | None = None,
     ):
         logger.info("Initializing the graph")
         env = os.getenv("ENV", "dev")
@@ -34,6 +36,7 @@ class RagGraphFactory:
             verifier_llm=verifier_llm,
             fast_llm=fast_llm,
             tools=tools,
+            settings=settings,
         )
         graph: StateGraph = StateGraph(RagState)
         graph.add_node(

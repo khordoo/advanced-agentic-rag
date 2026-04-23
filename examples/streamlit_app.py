@@ -784,7 +784,7 @@ elif page == "🔍 Search & Chat":
         context_text = "\n\n----\n\n".join(
             p.get("content", "") for p in parent_results
         )
-        prompt = PromptLoader.load("rag_qa", context=context_text, question=query)
+        prompt = PromptLoader.load("primary_rag_agent", context=context_text, question=query)
 
         provider_map = {
             "LM Studio": "lmstudio",

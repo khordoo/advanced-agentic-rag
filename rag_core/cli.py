@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 def run_chat_loop():
     logger.info("Initializing Agent Prompt & LLM...")
-    agent_prompt = AgentPrompt.from_yaml("rag_qa")
+    agent_prompt = AgentPrompt.from_package("primary_rag_agent")
     reasoning_llm = AgentFactory.create(
         provider="aws", model_name="amazon.nova-pro-v1:0"
     )

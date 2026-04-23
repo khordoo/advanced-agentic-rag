@@ -15,14 +15,14 @@ services:
     volumes:
       - qdrant_data:/qdtant/storage
   core-db:
-    image: postgres:18-alpine
+    image: postgres:18.3-alpine
     restart: always
     container_name: db
     shm_size: 128mb
     ports:
       - 5432:5432
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres18_data:/var/lib/postgresql
       - ./db-init.sh:/docker-entrypoint-initdb.d/init.sh:ro
     deploy:
       resources:
@@ -189,6 +189,6 @@ services:
 
 volumes:
   qdrant_data:
-  postgres_data:
+  postgres18_data:
   clickhouse_data:
   minio_data:

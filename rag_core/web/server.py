@@ -38,7 +38,7 @@ async def lifespan(app: FastAPI):
     global _app_graph, _agent_prompt, _langfuse_callbacks
 
     logger.info("🚀  Initializing RAG Web Server...")
-    _agent_prompt = AgentPrompt.from_yaml("rag_qa")
+    _agent_prompt = AgentPrompt.from_package("primary_rag_agent")
     reasoning_llm = AgentFactory.create(
         provider="aws", model_name="amazon.nova-pro-v1:0"
     )

@@ -132,7 +132,7 @@ class AgentFactory:
     @classmethod
     def get_table_summerizer(cls, provider="lmstudio", prompt_name="table_summary"):
         agent = cls.create(provider=provider)
-        prompt = AgentPrompt.from_yaml(prompt_name)
+        prompt = AgentPrompt.from_package(prompt_name)
         return TableSummarizer(agent, prompt)
 
 
@@ -153,7 +153,7 @@ class TableSummarizer:
     ):
         self.llm = model or AgentFactory.create(provider="aws")
         # Load our 'table_summary' prompt once
-        self.prompt = prompt or AgentPrompt.from_yaml("table_summary")
+        self.prompt = prompt or AgentPrompt.from_package("table_summary")
 
     @retry(
         stop=stop_after_attempt(3),

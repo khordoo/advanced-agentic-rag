@@ -1,4 +1,4 @@
-name: "table_json_indexer"
+name: "table_summary"
 description: "Transforms structured markdown tables and context into a precise JSON metadata object for Hybrid Search indexing."
 temperature: 0.0
 system_template: |

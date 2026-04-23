@@ -2,8 +2,6 @@ import logging
 import os
 from pathlib import Path
 
-from mcp.server.auth import settings
-
 from rag_core.converter import convert_pdf_to_markdown
 from rag_core.chunker import chunk_markdown
 from rag_core.core.config import load_config, setup_logging
