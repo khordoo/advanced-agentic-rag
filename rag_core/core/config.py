@@ -269,8 +269,20 @@ class GenerationSettings(BaseSettings):
     reasoning_model: str = "amazon.nova-pro-v1:0"
     verifier_model: str = "amazon.nova-micro-v1:0"
     fast_model: str = "amazon.nova-micro-v1:0"
-    max_agent_iterations: int = 3
-    max_self_correction_attempts: int = 3
+    max_agent_iterations: int = Field(default=3, ge=1, le=50)
+    max_self_correction_attempts: int = Field(default=3, ge=1, le=50)
+    intent_router_lookback: int = Field(
+        default=3,
+        ge=1,
+        le=50,
+        description="Number of messages to lookback in message history to determine the intent.",
+    )
+    general_assistant_lookback: int = Field(
+        default=3,
+        ge=1,
+        le=50,
+        description="Number of messages to lookback in message history for general assistant to maintain context.",
+    )
     model_config = SettingsConfigDict(
         env_prefix="GENERATION_", env_file=".env", extra="ignore"
     )

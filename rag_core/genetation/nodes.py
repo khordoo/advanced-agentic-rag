@@ -18,7 +18,10 @@ from rag_core.genetation.state import RagState
 from rag_core.prompts.packages.rag_verifier.schema import RagVerifierResponse
 from rag_core.prompts.loader import AgentPrompt
 from rag_core.prompts.specs.base import RagFinalResponseSchema
-from rag_core.prompts.packages.intent_router.schema import IntentCategory, IntentRouterResponse
+from rag_core.prompts.packages.intent_router.schema import (
+    IntentCategory,
+    IntentRouterResponse,
+)
 from rag_core.genetation.parsers import parse_agent_response
 from tenacity import (
     retry,
@@ -76,7 +79,7 @@ class GraphNodes:
     def execute_general_assistant_agent(self, state: RagState) -> dict:
         logger.info("Executing General Assistant Agent node...")
         agent_prompt = AgentPrompt.from_package("general_assistant")
-        current_user_query = state["messages"][-1].content
+        current_user_query = state["messages"][-3:]
         prompt = agent_prompt.chat_template.invoke({"question": current_user_query})
         response = self.fast_llm.invoke(prompt.to_messages())
         logger.info("Agent response received: %s", response)
@@ -97,6 +100,15 @@ class GraphNodes:
         logger.info("Executing self_correcting node...")
 
         documents = state.get("source_docs", [])
+        if not documents:
+            return {
+                "verifier_response": RagVerifierResponse(
+                    grounded=True, reason="There is no document to verify."
+                ),
+                "self_correction_attempts": state.get("self_correction_attempts", 0)
+                + 1,
+            }
+
         generated_answer = state["messages"][-1].content
         current_attempts = state.get("self_correction_attempts", 0)
         logger.info("Generated answer: %s", generated_answer)
@@ -175,7 +187,7 @@ class GraphNodes:
     def execute_intent_router_agent(self, state: RagState) -> dict:
         """Fast triage agent to classify intent."""
         logger.info("Executing Intent Router node...")
-        user_query = state["messages"][-1].content
+        user_query = state["messages"][-3:]
         agent_prompt = AgentPrompt.from_package("intent_router")
         prompt = agent_prompt.chat_template.invoke(
             {
@@ -328,9 +340,7 @@ class GraphNodes:
                     docs_lookup[display_name.lower()] = doc
 
             for citation in parsed_response.citations:
-                doc = self._find_source_doc(
-                    citation.file_name, docs_lookup, docs
-                )
+                doc = self._find_source_doc(citation.file_name, docs_lookup, docs)
                 if doc:
                     source = self._get_doc_source(doc)
                     citation.source_url = source
