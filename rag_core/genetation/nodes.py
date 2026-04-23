@@ -15,10 +15,10 @@ from langchain_core.messages import (
 )
 from langchain_core.documents import Document
 from rag_core.genetation.state import RagState
-from rag_core.prompts.specs.rag_verifier import RagVerifierResponse
+from rag_core.prompts.packages.rag_verifier.schema import RagVerifierResponse
 from rag_core.prompts.loader import AgentPrompt
 from rag_core.prompts.specs.base import RagFinalResponseSchema
-from rag_core.prompts.specs.intent_router import IntentCategory, IntentRouterResponse
+from rag_core.prompts.packages.intent_router.schema import IntentCategory, IntentRouterResponse
 from rag_core.genetation.parsers import parse_agent_response
 from tenacity import (
     retry,
@@ -75,7 +75,7 @@ class GraphNodes:
     @observe(name=NodeName.GENERAL_ASSISTANT_AGENT, as_type="agent")
     def execute_general_assistant_agent(self, state: RagState) -> dict:
         logger.info("Executing General Assistant Agent node...")
-        agent_prompt = AgentPrompt.from_yaml("general_assistant")
+        agent_prompt = AgentPrompt.from_package("general_assistant")
         current_user_query = state["messages"][-1].content
         prompt = agent_prompt.chat_template.invoke({"question": current_user_query})
         response = self.fast_llm.invoke(prompt.to_messages())
@@ -102,7 +102,7 @@ class GraphNodes:
         logger.info("Generated answer: %s", generated_answer)
         logger.info("Current self correction attempts: %d", current_attempts)
 
-        agent_prompt = AgentPrompt.from_yaml("rag_verifier")
+        agent_prompt = AgentPrompt.from_package("rag_verifier")
         prompt = agent_prompt.chat_template.invoke(
             {"documents": documents, "answer": generated_answer}
         )
@@ -176,7 +176,7 @@ class GraphNodes:
         """Fast triage agent to classify intent."""
         logger.info("Executing Intent Router node...")
         user_query = state["messages"][-1].content
-        agent_prompt = AgentPrompt.from_yaml("intent_router")
+        agent_prompt = AgentPrompt.from_package("intent_router")
         prompt = agent_prompt.chat_template.invoke(
             {
                 "question": user_query,

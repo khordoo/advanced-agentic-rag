@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 from langchain_core.documents import Document
 from langchain_core.messages import BaseMessage
-from rag_core.prompts.specs.rag_verifier import RagVerifierResponse
+from rag_core.prompts.packages.rag_verifier.schema import RagVerifierResponse
 
 
 class RagState(TypedDict):
