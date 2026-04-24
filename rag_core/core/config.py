@@ -23,7 +23,7 @@ _REQUIRED_KEYS: list[str] = []
 _DEFAULTS: dict[str, str] = {
     "CHROMA_COLLECTION_NAME": "docs",
     "CHROMA_PERSIST_DIRECTORY": "artifacts/chroma_db",
-    "DOCS_DIR": "docs",
+    "DOCS_DIR": "data/source_docs",
     "PROCCESED_DOCS_DIR": "data/processed",
     "DOCUMENT_STORE_PERSIST_PATH": "artifacts/document_store/document_store.pkl",
     "SYNTHETIC_QA_PERSIST_PATH": "data/synthetic/eval_question_answers.json",
@@ -256,7 +256,7 @@ class IngestionSettings(BaseSettings):
     chunk_size: int = 1000
     chunk_overlap: int = 200
     max_retries: int = 3
-    ALLOWED_EXTENSIONS: set = {".pdf", ".md", ".txt"}
+    ALLOWED_EXTENSIONS: set = {".pdf", ".md"}
     # You can add things like 'enable_ocr' or 'target_folder' here
 
     model_config = SettingsConfigDict(

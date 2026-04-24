@@ -25,7 +25,10 @@ class IngestionPipeline:
     into their respective stores.
     """
 
-    _IGNORE_DIR = {".DS_Store"}
+    # Directory names to skip entirely (not traversed during os.walk)
+    _IGNORE_DIRS = {".DS_Store", "__pycache__", ".git"}
+    # Specific filenames to skip even if extension is supported
+    _IGNORE_FILES = {"README.md", "LICENSE", ".gitignore"}
 
     def __init__(
         self,
@@ -50,7 +53,7 @@ class IngestionPipeline:
         self.table_summarizer = table_summerizer or TableSummarizer()
         self.markdown_chunker = chunk_markdown
         self.summerize_and_chunk_table = summerize_and_chunk_table
-        self.ingestion_dir = self.config.get("DOCS_DIR", "docs")
+        self.ingestion_dir = self.config.get("DOCS_DIR", "data/source_docs")
         self.processed_dir = self.config.get("PROCESSED_DOCS_DIR", "data/processed")
         self.store_persistence_path = self.config.get("DOCUMENT_STORE_PERSIST_PATH")
         self.table_context_window = int(self.config.get("TABLE_CONTEXT_WINDOW", 3))
@@ -103,12 +106,19 @@ class IngestionPipeline:
                     },
                 )
 
+                file_ext = Path(file_path).suffix.lower()
                 with Stopwatch("Markdown conversion"):
-                    markdown, tables = convert_pdf_to_markdown(
-                        input_path=absolute_file_path,
-                        table_context_window=self.table_context_window,
-                        file_id=file_id,
-                    )
+                    if file_ext == ".pdf":
+                        markdown, tables = convert_pdf_to_markdown(
+                            input_path=absolute_file_path,
+                            table_context_window=self.table_context_window,
+                            file_id=file_id,
+                        )
+                    elif file_ext == ".md":
+                        markdown = Path(absolute_file_path).read_text(encoding="utf-8")
+                        tables = []
+                    else:
+                        raise ValueError(f"Unsupported file extension: {file_ext}")
                 logger.info(
                     "Conversion complete",
                     extra={"markdown_chars": len(markdown), "table_count": len(tables)},
@@ -210,14 +220,16 @@ class IngestionPipeline:
         Yields:
             str: Absolute path to the file.
         """
-        for root, _, files in os.walk(self.ingestion_dir):
+        for root, dirs, files in os.walk(self.ingestion_dir, topdown=True):
+            # Prune ignored directories so we do not descend into them.
+            dirs[:] = [d for d in dirs if d not in self._IGNORE_DIRS]
             for file in files:
                 # Skip hidden/system files (like .gitkeep or .DS_Store)
                 if file.startswith("."):
                     continue
 
-                # Skip explicitly ignored files/dirs
-                if file in self._IGNORE_DIR:
+                # Skip explicitly ignored file names
+                if file in self._IGNORE_FILES:
                     continue
 
                 # Only yield files that match our supported formats

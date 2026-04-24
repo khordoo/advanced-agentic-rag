@@ -100,6 +100,9 @@ cp .env.example .env
 # Edit .env with your provider credentials
 ```
 
+Ingestion input defaults to `data/source_docs` (`DOCS_DIR`). Place source files (`.pdf`/`.md`) there.
+Use `docs/` for human documentation and guides.
+
 Generation controls:
 - `GENERATION_ENABLE_INTENT_ROUTING=true` — route first through `intent_router_agent`.
 - `GENERATION_ENABLE_GROUNDING_VERIFIER=true` — run `rag_verifier` self-correction loop.
@@ -181,7 +184,8 @@ advanced-rag/
 ├── evaluation/         # RAGAS evaluation + QA generation
 ├── docker/             # Production stack (Qdrant + LangFuse)
 ├── tests/              # Test suite
-└── docs/               # Source PDFs for ingestion
+├── docs/               # Human-facing documentation
+└── data/source_docs/   # Ingestion input (.pdf/.md source files)
 ```
 
 ### Prompt Profiles
