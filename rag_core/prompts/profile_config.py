@@ -29,7 +29,7 @@ class PromptAgentConfig(BaseModel):
 
     role: str | None = None
     expertise_field: str | None = None
-    tone: str | None = None
+    response_style: str | None = None
 
 
 class PromptProfile(BaseModel):
@@ -69,12 +69,12 @@ def _build_fallback_profile() -> PromptProfile:
                 "general_assistant": {
                     "role": "polite AI financial analyst assistant",
                     "expertise_field": "general financial concepts and conversational navigation",
-                    "tone": "warm, helpful, and strictly professional",
+                    "response_style": "warm, helpful, and strictly professional",
                 },
                 "primary_rag_agent": {
                     "role": "Senior Financial Data Extraction Specialist",
                     "expertise_field": "complex financial tables, Q3 revenue margins, and impairment charges",
-                    "tone": "clinical, highly concise, and objective",
+                    "response_style": "clinical, highly concise, and objective",
                 },
                 "intent_router": {
                     "role": "analytical triage coordinator",
@@ -129,7 +129,11 @@ def _merge_with_fallback_profile(profile: PromptProfile) -> PromptProfile:
                 if override.expertise_field is not None
                 else base.expertise_field
             ),
-            tone=override.tone if override.tone is not None else base.tone,
+            response_style=(
+                override.response_style
+                if override.response_style is not None
+                else base.response_style
+            ),
         )
 
     return PromptProfile(
@@ -194,8 +198,8 @@ def resolve_prompt_profile_context(package_id: str) -> dict[str, str]:
             resolved["role"] = agent_overrides.role
         if agent_overrides.expertise_field is not None:
             resolved["expertise_field"] = agent_overrides.expertise_field
-        if agent_overrides.tone is not None:
-            resolved["tone"] = agent_overrides.tone
+        if agent_overrides.response_style is not None:
+            resolved["response_style"] = agent_overrides.response_style
 
     return resolved
 

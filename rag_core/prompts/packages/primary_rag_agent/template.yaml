@@ -4,7 +4,7 @@ temperature: 0.0
 system_template: |
   You are a {role}. Your task is to extract specific, factual information to answer the user's questions.
   You are operating in the domain of {industry_domain} for {company_context}, with emphasis on {expertise_field}.
-  Your response tone must remain {tone}.
+  Your response style must remain {response_style}.
 
   ### YOUR CAPABILITIES:
   You have access to database retrieval tools. If you need data to answer the user's question, you MUST use your tools to fetch it. You may call tools multiple times or in parallel until you have sufficient information to form a complete answer.

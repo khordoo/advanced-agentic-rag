@@ -24,7 +24,7 @@ def test_resolve_profile_context_from_default_profile():
     assert context["industry_domain"] == "corporate finance and SEC filings"
     assert context["role"] == "Senior Financial Data Extraction Specialist"
     assert "impairment charges" in context["expertise_field"]
-    assert context["tone"] == "clinical, highly concise, and objective"
+    assert context["response_style"] == "clinical, highly concise, and objective"
 
 
 def test_general_assistant_prompt_renders_with_profile_values():
@@ -39,11 +39,11 @@ def test_general_assistant_prompt_renders_with_profile_values():
     assert "warm, helpful, and strictly professional" in rendered
 
 
-def test_intent_router_context_allows_omitted_tone():
+def test_intent_router_context_omits_response_style():
     _reset_prompt_caches()
     context = resolve_prompt_profile_context("intent_router")
     assert context["role"] == "analytical triage coordinator"
-    assert "tone" not in context
+    assert "response_style" not in context
 
 
 def test_unknown_agent_key_rejected_in_strict_mode(tmp_path: Path, monkeypatch):
@@ -88,7 +88,7 @@ def test_unknown_agent_key_ignored_when_strict_disabled(
                     "primary_rag_agent": {
                         "role": "Data Specialist",
                         "expertise_field": "retrieval-grounded answers",
-                        "tone": "neutral and terse",
+                        "response_style": "neutral and terse",
                     },
                     "non_existent_agent": {
                         "role": "invalid",
@@ -107,7 +107,7 @@ def test_unknown_agent_key_ignored_when_strict_disabled(
     assert context["company_context"] == "Demo Corp"
     assert context["industry_domain"] == "enterprise reports"
     assert context["role"] == "Data Specialist"
-    assert context["tone"] == "neutral and terse"
+    assert context["response_style"] == "neutral and terse"
 
 
 def test_partial_agent_override_keeps_fallback_fields(tmp_path: Path, monkeypatch):
@@ -131,4 +131,32 @@ def test_partial_agent_override_keeps_fallback_fields(tmp_path: Path, monkeypatc
     context = resolve_prompt_profile_context("primary_rag_agent")
     assert context["role"] == "Data Specialist"
     assert "impairment charges" in context["expertise_field"]
-    assert context["tone"] == "clinical, highly concise, and objective"
+    assert context["response_style"] == "clinical, highly concise, and objective"
+
+
+def test_legacy_tone_key_is_rejected(tmp_path: Path, monkeypatch):
+    profile_path = tmp_path / "legacy_tone_profile.yaml"
+    profile_path.write_text(
+        yaml.safe_dump(
+            {
+                "global": {
+                    "company_context": "Demo Corp",
+                    "industry_domain": "enterprise reports",
+                },
+                "agents": {
+                    "primary_rag_agent": {
+                        "role": "Data Specialist",
+                        "expertise_field": "retrieval-grounded answers",
+                        "tone": "neutral and terse",
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("PROMPTS_PROFILE_PATH", str(profile_path))
+    monkeypatch.setenv("PROMPTS_PROFILE_STRICT", "true")
+
+    _reset_prompt_caches()
+    with pytest.raises(RuntimeError, match="extra_forbidden"):
+        resolve_prompt_profile_context("primary_rag_agent")
