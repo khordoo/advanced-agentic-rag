@@ -103,14 +103,10 @@ cp .env.example .env
 Ingestion input defaults to `data/source_docs` (`DOCS_DIR`). Place source files (`.pdf`/`.md`) there.
 Use `docs/` for human documentation and guides.
 
-Generation controls:
-- `GENERATION_ENABLE_INTENT_ROUTING=true` — route first through `intent_router_agent`.
-- `GENERATION_ENABLE_GROUNDING_VERIFIER=true` — run `rag_verifier` self-correction loop.
-- `GENERATION_MAX_AGENT_ITERATIONS=25` — global kill switch for total primary-agent passes (`>=5`).
-- `GENERATION_MAX_TOOL_CALLS=15` — maximum number of individual tool calls before fallback (`>=3`).
-- `GENERATION_MAX_SELF_CORRECTION_ATTEMPTS=3` — verifier rewrite budget (`>=1`).
-
-Set either boolean toggle value to `false` to reduce generation cost/token usage.
+Documentation map:
+- `docs/README.md` — start here for all user-facing guides.
+- `docs/configuration/generation-models.md` — reasoning/verifier/fast model settings.
+- `docs/ingestion/README.md` — source document ingestion rules and folder tagging.
 
 ### 3. Run Examples (No Infra Needed)
 
@@ -185,6 +181,10 @@ advanced-rag/
 ├── docker/             # Production stack (Qdrant + LangFuse)
 ├── tests/              # Test suite
 ├── docs/               # Human-facing documentation
+│   ├── getting-started/
+│   ├── configuration/
+│   ├── ingestion/
+│   └── agents/
 └── data/source_docs/   # Ingestion input (.pdf/.md source files)
 ```
 
