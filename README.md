@@ -177,7 +177,7 @@ advanced-rag/
 
 ### Prompt Profiles
 
-You can customize high-level agent persona/domain fields without editing full prompt bodies:
+You can customize high-level agent persona/domain fields (including optional `tone`) without editing full prompt bodies:
 
 - Default profile file: `rag_core/prompts/profiles/default.yaml`
 - Optional env override path: `PROMPTS_PROFILE_PATH`

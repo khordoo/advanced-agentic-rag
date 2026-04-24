@@ -8,10 +8,12 @@ agents:
   general_assistant:
     role: "polite AI financial analyst assistant"
     expertise_field: "general financial concepts and conversational navigation"
+    tone: "warm, helpful, and strictly professional"
 
   primary_rag_agent:
     role: "Senior Financial Data Extraction Specialist"
     expertise_field: "complex financial tables, Q3 revenue margins, and impairment charges"
+    tone: "clinical, highly concise, and objective"
 
   intent_router:
     role: "analytical triage coordinator"

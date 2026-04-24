@@ -24,6 +24,7 @@ def test_resolve_profile_context_from_default_profile():
     assert context["industry_domain"] == "corporate finance and SEC filings"
     assert context["role"] == "Senior Financial Data Extraction Specialist"
     assert "impairment charges" in context["expertise_field"]
+    assert context["tone"] == "clinical, highly concise, and objective"
 
 
 def test_general_assistant_prompt_renders_with_profile_values():
@@ -35,6 +36,14 @@ def test_general_assistant_prompt_renders_with_profile_values():
     assert "polite AI financial analyst assistant" in rendered
     assert "Procter & Gamble (P&G)" in rendered
     assert "corporate finance and SEC filings" in rendered
+    assert "warm, helpful, and strictly professional" in rendered
+
+
+def test_intent_router_context_allows_omitted_tone():
+    _reset_prompt_caches()
+    context = resolve_prompt_profile_context("intent_router")
+    assert context["role"] == "analytical triage coordinator"
+    assert "tone" not in context
 
 
 def test_unknown_agent_key_rejected_in_strict_mode(tmp_path: Path, monkeypatch):
@@ -79,6 +88,7 @@ def test_unknown_agent_key_ignored_when_strict_disabled(
                     "primary_rag_agent": {
                         "role": "Data Specialist",
                         "expertise_field": "retrieval-grounded answers",
+                        "tone": "neutral and terse",
                     },
                     "non_existent_agent": {
                         "role": "invalid",
@@ -97,6 +107,7 @@ def test_unknown_agent_key_ignored_when_strict_disabled(
     assert context["company_context"] == "Demo Corp"
     assert context["industry_domain"] == "enterprise reports"
     assert context["role"] == "Data Specialist"
+    assert context["tone"] == "neutral and terse"
 
 
 def test_partial_agent_override_keeps_fallback_fields(tmp_path: Path, monkeypatch):
@@ -120,3 +131,4 @@ def test_partial_agent_override_keeps_fallback_fields(tmp_path: Path, monkeypatc
     context = resolve_prompt_profile_context("primary_rag_agent")
     assert context["role"] == "Data Specialist"
     assert "impairment charges" in context["expertise_field"]
+    assert context["tone"] == "clinical, highly concise, and objective"
