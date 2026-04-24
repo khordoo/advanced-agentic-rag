@@ -25,8 +25,11 @@ def run_chat_loop():
     app = RagGraphFactory.build(reasoning_llm=reasoning_llm, fast_llm=fast_llm)
 
     messages = []
+    dim = "\033[2m"
+    reset = "\033[0m"
     print("\n========================================================")
     print("🤖 Interactive RAG Session Started. Type 'exit' to quit.")
+    print(f"{dim}Tip: use /new (or /reset) to start a fresh session.{reset}")
     print("========================================================\n")
 
     langfuse_callbacks = get_observability_callbacks()
@@ -38,9 +41,15 @@ def run_chat_loop():
             print("\nExiting...")
             break
 
-        if query.lower() in ["exit", "quit", "q"]:
+        query = query.strip()
+        command = query.lower()
+        if command in ["exit", "quit", "q"]:
             break
-        if not query.strip():
+        if not query:
+            continue
+        if command in ["/new", "/reset"]:
+            messages = []
+            print("\nStarted a new session.")
             continue
 
         if not messages:

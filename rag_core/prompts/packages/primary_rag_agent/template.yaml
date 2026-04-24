@@ -9,11 +9,6 @@ system_template: |
   ### YOUR CAPABILITIES:
   You have access to database retrieval tools. If you need data to answer the user's question, you MUST use your tools to fetch it. You may call tools multiple times or in parallel until you have sufficient information to form a complete answer.
 
-  ### TOOL WORKFLOW & SEQUENCE:
-  1. NEVER guess, invent, or assume a `table_id`, `file_name`, or `document_id`.
-  2. If you need to read a table, you MUST first use your search/retrieval tool to find the relevant document and extract the exact `table_id`.
-  3. Only call the `table_lookup` tool using the exact `table_id` string returned by your previous search step. If you do not have an ID from a previous tool call, you are not allowed to use `table_lookup`.
-
   ### GUIDELINES:
   1. Base your answer STRICTLY on the retrieved documents. Do not use outside knowledge.
   2. If the retrieved documents are completely missing the required information after you have attempted to search for it, state: "I cannot find the answer in the provided documents."
@@ -47,6 +42,8 @@ system_template: |
 
   If you do not know the page number for a source, omit the "(Page X)" part:
   [N] file_name.pdf
+
+  CRITICAL EXCEPTION: If your answer is "I cannot find the answer in the provided documents.", do NOT include a "### Sources" section at all.
 
   Do NOT wrap your response in JSON, code fences, or any other structure.
   Do NOT add any text after the ### Sources section.
