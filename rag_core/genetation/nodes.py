@@ -51,6 +51,7 @@ class NodeName(StrEnum):
     SELF_CORRECTING_AGENT = "self_correcting_agent"
     FALLBACK_HANDLER = "fallback_handler"
     INTENT_ROUTER_AGENT = "intent_router_agent"
+    INITIAL_ROUTER = "initial_router"
     TOOLS = "tool_execution"
     POST_PROCESSING = "post_processing"
     TOOL_ROUTER = "tool_router"
@@ -74,6 +75,21 @@ class GraphNodes:
         self.reasoning_llm = reasoning_llm.bind_tools(tools)
         self.tool_executor = ToolNode(tools)
 
+    @observe(name=NodeName.INITIAL_ROUTER, as_type="evaluator")
+    def route_initial_node(self, state: RagState) -> str:
+        if not self.settings.enable_intent_routing:
+            logger.info(
+                "Initial router selected %s (intent routing disabled).",
+                NodeName.PRIMARY_RAG_AGENT,
+            )
+            return NodeName.PRIMARY_RAG_AGENT
+
+        logger.info(
+            "Initial router selected %s (intent routing enabled).",
+            NodeName.INTENT_ROUTER_AGENT,
+        )
+        return NodeName.INTENT_ROUTER_AGENT
+
     @observe(name=NodeName.GENERAL_ASSISTANT_AGENT, as_type="agent")
     def execute_general_assistant_agent(self, state: RagState) -> dict:
         logger.info("Executing General Assistant Agent node...")
@@ -90,15 +106,31 @@ class GraphNodes:
     @observe(name=NodeName.PRIMARY_RAG_AGENT, as_type="agent")
     def execute_primary_rag_agent(self, state: RagState) -> dict:
         logger.info("Executing Primary RAG Agent node...")
-        logger.debug("Source docs count: %d", len(state["source_docs"]))
+        source_docs = state.get("source_docs", [])
+        logger.debug("Source docs count: %d", len(source_docs))
         response = self.reasoning_llm.invoke(state["messages"])
         iteration_count = state.get("iteration_count", 0)
         logger.info("Agent response received. Iteration: %d", iteration_count)
-        return {"messages": [response], "iteration_count": iteration_count + 1}
+        return {
+            "messages": [response],
+            "iteration_count": iteration_count + 1,
+            "source_docs": source_docs,
+        }
 
     @observe(name=NodeName.SELF_CORRECTING_AGENT, as_type="evaluator")
     def execute_self_correcting_agent(self, state: RagState) -> dict:
         logger.info("Executing self_correcting node...")
+        current_attempts = state.get("self_correction_attempts", 0)
+
+        if not self.settings.enable_grounding_verifier:
+            logger.info("Grounding verifier disabled. Skipping verification step.")
+            return {
+                "verifier_response": RagVerifierResponse(
+                    grounded=True,
+                    reason="Grounding verifier disabled by configuration.",
+                ),
+                "self_correction_attempts": current_attempts + 1,
+            }
 
         documents = state.get("source_docs", [])
         if not documents:
@@ -106,12 +138,10 @@ class GraphNodes:
                 "verifier_response": RagVerifierResponse(
                     grounded=True, reason="There is no document to verify."
                 ),
-                "self_correction_attempts": state.get("self_correction_attempts", 0)
-                + 1,
+                "self_correction_attempts": current_attempts + 1,
             }
 
         generated_answer = state["messages"][-1].content
-        current_attempts = state.get("self_correction_attempts", 0)
         logger.info("Generated answer: %s", generated_answer)
         logger.info("Current self correction attempts: %d", current_attempts)
 

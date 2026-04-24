@@ -269,6 +269,8 @@ class GenerationSettings(BaseSettings):
     reasoning_model: str = "amazon.nova-pro-v1:0"
     verifier_model: str = "amazon.nova-micro-v1:0"
     fast_model: str = "amazon.nova-micro-v1:0"
+    enable_intent_routing: bool = True
+    enable_grounding_verifier: bool = True
     max_agent_iterations: int = Field(default=3, ge=1, le=50)
     max_self_correction_attempts: int = Field(default=3, ge=1, le=50)
     intent_router_lookback: int = Field(

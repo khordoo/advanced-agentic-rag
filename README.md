@@ -100,6 +100,12 @@ cp .env.example .env
 # Edit .env with your provider credentials
 ```
 
+Generation feature toggles (defaults preserve current behavior):
+- `GENERATION_ENABLE_INTENT_ROUTING=true` — route first through `intent_router_agent`.
+- `GENERATION_ENABLE_GROUNDING_VERIFIER=true` — run `rag_verifier` self-correction loop.
+
+Set either value to `false` to reduce generation cost/token usage.
+
 ### 3. Run Examples (No Infra Needed)
 
 ```bash

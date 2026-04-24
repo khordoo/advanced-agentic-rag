@@ -85,7 +85,14 @@ class RagGraphFactory:
         graph.add_edge(NodeName.GENERAL_ASSISTANT_AGENT, END)
         graph.add_edge(NodeName.FALLBACK_HANDLER, END)
         graph.add_edge(NodeName.POST_PROCESSING, END)
-        graph.set_entry_point(NodeName.INTENT_ROUTER_AGENT)
+        graph.set_conditional_entry_point(
+            graph_nodes.route_initial_node,
+            {
+                NodeName.INTENT_ROUTER_AGENT: NodeName.INTENT_ROUTER_AGENT,
+                NodeName.PRIMARY_RAG_AGENT: NodeName.PRIMARY_RAG_AGENT,
+            },
+        )
+        logger.info("Conditional initial router configured.")
 
         g = graph.compile()
         if env == "dev":
