@@ -90,4 +90,30 @@ Net earnings increased 2% to $15.0 billion.
             reason="The document states net earnings increased 2%, not 12%.",
         ),
     ),
+    RagVerifierExample(
+        documents="""
+    [Doc: report.pdf] [Section: Data Table] [Location: Page 5]
+
+    | Segment | Foreign Exchange |
+    |---------|------------------|
+    | Grooming | (6)%            |
+    """,
+        answer="Foreign exchange had an unfavorable impact of -6% on Grooming.",
+        response=RagVerifierResponse(
+            grounded=True,
+            reason="The table shows (6)% which corresponds to -6%, matching the answer.",
+        ),
+    ),
+    RagVerifierExample(
+        documents="""
+    [Doc: report.pdf] [Section: Summary] [Location: Page 3]
+
+    Grooming net sales increased high single digits versus the prior year.
+    """,
+        answer="I cannot find the exact net sales growth percentage for the Grooming segment. The document only states that growth was in the high single digits.",
+        response=RagVerifierResponse(
+            grounded=True,
+            reason="The answer is grounded because the document only provides high single-digit growth and does not specify an exact percentage.",
+        ),
+    )
 ]

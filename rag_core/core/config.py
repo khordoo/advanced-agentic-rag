@@ -193,7 +193,7 @@ class RerankerSettings(BaseSettings):
     """
 
     provider: str = "huggingface"
-    model_name: str = "jinaai/jina-reranker-v1-turbo-en"  # "cross-encoder/ms-marco-MiniLM-L-6-v2"  # "BAAI/bge-reranker-v2-m3"
+    model_name: str = "BAAI/bge-reranker-v2-m3"  # "cross-encoder/ms-marco-MiniLM-L-6-v2"  # "BAAI/bge-reranker-v2-m3"
     top_k: int = Field(
         default=3,
         ge=1,
@@ -267,7 +267,7 @@ class IngestionSettings(BaseSettings):
 class GenerationSettings(BaseSettings):
     model_provider: str = "aws"
     reasoning_model: str = "amazon.nova-pro-v1:0"
-    verifier_model: str = "amazon.nova-micro-v1:0"
+    verifier_model: str = "amazon.nova-pro-v1:0"
     fast_model: str = "amazon.nova-micro-v1:0"
     enable_intent_routing: bool = True
     enable_grounding_verifier: bool = True
