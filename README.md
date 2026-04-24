@@ -100,6 +100,14 @@ cp .env.example .env
 # Edit .env with your provider credentials
 ```
 
+Ingestion input defaults to `data/source_docs` (`DOCS_DIR`). Place source files (`.pdf`/`.md`) there.
+Use `docs/` for human documentation and guides.
+
+Documentation map:
+- `docs/README.md` — start here for all user-facing guides.
+- `docs/configuration/generation-models.md` — reasoning/verifier/fast model settings.
+- `docs/ingestion/README.md` — source document ingestion rules and folder tagging.
+
 ### 3. Run Examples (No Infra Needed)
 
 ```bash
@@ -172,7 +180,12 @@ advanced-rag/
 ├── evaluation/         # RAGAS evaluation + QA generation
 ├── docker/             # Production stack (Qdrant + LangFuse)
 ├── tests/              # Test suite
-└── docs/               # Source PDFs for ingestion
+├── docs/               # Human-facing documentation
+│   ├── getting-started/
+│   ├── configuration/
+│   ├── ingestion/
+│   └── agents/
+└── data/source_docs/   # Ingestion input (.pdf/.md source files)
 ```
 
 ### Prompt Profiles

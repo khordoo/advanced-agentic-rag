@@ -18,7 +18,16 @@ wheels/
 
 # Runtime data & artifacts
 artifacts/
-data/
+data/*
+!data/source_docs/
+data/source_docs/*
+!data/source_docs/README.md
+!data/source_docs/finance/
+data/source_docs/finance/*
+!data/source_docs/finance/.gitkeep
+!data/source_docs/legal/
+data/source_docs/legal/*
+!data/source_docs/legal/.gitkeep
 scratch/
 *.pkl
 

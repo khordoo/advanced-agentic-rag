@@ -23,7 +23,7 @@ _REQUIRED_KEYS: list[str] = []
 _DEFAULTS: dict[str, str] = {
     "CHROMA_COLLECTION_NAME": "docs",
     "CHROMA_PERSIST_DIRECTORY": "artifacts/chroma_db",
-    "DOCS_DIR": "docs",
+    "DOCS_DIR": "data/source_docs",
     "PROCCESED_DOCS_DIR": "data/processed",
     "DOCUMENT_STORE_PERSIST_PATH": "artifacts/document_store/document_store.pkl",
     "SYNTHETIC_QA_PERSIST_PATH": "data/synthetic/eval_question_answers.json",
@@ -193,7 +193,7 @@ class RerankerSettings(BaseSettings):
     """
 
     provider: str = "huggingface"
-    model_name: str = "jinaai/jina-reranker-v1-turbo-en"  # "cross-encoder/ms-marco-MiniLM-L-6-v2"  # "BAAI/bge-reranker-v2-m3"
+    model_name: str = "BAAI/bge-reranker-v2-m3"  # "cross-encoder/ms-marco-MiniLM-L-6-v2"  # "BAAI/bge-reranker-v2-m3"
     top_k: int = Field(
         default=3,
         ge=1,
@@ -256,7 +256,7 @@ class IngestionSettings(BaseSettings):
     chunk_size: int = 1000
     chunk_overlap: int = 200
     max_retries: int = 3
-    ALLOWED_EXTENSIONS: set = {".pdf", ".md", ".txt"}
+    ALLOWED_EXTENSIONS: set = {".pdf", ".md"}
     # You can add things like 'enable_ocr' or 'target_folder' here
 
     model_config = SettingsConfigDict(
@@ -266,11 +266,26 @@ class IngestionSettings(BaseSettings):
 
 class GenerationSettings(BaseSettings):
     model_provider: str = "aws"
-    reasoning_model: str = "amazon.nova-pro-v1:0"
-    verifier_model: str = "amazon.nova-micro-v1:0"
+    reasoning_model: str = "openai.gpt-oss-120b-1:0"
+    verifier_model: str = "openai.gpt-oss-120b-1:0"
     fast_model: str = "amazon.nova-micro-v1:0"
-    max_agent_iterations: int = Field(default=3, ge=1, le=50)
-    max_self_correction_attempts: int = Field(default=3, ge=1, le=50)
+    enable_intent_routing: bool = True
+    enable_grounding_verifier: bool = True
+    max_agent_iterations: int = Field(
+        default=25,
+        ge=5,
+        description="Global kill switch for primary agent passes. Must be >= 5 to allow basic tool gathering and verifier loops to complete.",
+    )
+    max_tool_calls: int = Field(
+        default=15,
+        ge=3,
+        description="Maximum number of individual tool calls the agent can make before triggering fallback.",
+    )
+    max_self_correction_attempts: int = Field(
+        default=3,
+        ge=1,
+        description="How many times the agent can rewrite its answer after failing the verifier.",
+    )
     intent_router_lookback: int = Field(
         default=3,
         ge=1,

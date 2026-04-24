@@ -14,6 +14,7 @@ class RagState(TypedDict):
     source_docs: list[Document]
     token_budget: int
     iteration_count: NotRequired[int]
+    tool_call_count: NotRequired[int]
     intent_route: str
     verifier_response: NotRequired[RagVerifierResponse]
     self_correction_attempts: NotRequired[int]

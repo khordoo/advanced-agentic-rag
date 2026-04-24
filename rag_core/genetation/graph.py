@@ -10,6 +10,7 @@ from rag_core.core.config import GenerationSettings
 from rag_core.genetation.tools import AgentToolFactory
 from rag_core.genetation.nodes import NodeName, GraphNodes
 from rag_core.genetation.state import RagState
+from rag_core.core.config import get_generation_settings
 
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,7 @@ class RagGraphFactory:
         verifier_llm = verifier_llm or AgentFactory.get_default_model()
         fast_llm = fast_llm or AgentFactory.get_default_model()
         tools = tools or AgentToolFactory.create_tools()
+        settings = settings or get_generation_settings()
         graph_nodes = GraphNodes(
             reasoning_llm=reasoning_llm,
             verifier_llm=verifier_llm,
@@ -85,10 +87,23 @@ class RagGraphFactory:
         graph.add_edge(NodeName.GENERAL_ASSISTANT_AGENT, END)
         graph.add_edge(NodeName.FALLBACK_HANDLER, END)
         graph.add_edge(NodeName.POST_PROCESSING, END)
-        graph.set_entry_point(NodeName.INTENT_ROUTER_AGENT)
+        graph.set_conditional_entry_point(
+            graph_nodes.route_initial_node,
+            {
+                NodeName.INTENT_ROUTER_AGENT: NodeName.INTENT_ROUTER_AGENT,
+                NodeName.PRIMARY_RAG_AGENT: NodeName.PRIMARY_RAG_AGENT,
+            },
+        )
+        logger.info("Conditional initial router configured.")
 
         g = graph.compile()
         if env == "dev":
             logger.info("Graph ASCII Layout: \n%s", g.get_graph().draw_ascii())
         logger.info("Graph initialized successfully")
+        logger.info(
+                    f"Providers: {settings.model_provider}\n"
+                    f"Reasoning Model: {settings.reasoning_model}\n"
+                    f"Verifier Model: {settings.verifier_model}\n"
+                    f"Fast Model: {settings.fast_model}"
+                )
         return g

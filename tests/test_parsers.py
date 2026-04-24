@@ -1,6 +1,10 @@
 """Quick smoke tests for the new Markdown parser."""
 
-from rag_core.genetation.parsers import parse_agent_response, parse_markdown_response
+from rag_core.genetation.parsers import (
+    parse_agent_response,
+    parse_markdown_response,
+    extract_text_from_message,
+)
 
 
 def test_markdown_with_citations():
@@ -101,6 +105,36 @@ def test_file_id_style_citations():
     print("  PASSED\n")
 
 
+def test_extract_text_from_message_string_passthrough():
+    content = "Simple answer."
+    assert extract_text_from_message(content) == "Simple answer."
+
+
+def test_extract_text_from_message_mixed_list():
+    content = [
+        {"type": "text", "text": "First"},
+        "Second",
+        {"type": "reasoning_content", "reasoning_content": {"text": "Ignore this"}},
+        {"unexpected": "value"},
+    ]
+    assert extract_text_from_message(content) == "First Second"
+
+
+def test_extract_text_from_message_dict_fallback():
+    content = {"foo": "bar"}
+    assert extract_text_from_message(content) == "{'foo': 'bar'}"
+
+
+def test_parse_agent_response_accepts_list_content():
+    content = [
+        {"type": "text", "text": "I cannot find the answer in the provided documents."},
+        {"type": "reasoning_content", "reasoning_content": {"text": "hidden"}},
+    ]
+    result = parse_agent_response(content)
+    assert result.answer == "I cannot find the answer in the provided documents."
+    assert result.citations == []
+
+
 if __name__ == "__main__":
     test_markdown_with_citations()
     test_no_sources()
@@ -109,4 +143,8 @@ if __name__ == "__main__":
     test_code_fenced_markdown()
     test_mixed_sources()
     test_file_id_style_citations()
+    test_extract_text_from_message_string_passthrough()
+    test_extract_text_from_message_mixed_list()
+    test_extract_text_from_message_dict_fallback()
+    test_parse_agent_response_accepts_list_content()
     print("✅ All tests passed!")

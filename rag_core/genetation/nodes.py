@@ -22,7 +22,7 @@ from rag_core.prompts.packages.intent_router.schema import (
     IntentCategory,
     IntentRouterResponse,
 )
-from rag_core.genetation.parsers import parse_agent_response
+from rag_core.genetation.parsers import parse_agent_response, extract_text_from_message
 from tenacity import (
     retry,
     stop_after_attempt,
@@ -51,6 +51,7 @@ class NodeName(StrEnum):
     SELF_CORRECTING_AGENT = "self_correcting_agent"
     FALLBACK_HANDLER = "fallback_handler"
     INTENT_ROUTER_AGENT = "intent_router_agent"
+    INITIAL_ROUTER = "initial_router"
     TOOLS = "tool_execution"
     POST_PROCESSING = "post_processing"
     TOOL_ROUTER = "tool_router"
@@ -74,6 +75,21 @@ class GraphNodes:
         self.reasoning_llm = reasoning_llm.bind_tools(tools)
         self.tool_executor = ToolNode(tools)
 
+    @observe(name=NodeName.INITIAL_ROUTER, as_type="evaluator")
+    def route_initial_node(self, state: RagState) -> str:
+        if not self.settings.enable_intent_routing:
+            logger.info(
+                "Initial router selected %s (intent routing disabled).",
+                NodeName.PRIMARY_RAG_AGENT,
+            )
+            return NodeName.PRIMARY_RAG_AGENT
+
+        logger.info(
+            "Initial router selected %s (intent routing enabled).",
+            NodeName.INTENT_ROUTER_AGENT,
+        )
+        return NodeName.INTENT_ROUTER_AGENT
+
     @observe(name=NodeName.GENERAL_ASSISTANT_AGENT, as_type="agent")
     def execute_general_assistant_agent(self, state: RagState) -> dict:
         logger.info("Executing General Assistant Agent node...")
@@ -90,15 +106,31 @@ class GraphNodes:
     @observe(name=NodeName.PRIMARY_RAG_AGENT, as_type="agent")
     def execute_primary_rag_agent(self, state: RagState) -> dict:
         logger.info("Executing Primary RAG Agent node...")
-        logger.debug("Source docs count: %d", len(state["source_docs"]))
+        source_docs = state.get("source_docs", [])
+        logger.debug("Source docs count: %d", len(source_docs))
         response = self.reasoning_llm.invoke(state["messages"])
         iteration_count = state.get("iteration_count", 0)
-        logger.info("Agent response received. Iteration: %d", iteration_count)
-        return {"messages": [response], "iteration_count": iteration_count + 1}
+        logger.info("Agent response received. Iteration: %d", iteration_count + 1)
+        return {
+            "messages": [response],
+            "iteration_count": iteration_count + 1,
+            "source_docs": source_docs,
+        }
 
     @observe(name=NodeName.SELF_CORRECTING_AGENT, as_type="evaluator")
     def execute_self_correcting_agent(self, state: RagState) -> dict:
         logger.info("Executing self_correcting node...")
+        current_attempts = state.get("self_correction_attempts", 0)
+
+        if not self.settings.enable_grounding_verifier:
+            logger.info("Grounding verifier disabled. Skipping verification step.")
+            return {
+                "verifier_response": RagVerifierResponse(
+                    grounded=True,
+                    reason="Grounding verifier disabled by configuration.",
+                ),
+                "self_correction_attempts": current_attempts + 1,
+            }
 
         documents = state.get("source_docs", [])
         if not documents:
@@ -106,12 +138,10 @@ class GraphNodes:
                 "verifier_response": RagVerifierResponse(
                     grounded=True, reason="There is no document to verify."
                 ),
-                "self_correction_attempts": state.get("self_correction_attempts", 0)
-                + 1,
+                "self_correction_attempts": current_attempts + 1,
             }
 
-        generated_answer = state["messages"][-1].content
-        current_attempts = state.get("self_correction_attempts", 0)
+        generated_answer = extract_text_from_message(state["messages"][-1].content)
         logger.info("Generated answer: %s", generated_answer)
         logger.info("Current self correction attempts: %d", current_attempts)
 
@@ -133,7 +163,8 @@ class GraphNodes:
             logger.info("Invoking Verifier LLM...")
             response = self.verifier_llm.invoke(prompt.to_messages())
             # This will throw a ValueError if the LLM output is garbage
-            return RagVerifierResponse.model_validate_json(response.content)
+            response_text = extract_text_from_message(response.content)
+            return RagVerifierResponse.model_validate_json(response_text)
 
         # --- PARSING & FALLBACK ---
         try:
@@ -223,6 +254,7 @@ class GraphNodes:
             "intent_route": intent,
             "source_docs": [],
             "iteration_count": 0,
+            "tool_call_count": 0,
             "self_correction_attempts": 0,
         }
 
@@ -238,7 +270,9 @@ class GraphNodes:
     @observe(name=NodeName.TOOLS, as_type="tool")
     def execute_tools(self, state: RagState) -> dict:
         logger.info("Executing Tool Execution node...")
-        logger.debug("Tool calls: %s", state["messages"][-1].tool_calls)
+        last_message = state["messages"][-1]
+        tool_calls = getattr(last_message, "tool_calls", None) or []
+        logger.debug("Tool calls: %s", tool_calls)
 
         tool_result = self.tool_executor.invoke({"messages": state["messages"]})
 
@@ -259,9 +293,11 @@ class GraphNodes:
             "Tool Execution node completed. Extracted %d documents.", len(raw_docs)
         )
         existing_docs = state.get("source_docs", [])
+        current_tool_call_count = state.get("tool_call_count", 0)
         return {
             "messages": tool_result["messages"],
             "source_docs": existing_docs + raw_docs,
+            "tool_call_count": current_tool_call_count + len(tool_calls),
         }
 
     @staticmethod
@@ -323,7 +359,8 @@ class GraphNodes:
     def execute_post_processing(self, state: RagState) -> dict:
         logger.info("Executing Post-Processing node...")
         try:
-            parsed_response = parse_agent_response(state["messages"][-1].content)
+            raw_content = extract_text_from_message(state["messages"][-1].content)
+            parsed_response = parse_agent_response(raw_content)
 
             # Build lookup from actual retrieved documents keyed by
             # file_id, display name, and case-insensitive variants
@@ -354,17 +391,21 @@ class GraphNodes:
             return {"messages": [AIMessage(content=parsed_response.model_dump_json())]}
         except Exception as e:
             logger.error("Post-processing failed, returning raw response: %s", e)
-            raw_content = state["messages"][-1].content if state.get("messages") else ""
+            raw_content = (
+                extract_text_from_message(state["messages"][-1].content)
+                if state.get("messages")
+                else ""
+            )
             fallback = RagFinalResponseSchema(answer=raw_content, citations=[])
             return {"messages": [AIMessage(content=fallback.model_dump_json())]}
 
     @observe(name=NodeName.TOOL_ROUTER, as_type="evaluator")
     def tool_router(self, state: RagState) -> str:
         iteration_count = state.get("iteration_count", 0)
-        logger.debug("Tool iteration count: %d", iteration_count)
+        logger.debug("Global iteration count: %d", iteration_count)
         if iteration_count >= self.settings.max_agent_iterations:
             logger.info(
-                "Max iterations reached: %d. Routing to FALLBACK_HANDLER.",
+                "Max agent iterations reached: %d. Routing to FALLBACK_HANDLER.",
                 iteration_count,
             )
             return NodeName.FALLBACK_HANDLER
@@ -372,12 +413,21 @@ class GraphNodes:
         last_message = self._get_last_message(state)
         has_tool_calls = bool(getattr(last_message, "tool_calls", None))
 
-        if has_tool_calls:
-            logger.info("Router: Detected tool calls. Routing to %s", NodeName.TOOLS)
-            return NodeName.TOOLS
+        if not has_tool_calls:
+            logger.info("Router: No tool calls. Routing to %s", NodeName.FINISH)
+            return NodeName.FINISH
 
-        logger.info("Router: No tool calls. Routing to %s", NodeName.FINISH)
-        return NodeName.FINISH
+        tool_call_count = state.get("tool_call_count", 0)
+        logger.debug("Tool call count: %d", tool_call_count)
+        if tool_call_count >= self.settings.max_tool_calls:
+            logger.info(
+                "Max tool calls reached: %d. Routing to FALLBACK_HANDLER.",
+                tool_call_count,
+            )
+            return NodeName.FALLBACK_HANDLER
+
+        logger.info("Router: Detected tool calls. Routing to %s", NodeName.TOOLS)
+        return NodeName.TOOLS
 
     def verifier_router(self, state: RagState) -> str:
         verifier_resp = state.get("verifier_response")

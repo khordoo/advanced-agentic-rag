@@ -90,4 +90,69 @@ Net earnings increased 2% to $15.0 billion.
             reason="The document states net earnings increased 2%, not 12%.",
         ),
     ),
+    RagVerifierExample(
+        documents="""
+    [Doc: report.pdf] [Section: Data Table] [Location: Page 5]
+
+    | Segment | Foreign Exchange |
+    |---------|------------------|
+    | Grooming | (6)%            |
+    """,
+        answer="Foreign exchange had an unfavorable impact of -6% on Grooming.",
+        response=RagVerifierResponse(
+            grounded=True,
+            reason="The table shows (6)% which corresponds to -6%, matching the answer.",
+        ),
+    ),
+    RagVerifierExample(
+        documents="""
+    [Doc: report.pdf] [Section: Summary] [Location: Page 3]
+
+    Grooming net sales increased high single digits versus the prior year.
+    """,
+        answer="I cannot find the exact net sales growth percentage for the Grooming segment. The document only states that growth was in the high single digits.",
+        response=RagVerifierResponse(
+            grounded=True,
+            reason="The answer is grounded because the document only provides high single-digit growth and does not specify an exact percentage.",
+        ),
+    ),
+    RagVerifierExample(
+        documents="""
+    [Doc: report.pdf] [Section: Segment Results] [Location: Page 5]
+
+    | Segment  | Foreign Exchange | Price | Net Sales Growth |
+    |----------|------------------|-------|------------------|
+    | Grooming | (5)%             | 8%    | 4%               |
+    """,
+        answer=(
+            "I cannot find the exact net sales growth percentage for Grooming "
+            "in the first quarter of 2024 in the provided documents. The documents "
+            "only show full-year 2024 versus 2023 Grooming net sales growth of 4%."
+        ),
+        response=RagVerifierResponse(
+            grounded=True,
+            reason=(
+                "The answer is grounded because the document provides full-year "
+                "2024 versus 2023 Grooming net sales growth, but does not provide "
+                "a first-quarter 2024 Grooming value."
+            ),
+        ),
+    ),
+    RagVerifierExample(
+        documents="""
+    [Doc: report.pdf] [Section: Segment Results] [Location: Page 5]
+
+    | Segment  | Foreign Exchange | Price | Net Sales Growth |
+    |----------|------------------|-------|------------------|
+    | Grooming | (5)%             | 8%    | 4%               |
+    """,
+        answer="Grooming net sales growth was 4% in the first quarter of 2024.",
+        response=RagVerifierResponse(
+            grounded=False,
+            reason=(
+                "The document shows Grooming net sales growth of 4% for full-year "
+                "2024 versus 2023, but does not support the first-quarter 2024 scope."
+            ),
+        ),
+    )
 ]
