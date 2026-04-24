@@ -12,6 +12,8 @@ from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, ConfigDict, PrivateAttr
 
+from rag_core.prompts.profile_config import resolve_prompt_profile_context
+
 _PROMPT_PACKAGES_DIR = Path(__file__).resolve().parent / "packages"
 
 
@@ -121,6 +123,8 @@ class AgentPrompt(BaseModel):
         if self._schema_class is not None:
             parser = PydanticOutputParser(pydantic_object=self._schema_class)
             partials_to_inject["schema"] = parser.get_format_instructions()
+
+        partials_to_inject.update(resolve_prompt_profile_context(self.package_id))
 
         rendered_template = "\n".join(
             segment for segment in [self.system_template, self.user_template] if segment

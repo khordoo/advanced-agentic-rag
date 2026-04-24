@@ -167,13 +167,21 @@ advanced-rag/
 │   ├── retrival/       # Vector DB retrieval logic
 │   ├── indexing/       # Vector DB indexing logic
 │   ├── reranking/      # Reranking integrations
-│   └── prompts/        # YAML prompt templates
+│   └── prompts/        # Prompt packages + profile config
 ├── examples/           # Learning track (zero infra)
 ├── evaluation/         # RAGAS evaluation + QA generation
 ├── docker/             # Production stack (Qdrant + LangFuse)
 ├── tests/              # Test suite
 └── docs/               # Source PDFs for ingestion
 ```
+
+### Prompt Profiles
+
+You can customize high-level agent persona/domain fields (including optional `response_style`) without editing full prompt bodies:
+
+- Default profile file: `rag_core/prompts/profiles/default.yaml`
+- Optional env override path: `PROMPTS_PROFILE_PATH`
+- Strict validation toggle: `PROMPTS_PROFILE_STRICT` (default: `true`)
 
 ## Evaluation Results
 

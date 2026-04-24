@@ -20,7 +20,7 @@ from ragas.metrics import (
 from ragas.run_config import RunConfig
 
 from rag_core.agents import AgentFactory
-from rag_core.config import load_config
+from rag_core.core.config import load_config
 from rag_core.pipelines.pipeline import RAGPipeline
 
 logger = logging.getLogger(__name__)
@@ -36,7 +36,7 @@ def build_evaluation_set(
     test_cases: list[dict],
     config: dict,
     provider: str = "aws",
-    prompt_name: str = "rag_eval",
+    prompt_name: str = "evaluation_rag",
 ) -> EvaluationDataset:
     """Run RAG on each test case and build a RAGAS evaluation dataset."""
     rag = RAGPipeline(config, provider=provider, prompt_name=prompt_name)
@@ -46,6 +46,10 @@ def build_evaluation_set(
         rag_out = rag.run(case["question"])
         # remvoe file name references from the response, RAGAS penalizes for this
         rag_out["response"] = re.sub(r"\s*\[\[.*?\]\]", "", rag_out["response"])
+        print(rag_out["response"])
+        print("*" * 30)
+        print(case["ground_truth"])
+        print("*" * 30)
         samples.append(
             {
                 "user_input": case["question"],
@@ -98,7 +102,9 @@ def run_eval(
 
 
 def run_eval_pipeline(
-    config: dict | None = None, provider: str = "aws", prompt_name: str = "rag_eval"
+    config: dict | None = None,
+    provider: str = "aws",
+    prompt_name: str = "evaluation_rag",
 ):
     """End-to-end: load QA set → run RAG → evaluate → save results."""
     config = config or load_config()

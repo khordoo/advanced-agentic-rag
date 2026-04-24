@@ -11,6 +11,10 @@ wheels/
 
 # Environment (contains secrets)
 .env
+.env.*
+.ENV
+.ENV.*
+!.env.example
 
 # Runtime data & artifacts
 artifacts/
