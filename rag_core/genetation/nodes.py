@@ -110,7 +110,7 @@ class GraphNodes:
         logger.debug("Source docs count: %d", len(source_docs))
         response = self.reasoning_llm.invoke(state["messages"])
         iteration_count = state.get("iteration_count", 0)
-        logger.info("Agent response received. Iteration: %d", iteration_count)
+        logger.info("Agent response received. Iteration: %d", iteration_count + 1)
         return {
             "messages": [response],
             "iteration_count": iteration_count + 1,
@@ -253,6 +253,7 @@ class GraphNodes:
             "intent_route": intent,
             "source_docs": [],
             "iteration_count": 0,
+            "tool_call_count": 0,
             "self_correction_attempts": 0,
         }
 
@@ -268,7 +269,9 @@ class GraphNodes:
     @observe(name=NodeName.TOOLS, as_type="tool")
     def execute_tools(self, state: RagState) -> dict:
         logger.info("Executing Tool Execution node...")
-        logger.debug("Tool calls: %s", state["messages"][-1].tool_calls)
+        last_message = state["messages"][-1]
+        tool_calls = getattr(last_message, "tool_calls", None) or []
+        logger.debug("Tool calls: %s", tool_calls)
 
         tool_result = self.tool_executor.invoke({"messages": state["messages"]})
 
@@ -289,9 +292,11 @@ class GraphNodes:
             "Tool Execution node completed. Extracted %d documents.", len(raw_docs)
         )
         existing_docs = state.get("source_docs", [])
+        current_tool_call_count = state.get("tool_call_count", 0)
         return {
             "messages": tool_result["messages"],
             "source_docs": existing_docs + raw_docs,
+            "tool_call_count": current_tool_call_count + len(tool_calls),
         }
 
     @staticmethod
@@ -391,10 +396,10 @@ class GraphNodes:
     @observe(name=NodeName.TOOL_ROUTER, as_type="evaluator")
     def tool_router(self, state: RagState) -> str:
         iteration_count = state.get("iteration_count", 0)
-        logger.debug("Tool iteration count: %d", iteration_count)
+        logger.debug("Global iteration count: %d", iteration_count)
         if iteration_count >= self.settings.max_agent_iterations:
             logger.info(
-                "Max iterations reached: %d. Routing to FALLBACK_HANDLER.",
+                "Max agent iterations reached: %d. Routing to FALLBACK_HANDLER.",
                 iteration_count,
             )
             return NodeName.FALLBACK_HANDLER
@@ -402,12 +407,21 @@ class GraphNodes:
         last_message = self._get_last_message(state)
         has_tool_calls = bool(getattr(last_message, "tool_calls", None))
 
-        if has_tool_calls:
-            logger.info("Router: Detected tool calls. Routing to %s", NodeName.TOOLS)
-            return NodeName.TOOLS
+        if not has_tool_calls:
+            logger.info("Router: No tool calls. Routing to %s", NodeName.FINISH)
+            return NodeName.FINISH
 
-        logger.info("Router: No tool calls. Routing to %s", NodeName.FINISH)
-        return NodeName.FINISH
+        tool_call_count = state.get("tool_call_count", 0)
+        logger.debug("Tool call count: %d", tool_call_count)
+        if tool_call_count >= self.settings.max_tool_calls:
+            logger.info(
+                "Max tool calls reached: %d. Routing to FALLBACK_HANDLER.",
+                tool_call_count,
+            )
+            return NodeName.FALLBACK_HANDLER
+
+        logger.info("Router: Detected tool calls. Routing to %s", NodeName.TOOLS)
+        return NodeName.TOOLS
 
     def verifier_router(self, state: RagState) -> str:
         verifier_resp = state.get("verifier_response")

@@ -97,7 +97,12 @@ class AgentFactory:
                 f"Unknown provider: '{provider}'. "
                 f"Available: {', '.join(sorted(builders))}"
             )
-
+        logger.info(
+            "Model Successfully Built Model: %s: %s, temperature: %.2f",
+            provider,
+            model_name,
+            temperature,
+        )
         return builders[provider]()
 
     @classmethod

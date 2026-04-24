@@ -267,12 +267,25 @@ class IngestionSettings(BaseSettings):
 class GenerationSettings(BaseSettings):
     model_provider: str = "aws"
     reasoning_model: str = "openai.gpt-oss-120b-1:0"
-    verifier_model: str = "openai.gpt-oss-120b-1:0"
+    verifier_model: str = "amazon.nova-pro-v1:0"
     fast_model: str = "amazon.nova-micro-v1:0"
     enable_intent_routing: bool = True
     enable_grounding_verifier: bool = True
-    max_agent_iterations: int = Field(default=3, ge=1, le=50)
-    max_self_correction_attempts: int = Field(default=3, ge=1, le=50)
+    max_agent_iterations: int = Field(
+        default=25,
+        ge=5,
+        description="Global kill switch for primary agent passes. Must be >= 5 to allow basic tool gathering and verifier loops to complete.",
+    )
+    max_tool_calls: int = Field(
+        default=15,
+        ge=3,
+        description="Maximum number of individual tool calls the agent can make before triggering fallback.",
+    )
+    max_self_correction_attempts: int = Field(
+        default=3,
+        ge=1,
+        description="How many times the agent can rewrite its answer after failing the verifier.",
+    )
     intent_router_lookback: int = Field(
         default=3,
         ge=1,

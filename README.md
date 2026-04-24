@@ -100,11 +100,14 @@ cp .env.example .env
 # Edit .env with your provider credentials
 ```
 
-Generation feature toggles (defaults preserve current behavior):
+Generation controls:
 - `GENERATION_ENABLE_INTENT_ROUTING=true` — route first through `intent_router_agent`.
 - `GENERATION_ENABLE_GROUNDING_VERIFIER=true` — run `rag_verifier` self-correction loop.
+- `GENERATION_MAX_AGENT_ITERATIONS=25` — global kill switch for total primary-agent passes (`>=5`).
+- `GENERATION_MAX_TOOL_CALLS=15` — maximum number of individual tool calls before fallback (`>=3`).
+- `GENERATION_MAX_SELF_CORRECTION_ATTEMPTS=3` — verifier rewrite budget (`>=1`).
 
-Set either value to `false` to reduce generation cost/token usage.
+Set either boolean toggle value to `false` to reduce generation cost/token usage.
 
 ### 3. Run Examples (No Infra Needed)
 

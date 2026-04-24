@@ -10,6 +10,7 @@ from rag_core.core.telemetry import get_observability_callbacks
 from rag_core.genetation.graph import RagGraphFactory
 from rag_core.genetation.parsers import parse_agent_response
 from rag_core.prompts.loader import AgentPrompt
+from rag_core.core.config import get_generation_settings
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -17,12 +18,20 @@ logger = logging.getLogger(__name__)
 
 def run_chat_loop():
     logger.info("Initializing Agent Prompt & LLM...")
+    settings = get_generation_settings()
     agent_prompt = AgentPrompt.from_package("primary_rag_agent")
     reasoning_llm = AgentFactory.create(
-        provider="aws", model_name="amazon.nova-pro-v1:0"
+        provider=settings.model_provider, model_name=settings.reasoning_model
     )
-    fast_llm = AgentFactory.create(provider="aws", model_name="amazon.nova-micro-v1:0")
-    app = RagGraphFactory.build(reasoning_llm=reasoning_llm, fast_llm=fast_llm)
+    verifying_llm = AgentFactory.create(
+        provider=settings.model_provider, model_name=settings.verifier_model
+    )
+    fast_llm = AgentFactory.create(
+        provider=settings.model_provider, model_name=settings.fast_model
+    )
+    app = RagGraphFactory.build(
+        reasoning_llm=reasoning_llm, verifier_llm=verifying_llm, fast_llm=fast_llm
+    )
 
     messages = []
     dim = "\033[2m"
