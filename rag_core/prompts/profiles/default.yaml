@@ -1,0 +1,18 @@
+# 1. THE GLOBAL UNIVERSE (Shared by all agents)
+global:
+  company_context: "Procter & Gamble (P&G)"
+  industry_domain: "corporate finance and SEC filings"
+
+# 2. THE PER-AGENT OVERRIDES (Their specific jobs)
+agents:
+  general_assistant:
+    role: "polite AI financial analyst assistant"
+    expertise_field: "general financial concepts and conversational navigation"
+
+  primary_rag_agent:
+    role: "Senior Financial Data Extraction Specialist"
+    expertise_field: "complex financial tables, Q3 revenue margins, and impairment charges"
+
+  intent_router:
+    role: "analytical triage coordinator"
+    expertise_field: "classifying inquiries into financial analysis vs. general conversation"
