@@ -290,3 +290,80 @@ def test_execute_tools_increments_tool_call_count():
         }
     )
     assert result["tool_call_count"] == 6
+
+
+def test_self_correcting_agent_handles_list_answer_content():
+    reasoning_model = _DummyModel()
+    verifier_model = _DummyModel(
+        response_content=json.dumps({"grounded": True, "reason": "looks grounded"})
+    )
+    fast_model = _DummyModel()
+    nodes = GraphNodes(
+        reasoning_llm=reasoning_model,
+        verifier_llm=verifier_model,
+        fast_llm=fast_model,
+        tools=[_make_tool()],
+        settings=GenerationSettings(enable_grounding_verifier=True),
+    )
+
+    result = nodes.execute_self_correcting_agent(
+        {
+            "messages": [
+                HumanMessage(content="q"),
+                AIMessage(
+                    content=[
+                        {"type": "text", "text": "I cannot find the answer."},
+                        {
+                            "type": "reasoning_content",
+                            "reasoning_content": {"text": "hidden chain-of-thought"},
+                        },
+                    ]
+                ),
+            ],
+            "source_docs": [Document(page_content="doc", metadata={})],
+            "token_budget": 0,
+            "intent_route": "domain_expert",
+            "self_correction_attempts": 0,
+        }
+    )
+
+    assert result["verifier_response"].grounded is True
+    assert result["verifier_response"].reason == "looks grounded"
+    assert verifier_model.invoke_calls == 1
+
+
+def test_post_processing_handles_list_answer_content():
+    model = _DummyModel()
+    nodes = GraphNodes(
+        reasoning_llm=model,
+        verifier_llm=model,
+        fast_llm=model,
+        tools=[_make_tool()],
+        settings=GenerationSettings(),
+    )
+
+    result = nodes.execute_post_processing(
+        {
+            "messages": [
+                AIMessage(
+                    content=[
+                        {
+                            "type": "text",
+                            "text": "I cannot find the answer in the provided documents.",
+                        },
+                        {
+                            "type": "reasoning_content",
+                            "reasoning_content": {"text": "hidden chain-of-thought"},
+                        },
+                    ]
+                )
+            ],
+            "source_docs": [],
+            "token_budget": 0,
+            "intent_route": "domain_expert",
+        }
+    )
+
+    payload = json.loads(result["messages"][0].content)
+    assert payload["answer"] == "I cannot find the answer in the provided documents."
+    assert payload["citations"] == []

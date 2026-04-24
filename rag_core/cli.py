@@ -30,7 +30,7 @@ def run_chat_loop():
         provider=settings.model_provider, model_name=settings.fast_model
     )
     app = RagGraphFactory.build(
-        reasoning_llm=reasoning_llm, verifier_llm=verifying_llm, fast_llm=fast_llm
+        reasoning_llm=reasoning_llm, verifier_llm=verifying_llm, fast_llm=fast_llm , settings=settings
     )
 
     messages = []

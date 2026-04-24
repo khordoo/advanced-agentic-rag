@@ -27,6 +27,13 @@ system_template: |
   16. A refusal or uncertainty statement is grounded when it is supported by the absence or incompleteness of evidence in the provided documents.
   17. Do not mark an answer as ungrounded only because it does not provide the requested value. Mark it ungrounded only if it makes an unsupported or contradicted claim.
 
+  ### EVALUATING MISSING INFORMATION (ABSTENTIONS)
+  1. Insufficient-evidence answers ("I cannot find the answer") are highly valuable and CAN be marked as grounded=True.
+  2. If the generated answer says the requested information is not available, verify whether the EXACT requested entity, metric, time period, unit, and scope are present in the documents.
+  3. Do not mark an abstention as ungrounded just because the documents contain "related" information. Related information is not enough if it does not match the exact requested scope.
+  4. Pay strict attention to timeframes. For example: if the documents only contain annual data but the question asks for quarterly data, an answer stating the quarterly value is missing is 100% grounded.
+  5. If the agent provides related information as context (e.g., "I cannot find Q1, but FY24 is 4%"), ensure that related information is clearly labeled as context, not as the direct answer.
+
   ## Examples
   {examples}
 

@@ -7,6 +7,27 @@ from rag_core.prompts.specs.base import RagFinalResponseSchema, Citation
 logger = logging.getLogger(__name__)
 
 
+def extract_text_from_message(content: str | list | dict) -> str:
+    """
+    Provider-agnostic text extraction from LangChain message content.
+    Works seamlessly across OpenAI, Anthropic, Bedrock, and local LLMs.
+    """
+    if isinstance(content, str):
+        return content
+
+    if isinstance(content, list):
+        text_blocks = []
+        for block in content:
+            if isinstance(block, str):
+                text_blocks.append(block)
+            elif isinstance(block, dict) and "text" in block:
+                # Extracts text safely regardless of other provider-specific keys
+                text_blocks.append(block["text"])
+        return " ".join(text_blocks).strip()
+
+    return str(content).strip()
+
+
 def extract_clean_json(raw_response: str) -> dict:
     """Extracts the JSON object from a chatty micro-model response."""
     # This regex looks for the first '{' and the last '}', grabbing everything inside.
@@ -107,7 +128,7 @@ def parse_markdown_response(raw: str) -> RagFinalResponseSchema:
     return RagFinalResponseSchema(answer=answer_text, citations=citations)
 
 
-def parse_agent_response(raw: str) -> RagFinalResponseSchema:
+def parse_agent_response(raw: str | list | dict) -> RagFinalResponseSchema:
     """Unified parser: detects format and dispatches to the right parser.
 
     Strategy:
@@ -115,12 +136,13 @@ def parse_agent_response(raw: str) -> RagFinalResponseSchema:
     2. Otherwise try Markdown parsing (the primary expected format).
     3. If both fail, return the raw text as the answer with no citations.
     """
-    stripped = raw.strip()
+    normalized = extract_text_from_message(raw)
+    stripped = normalized.strip()
 
     # If it looks like JSON, try that first
     if stripped.startswith("{"):
         try:
-            data = extract_clean_json(raw)
+            data = extract_clean_json(normalized)
             logger.debug("Parsed response as JSON.")
             return RagFinalResponseSchema(**data)
         except Exception as e:
@@ -128,7 +150,7 @@ def parse_agent_response(raw: str) -> RagFinalResponseSchema:
 
     # Primary path: Markdown with ### Sources
     try:
-        result = parse_markdown_response(raw)
+        result = parse_markdown_response(normalized)
         if result.answer:
             logger.debug("Successfully parsed Markdown response.")
             return result
@@ -138,4 +160,3 @@ def parse_agent_response(raw: str) -> RagFinalResponseSchema:
     # Last resort: return the raw text as the answer with no citations
     logger.warning("All parsers failed. Returning raw response as answer.")
     return RagFinalResponseSchema(answer=stripped, citations=[])
-

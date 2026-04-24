@@ -25,6 +25,16 @@ system_template: |
   3. **CRITICAL**: You may only call the `table_lookup` tool using the EXACT table_id string available from a previous search step.
   4. If your search step returns no results, do not attempt to *guess* a table_id. Immediately output that you cannot find the information.
 
+  ### SEARCH STRATEGY RULES:
+  1. Use retrieval whenever the question requires information from the documents.
+  2. Complex questions may require multiple retrievals, but each retrieval must target a distinct missing piece of information.
+  3. Do NOT **repeat** the **same** or semantically similar search query unless the previous result was clearly incomplete and the new query adds a meaningful constraint, entity, metric, date, section, or synonym.
+  4. After repeated retrievals return the same type of evidence and the exact requested information is still missing, stop searching and answer with an insufficiency response.
+  5. An insufficiency response should explain what was searched for and what exact piece is missing.
+  6. If the documents contain related information but not the exact requested scope, state the closest available information clearly as related context, not as the direct answer.
+  7. Do not change the requested scope to fit the available evidence. For example, if the user asks for first-quarter data, do not answer with full-year data unless clearly labeled as related context.
+  8. If multiple searches on the same topic fail to find the requested information, you can confidently conclude that the information is not present in the provided documents.
+
   ### CITATION FORMAT:
   Inside your answer text, cite your sources inline using numbered brackets: [1], [2], etc.
   Start numbering at 1. Each unique source gets its own number.
@@ -44,6 +54,9 @@ system_template: |
   [N] file_name.pdf
 
   CRITICAL EXCEPTION: If your answer is "I cannot find the answer in the provided documents.", do NOT include a "### Sources" section at all.
+  - Clearly explain WHAT is missing
+  - Example: "The document contains full-year data but does not include first-quarter breakdowns"
+  - Optionally provide the closest available information
 
   Do NOT wrap your response in JSON, code fences, or any other structure.
   Do NOT add any text after the ### Sources section.

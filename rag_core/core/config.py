@@ -267,7 +267,7 @@ class IngestionSettings(BaseSettings):
 class GenerationSettings(BaseSettings):
     model_provider: str = "aws"
     reasoning_model: str = "openai.gpt-oss-120b-1:0"
-    verifier_model: str = "amazon.nova-pro-v1:0"
+    verifier_model: str = "openai.gpt-oss-120b-1:0"
     fast_model: str = "amazon.nova-micro-v1:0"
     enable_intent_routing: bool = True
     enable_grounding_verifier: bool = True

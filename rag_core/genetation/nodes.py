@@ -22,7 +22,7 @@ from rag_core.prompts.packages.intent_router.schema import (
     IntentCategory,
     IntentRouterResponse,
 )
-from rag_core.genetation.parsers import parse_agent_response
+from rag_core.genetation.parsers import parse_agent_response, extract_text_from_message
 from tenacity import (
     retry,
     stop_after_attempt,
@@ -141,7 +141,7 @@ class GraphNodes:
                 "self_correction_attempts": current_attempts + 1,
             }
 
-        generated_answer = state["messages"][-1].content
+        generated_answer = extract_text_from_message(state["messages"][-1].content)
         logger.info("Generated answer: %s", generated_answer)
         logger.info("Current self correction attempts: %d", current_attempts)
 
@@ -163,7 +163,8 @@ class GraphNodes:
             logger.info("Invoking Verifier LLM...")
             response = self.verifier_llm.invoke(prompt.to_messages())
             # This will throw a ValueError if the LLM output is garbage
-            return RagVerifierResponse.model_validate_json(response.content)
+            response_text = extract_text_from_message(response.content)
+            return RagVerifierResponse.model_validate_json(response_text)
 
         # --- PARSING & FALLBACK ---
         try:
@@ -358,7 +359,8 @@ class GraphNodes:
     def execute_post_processing(self, state: RagState) -> dict:
         logger.info("Executing Post-Processing node...")
         try:
-            parsed_response = parse_agent_response(state["messages"][-1].content)
+            raw_content = extract_text_from_message(state["messages"][-1].content)
+            parsed_response = parse_agent_response(raw_content)
 
             # Build lookup from actual retrieved documents keyed by
             # file_id, display name, and case-insensitive variants
@@ -389,7 +391,11 @@ class GraphNodes:
             return {"messages": [AIMessage(content=parsed_response.model_dump_json())]}
         except Exception as e:
             logger.error("Post-processing failed, returning raw response: %s", e)
-            raw_content = state["messages"][-1].content if state.get("messages") else ""
+            raw_content = (
+                extract_text_from_message(state["messages"][-1].content)
+                if state.get("messages")
+                else ""
+            )
             fallback = RagFinalResponseSchema(answer=raw_content, citations=[])
             return {"messages": [AIMessage(content=fallback.model_dump_json())]}
 
