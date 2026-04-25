@@ -14,7 +14,7 @@ from typing import Any
 from qdrant_client import QdrantClient, models
 
 from rag_core.core.config import QdrantSettings, get_qdrant_settings
-from rag_core.db.connection_manager import QdrantConnectionManager
+from rag_core.store.qdrant import QdrantConnectionManager
 from rag_core.indexing.base import BaseIndexer
 from rag_core.schemas import (
     CHILD_INDEX_SCHEMA,
