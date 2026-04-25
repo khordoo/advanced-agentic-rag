@@ -1,7 +1,7 @@
 # Source Documents for Ingestion
 
 This directory is the ingestion input root for the RAG pipeline.
-For human documentation and usage guides, use `docs/`.
+For project documentation and usage guides, use `docs/`.
 
 ## How It Works
 
