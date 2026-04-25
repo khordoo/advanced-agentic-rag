@@ -1,6 +1,7 @@
 # Documentation
 
-This `docs/` directory is for human-facing guides only.
+This `docs/` directory contains project guides.
+The root `README.md` is the landing page; this folder holds detailed documentation.
 
 Where to put what:
 - Put documentation and operational guidance in `docs/`.
