@@ -239,7 +239,7 @@ class PostgresSettings(BaseSettings):
     password: str = "password"
     host: str = "localhost"  # 'core-db' when running inside Docker
     port: int = 5432
-    rag_db: str = "rag_registry"
+    rag_db: str = "rag_core"
 
     # Pydantic will ONLY look for variables starting with "POSTGRES_"
     model_config = SettingsConfigDict(

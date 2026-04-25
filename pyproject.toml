@@ -5,6 +5,7 @@ description = "Advanced RAG pipeline with hierarchical chunking, hybrid search (
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "alembic>=1.18.4",
     "docling>=2.82.0",
     "fastapi>=0.115",
     "fastembed>=0.8.0",
@@ -20,10 +21,12 @@ dependencies = [
     "langgraph>=1.1.4",
     "more-itertools>=11.0.1",
     "pandas>=2.3.3",
+    "psycopg[binary]>=3.3.3",
     "python-dotenv>=1.2.2",
     "pyyaml>=6.0.3",
     "ragas>=0.4.3",
     "sentence-transformers>=5.3.0",
+    "sqlalchemy>=2.0.48",
     "tenacity>=9.1.4",
     "uvicorn>=0.34",
 ]
