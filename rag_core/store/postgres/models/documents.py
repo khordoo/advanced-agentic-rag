@@ -1,116 +1,133 @@
+from __future__ import annotations
+
 import datetime
 import enum
-from typing import List, Optional
+from typing import Optional, TYPE_CHECKING
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
-    String,
-    Text,
     DateTime,
-    UniqueConstraint,
+    Enum as SQLEnum,
+    ForeignKey,
     Index,
     Integer,
-    ForeignKey,
-    Enum as SQLEnum
+    String,
+    Text,
+    UniqueConstraint,
 )
-from sqlalchemy.sql import func
-from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
-# Make sure you have pgvector installed: pip install pgvector
-from pgvector.sqlalchemy import Vector
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.sql import func
 
 from rag_core.store.postgres.models.base import Base
 
-VECTOR_DIMS=384
+if TYPE_CHECKING:
+    from rag_core.store.postgres.models.pipelines import PipelineRun
 
-class IngestionStatus(str, enum.Enum):
-    """State machine for the background ingestion worker."""
+
+class AssetStatus(str, enum.Enum):
+    """Latest processing state for a source asset."""
+
     PENDING = "pending"
     PROCESSING = "processing"
     COMPLETED = "completed"
     FAILED = "failed"
+    DELETED = "deleted"
+    IGNORED = "ignored"
 
 
-class DocumentRegistry(Base):
-    __tablename__ = 'document_registry'
+class SourceAsset(Base):
+    __tablename__ = "source_assets"
 
-    # --- Database Mechanics ---
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     file_id: Mapped[str] = mapped_column(String(255), unique=True, index=True)
 
-    # --- Location Identity ---
     folder_name: Mapped[str] = mapped_column(String(255))
     file_name: Mapped[str] = mapped_column(String(255))
     source_uri: Mapped[str] = mapped_column(String(1024))
-
-    # --- Content State ---
     content_hash: Mapped[str] = mapped_column(String(64))
 
-    # --- State Machine & Metadata ---
-    status: Mapped[IngestionStatus] = mapped_column(
-        SQLEnum(IngestionStatus, name="ingestion_status_enum"),
-        default=IngestionStatus.PENDING
+    status: Mapped[AssetStatus] = mapped_column(
+        SQLEnum(AssetStatus, name="asset_status_enum",native_enum=False,length=50),
+        default=AssetStatus.PENDING,
+        nullable=False,
     )
+    worker_id: Mapped[Optional[str]] = mapped_column(String(50))
     error_message: Mapped[Optional[str]] = mapped_column(Text)
-    ingestion_metadata: Mapped[Optional[dict]] = mapped_column(JSONB, server_default='{}')
+    asset_metadata: Mapped[dict] = mapped_column(
+        JSONB, server_default="{}", nullable=False
+    )
 
-    # --- Audit Trail ---
     created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     updated_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
     )
+
+    last_seen_run_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("pipeline_runs.id", ondelete="SET NULL"), index=True
+    )
+
+    last_seen_run: Mapped[Optional["PipelineRun"]] = relationship()
 
     __table_args__ = (
-        UniqueConstraint('folder_name', 'file_name', name='uix_folder_file'),
+        UniqueConstraint(
+            "folder_name", "file_name", name="uix_source_asset_folder_file"
+        ),
     )
 
 
-class ParentDocument(Base):
-    __tablename__ = 'parent_documents'
+class DocumentSection(Base):
+    __tablename__ = "document_sections"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    registry_id: Mapped[int] = mapped_column(ForeignKey('document_registry.id', ondelete='CASCADE'))
+    asset_id: Mapped[int] = mapped_column(
+        ForeignKey("source_assets.id", ondelete="CASCADE"), index=True
+    )
 
-    # Denormalized from registry for fast access without joins
     file_id: Mapped[str] = mapped_column(String(255), index=True)
     source_uri: Mapped[str] = mapped_column(String(1024))
-
-    doc_type: Mapped[str] = mapped_column(String(50)) # e.g., 'text', 'table'
-    # Using an array of integers to support spanning multiple pages
-    page_numbers: Mapped[Optional[list[int]]] = mapped_column(ARRAY(Integer))
+    doc_type: Mapped[str] = mapped_column(String(50))
+    page_numbers: Mapped[list[int]] = mapped_column(
+        ARRAY(Integer), server_default="{}", nullable=False
+    )
     text: Mapped[str] = mapped_column(Text)
 
+    asset: Mapped["SourceAsset"] = relationship()
 
 
-class ChildDocument(Base):
-    __tablename__ = 'child_documents'
+class DocumentChunk(Base):
+    __tablename__ = "document_chunks"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    parent_id: Mapped[int] = mapped_column(ForeignKey('parent_documents.id', ondelete='CASCADE'))
+    section_id: Mapped[int] = mapped_column(
+        ForeignKey("document_sections.id", ondelete="CASCADE"), index=True
+    )
 
-    # Denormalized for ultra-fast hybrid search filtering
     file_id: Mapped[str] = mapped_column(String(255), index=True)
-    page_numbers: Mapped[Optional[list[int]]] = mapped_column(ARRAY(Integer))
-
-    # The actual semantic content
+    page_numbers: Mapped[list[int]] = mapped_column(
+        ARRAY(Integer), server_default="{}", nullable=False
+    )
     text: Mapped[str] = mapped_column(Text)
-
-    # Vector Column (AWe leave it empty and enforace it later via settigns)
     vector: Mapped[list[float]] = mapped_column(Vector())
 
-    # Extensible filtering arrays (like Qdrant)
-    scope: Mapped[Optional[list[str]]] = mapped_column(ARRAY(String), server_default='{}')
-    tags: Mapped[Optional[list[str]]] = mapped_column(ARRAY(String), server_default='{}')
+    scopes: Mapped[list[str]] = mapped_column(
+        ARRAY(String), server_default="{}", nullable=False
+    )
+    tags: Mapped[list[str]] = mapped_column(
+        ARRAY(String), server_default="{}", nullable=False
+    )
+    chunk_metadata: Mapped[dict] = mapped_column(
+        JSONB, server_default="{}", nullable=False
+    )
 
-    # Catch-all for chunking strategy, character overlap, etc.
-    chunk_metadata: Mapped[Optional[dict]] = mapped_column(JSONB, server_default='{}')
-
-    # --- Relationships ---
-    parent: Mapped["ParentDocument"] = relationship()
+    section: Mapped["DocumentSection"] = relationship()
 
     __table_args__ = (
-        # GIN Indexes to make the Array filtering as fast as Qdrant
-        Index('ix_child_scope_gin', 'scope', postgresql_using='gin'),
-        Index('ix_child_tags_gin', 'tags', postgresql_using='gin'),
+        Index("ix_document_chunks_scopes_gin", "scopes", postgresql_using="gin"),
+        Index("ix_document_chunks_tags_gin", "tags", postgresql_using="gin"),
     )
