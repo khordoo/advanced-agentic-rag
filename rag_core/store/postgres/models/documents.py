@@ -44,7 +44,7 @@ class SourceAsset(Base):
 
     folder_name: Mapped[str] = mapped_column(String(255))
     file_name: Mapped[str] = mapped_column(String(255))
-    source_uri: Mapped[str] = mapped_column(String(1024))
+    source_uri: Mapped[str] = mapped_column(String(4096))
     content_hash: Mapped[str] = mapped_column(String(64))
 
     status: Mapped[AssetStatus] = mapped_column(
@@ -90,7 +90,7 @@ class DocumentSection(Base):
     )
 
     file_id: Mapped[str] = mapped_column(String(255), index=True)
-    source_uri: Mapped[str] = mapped_column(String(1024))
+    source_uri: Mapped[str] = mapped_column(String(4096))
     doc_type: Mapped[str] = mapped_column(String(50))
     page_numbers: Mapped[list[int]] = mapped_column(
         ARRAY(Integer), server_default="{}", nullable=False

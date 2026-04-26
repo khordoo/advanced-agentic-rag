@@ -1,8 +1,8 @@
 """initial_schema
 
-Revision ID: fd9e9fbaf9e0
+Revision ID: 524e8efd785d
 Revises: 729088a76e80
-Create Date: 2026-04-26 12:45:09.250287
+Create Date: 2026-04-26 14:04:30.951222
 
 """
 from typing import Sequence, Union
@@ -13,7 +13,7 @@ from sqlalchemy.dialects import postgresql
 import pgvector.sqlalchemy
 
 # revision identifiers, used by Alembic.
-revision: str = 'fd9e9fbaf9e0'
+revision: str = '524e8efd785d'
 down_revision: Union[str, Sequence[str], None] = '729088a76e80'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -36,7 +36,7 @@ def upgrade() -> None:
     sa.Column('file_id', sa.String(length=255), nullable=False),
     sa.Column('folder_name', sa.String(length=255), nullable=False),
     sa.Column('file_name', sa.String(length=255), nullable=False),
-    sa.Column('source_uri', sa.String(length=1024), nullable=False),
+    sa.Column('source_uri', sa.String(length=4096), nullable=False),
     sa.Column('content_hash', sa.String(length=64), nullable=False),
     sa.Column('status', sa.Enum('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', 'DELETED', 'IGNORED', name='asset_status_enum', native_enum=False, length=50), nullable=False),
     sa.Column('worker_id', sa.String(length=50), nullable=True),
@@ -55,7 +55,7 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
     sa.Column('asset_id', sa.Integer(), nullable=False),
     sa.Column('file_id', sa.String(length=255), nullable=False),
-    sa.Column('source_uri', sa.String(length=1024), nullable=False),
+    sa.Column('source_uri', sa.String(length=4096), nullable=False),
     sa.Column('doc_type', sa.String(length=50), nullable=False),
     sa.Column('page_numbers', postgresql.ARRAY(sa.Integer()), server_default='{}', nullable=False),
     sa.Column('text', sa.Text(), nullable=False),
