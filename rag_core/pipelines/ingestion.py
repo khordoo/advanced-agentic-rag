@@ -174,7 +174,7 @@ class IngestionPipeline:
                 logger.warning(f"Failed to ingest: {e}", extra={"file_path": file_path})
 
         logger.info(
-            f"Ingestion run completed: Failed files: {len(failed_files)}, Successful files: {total_processed} "
+            f"Ingestion run completed: successful_files={total_processed}, failed_files: {len(failed_files)}"
         )
 
     def _get_tags_for_file(self, file_path: str) -> list[str]:

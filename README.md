@@ -30,6 +30,25 @@ uv run rag_core/pipelines/ingestion.py
 uv run rag_core/cli.py
 ```
 
+## Database Migrations
+
+Use `make` shortcuts for Alembic commands (config is wired to `db/alembic.ini`).
+
+```bash
+# Apply latest migration
+make migrate-up
+
+# Upgrade/downgrade to a specific revision (or relative step like -1 / +1)
+make migrate-up REV=<revision_or_step>
+make migrate-down REV=<revision_or_step>
+
+# Create a new autogenerate migration
+make migrate-new MSG="describe schema change"
+
+# Show migration history
+make migrate-status
+```
+
 ## Folder Conventions
 
 - `docs/` contains project guides and operational documentation.

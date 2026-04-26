@@ -18,6 +18,8 @@ wheels/
 
 # Runtime data & artifacts
 artifacts/
+/artifacts/models/
+# Explicitly ignore model artifacts (already covered by artifacts/, kept for clarity)
 data/*
 !data/source_docs/
 data/source_docs/*
@@ -40,10 +42,6 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
-
-
-# Models (downloaded at runtime)
-models/
 
 # Project conventions
 AGENTS.md

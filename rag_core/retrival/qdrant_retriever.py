@@ -15,7 +15,7 @@ from langchain_core.documents import Document
 from qdrant_client import QdrantClient, models
 
 from rag_core.core.config import RetrivalSettings, QdrantSettings, get_qdrant_settings
-from rag_core.db.connection_manager import QdrantConnectionManager
+from rag_core.store.qdrant import QdrantConnectionManager
 from rag_core.retrival.base import BaseRetriever
 from rag_core.reranking import BaseReranker, LocalReranker
 from rag_core.schemas import (
