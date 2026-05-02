@@ -12,7 +12,7 @@ from rag_core.store.postgres.models.base import Base
 
 
 
-class IngestionRunPhase(str, enum.Enum):
+class IngestionRunStatus(str, enum.Enum):
     """Recoverable phase marker for a pipeline run."""
 
     SCANNING = "scanning"
@@ -27,9 +27,9 @@ class IngestionRun(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
 
-    phase: Mapped[IngestionRunPhase] = mapped_column(
-        SQLEnum(IngestionRunPhase, name="run_phase_enum",native_enum=False,length=50),
-        default=IngestionRunPhase.SCANNING,
+    status: Mapped[IngestionRunStatus] = mapped_column(
+        SQLEnum(IngestionRunStatus, name="run_status_enum",native_enum=False,length=50),
+        default=IngestionRunStatus.SCANNING,
         nullable=False,
     )
     error_message: Mapped[Optional[str]] = mapped_column(Text)
