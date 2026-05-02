@@ -13,14 +13,17 @@ from rag_core.store.postgres.models.base import Base
 
 
 class IngestionRunStatus(str, enum.Enum):
-    """Recoverable phase marker for a pipeline run."""
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
 
-    SCANNING = "scanning"
-    RECONCILING = "reconciling"
-    INGESTING = "ingesting"
-    COMPLETED = "completed"
-    FAILED = "failed"
-
+# 2. The Pipeline Steps (Where is it currently?)
+class IngestionRunPhase(str, enum.Enum):
+    SCANNING = "SCANNING"
+    PARSING = "PARSING"
+    CHUNKING = "CHUNKING"
+    EMBEDDING = "EMBEDDING"
 
 class IngestionRun(Base):
     __tablename__ = "ingestion_runs"
@@ -29,7 +32,11 @@ class IngestionRun(Base):
 
     status: Mapped[IngestionRunStatus] = mapped_column(
         SQLEnum(IngestionRunStatus, name="run_status_enum",native_enum=False,length=50),
-        default=IngestionRunStatus.SCANNING,
+        default=IngestionRunStatus.PENDING,
+        nullable=False,
+    )
+    phase: Mapped[IngestionRunPhase] = mapped_column(
+        SQLEnum(IngestionRunStatus, name="run_phase_enum",native_enum=False,length=50),
         nullable=False,
     )
     error_message: Mapped[Optional[str]] = mapped_column(Text)
