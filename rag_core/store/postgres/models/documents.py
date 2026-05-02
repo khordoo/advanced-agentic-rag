@@ -22,7 +22,7 @@ from sqlalchemy.sql import func
 from rag_core.store.postgres.models.base import Base
 
 if TYPE_CHECKING:
-    from rag_core.store.postgres.models.pipelines import PipelineRun
+    from rag_core.store.postgres.models.pipelines import IngestionRun
 
 
 class AssetStatus(str, enum.Enum):
@@ -69,10 +69,10 @@ class SourceAsset(Base):
     )
 
     last_seen_run_id: Mapped[Optional[int]] = mapped_column(
-        ForeignKey("pipeline_runs.id", ondelete="SET NULL"), index=True
+        ForeignKey("ingestion_runs.id", ondelete="SET NULL"), index=True
     )
 
-    last_seen_run: Mapped[Optional["PipelineRun"]] = relationship()
+    last_seen_run: Mapped[Optional["IngestionRun"]] = relationship()
 
     __table_args__ = (
         UniqueConstraint(

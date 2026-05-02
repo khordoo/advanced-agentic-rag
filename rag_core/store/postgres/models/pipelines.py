@@ -11,14 +11,8 @@ from sqlalchemy.sql import func
 from rag_core.store.postgres.models.base import Base
 
 
-class PipelineType(str, enum.Enum):
-    """Pipeline families that can share run tracking."""
 
-    INGESTION = "ingestion"
-    EVALUATION = "evaluation"
-
-
-class RunPhase(str, enum.Enum):
+class IngestionRunPhase(str, enum.Enum):
     """Recoverable phase marker for a pipeline run."""
 
     SCANNING = "scanning"
@@ -28,19 +22,14 @@ class RunPhase(str, enum.Enum):
     FAILED = "failed"
 
 
-class PipelineRun(Base):
-    __tablename__ = "pipeline_runs"
+class IngestionRun(Base):
+    __tablename__ = "ingestion_runs"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
 
-    pipeline_type: Mapped[PipelineType] = mapped_column(
-        SQLEnum(PipelineType, name="pipeline_type_enum",native_enum=False,length=50),
-        default=PipelineType.INGESTION,
-        nullable=False,
-    )
-    phase: Mapped[RunPhase] = mapped_column(
-        SQLEnum(RunPhase, name="run_phase_enum",native_enum=False,length=50),
-        default=RunPhase.SCANNING,
+    phase: Mapped[IngestionRunPhase] = mapped_column(
+        SQLEnum(IngestionRunPhase, name="run_phase_enum",native_enum=False,length=50),
+        default=IngestionRunPhase.SCANNING,
         nullable=False,
     )
     error_message: Mapped[Optional[str]] = mapped_column(Text)
