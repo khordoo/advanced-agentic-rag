@@ -240,7 +240,22 @@ class PostgresSettings(BaseSettings):
     host: str = "localhost"  # 'core-db' when running inside Docker
     port: int = 5432
     rag_db: str = "rag_core"
+    pool_pre_ping:bool=True
+    max_overflow:int=10
+    pool_size:int=5
+    pool_recycle:int=3600
+    pool_timeout:int=30
+    statement_timeout_ms: int = 60000
 
+    @property
+    def connect_args(self)->dict:
+        """Dynamically construct connect_args for SQLAlchemy."""
+        return {"options": f"-c statement_timeout={self.statement_timeout_ms}"}
+
+    @property
+    def uri(self)->str:
+        """Build the connection string dynamically too!"""
+        return f"postgresql+psycopg://{self.user}:{self.password}@{self.host}:{self.port}/{self.rag_db}"
     # Pydantic will ONLY look for variables starting with "POSTGRES_"
     model_config = SettingsConfigDict(
         env_prefix="POSTGRES_", env_file=".env", extra="ignore"
