@@ -19,7 +19,7 @@ from sqlalchemy.sql import func
 from rag_core.store.postgres.models.base import Base
 
 
-class IngestionRunStatus(str, enum.Enum):
+class IngestionRunState(str, enum.Enum):
     """Lifecycle state for an ingestion run."""
 
     PENDING = "PENDING"
@@ -28,7 +28,7 @@ class IngestionRunStatus(str, enum.Enum):
     FAILED = "FAILED"
 
 
-class IngestionRunPhase(str, enum.Enum):
+class IngestionRunStep(str, enum.Enum):
     """Current processing phase for a running ingestion run."""
 
     SCANNING = "SCANNING"
@@ -44,22 +44,22 @@ class IngestionRun(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
 
-    status: Mapped[IngestionRunStatus] = mapped_column(
+    state: Mapped[IngestionRunState] = mapped_column(
         SQLEnum(
-            IngestionRunStatus,
-            name="run_status_enum",
+            IngestionRunState,
+            name="run_state_enum",
             native_enum=False,
             validate_strings=True,
             create_constraint=True,
             length=50,
         ),
-        default=IngestionRunStatus.PENDING,
+        default=IngestionRunState.PENDING,
         nullable=False,
     )
-    phase: Mapped[IngestionRunPhase] = mapped_column(
+    step: Mapped[IngestionRunStep] = mapped_column(
         SQLEnum(
-            IngestionRunPhase,
-            name="run_phase_enum",
+            IngestionRunStep,
+            name="run_step_enum",
             native_enum=False,
             validate_strings=True,
             create_constraint=True,
@@ -77,7 +77,7 @@ class IngestionRun(Base):
     )
 
 
-class AssetStatus(str, enum.Enum):
+class AssetState(str, enum.Enum):
     """Latest processing state for a source asset."""
 
     PENDING = "PENDING"
@@ -99,16 +99,16 @@ class SourceAsset(Base):
     source_uri: Mapped[str] = mapped_column(String(4096))
     content_hash: Mapped[str] = mapped_column(String(64))
 
-    status: Mapped[AssetStatus] = mapped_column(
+    state: Mapped[AssetState] = mapped_column(
         SQLEnum(
-            AssetStatus,
-            name="asset_status_enum",
+            AssetState,
+            name="asset_state_enum",
             native_enum=False,
             validate_strings=True,
             create_constraint=True,
             length=50,
         ),
-        default=AssetStatus.PENDING,
+        default=AssetState.PENDING,
         nullable=False,
     )
     worker_id: Mapped[Optional[str]] = mapped_column(String(50))
@@ -140,4 +140,4 @@ class SourceAsset(Base):
     )
 
     def __repr__(self) -> str:
-        return f"SourceAsset(file_name={self.file_name}, status={self.status})"
+        return f"SourceAsset(file_name={self.file_name}, state={self.state})"

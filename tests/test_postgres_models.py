@@ -4,10 +4,10 @@ from sqlalchemy.orm import configure_mappers
 
 from rag_core.store.postgres.models.documents import DocumentChunk, DocumentSection
 from rag_core.store.postgres.models.ingestion import (
-    AssetStatus,
+    AssetState,
     IngestionRun,
-    IngestionRunPhase,
-    IngestionRunStatus,
+    IngestionRunState,
+    IngestionRunStep,
     SourceAsset,
 )
 
@@ -22,13 +22,13 @@ def test_postgres_domain_models_configure() -> None:
 
 
 def test_postgres_domain_enums_match_contract() -> None:
-    assert {item.name for item in IngestionRunStatus} == {
+    assert {item.name for item in IngestionRunState} == {
         "PENDING",
         "RUNNING",
         "COMPLETED",
         "FAILED",
     }
-    assert {item.name for item in IngestionRunPhase} == {
+    assert {item.name for item in IngestionRunStep} == {
         "SCANNING",
         "PARSING",
         "CHUNKING",
@@ -36,7 +36,7 @@ def test_postgres_domain_enums_match_contract() -> None:
         "INGESTING",
         "RECONCILING",
     }
-    assert {item.name for item in AssetStatus} == {
+    assert {item.name for item in AssetState} == {
         "PENDING",
         "PROCESSING",
         "COMPLETED",
