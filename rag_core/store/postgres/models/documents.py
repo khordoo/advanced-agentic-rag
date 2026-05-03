@@ -28,12 +28,12 @@ if TYPE_CHECKING:
 class AssetStatus(str, enum.Enum):
     """Latest processing state for a source asset."""
 
-    PENDING = "pending"
-    PROCESSING = "processing"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    DELETED = "deleted"
-    IGNORED = "ignored"
+    PENDING = "PENDING"
+    PROCESSING = "PROCESSING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    DELETED = "DELETED"
+    IGNORED = "IGNORED"
 
 
 class SourceAsset(Base):
@@ -48,7 +48,8 @@ class SourceAsset(Base):
     content_hash: Mapped[str] = mapped_column(String(64))
 
     status: Mapped[AssetStatus] = mapped_column(
-        SQLEnum(AssetStatus, name="asset_status_enum",native_enum=False,length=50),
+        SQLEnum(AssetStatus, name="asset_status_enum", native_enum=False, validate_strings=True,
+                create_constraint=True,length=50),
         default=AssetStatus.PENDING,
         nullable=False,
     )
@@ -79,6 +80,9 @@ class SourceAsset(Base):
             "folder_name", "file_name", name="uix_source_asset_folder_file"
         ),
     )
+
+    def __repr__(self) -> str:
+        return f"SourceAsset(file_name={self.file_name}, status={self.status})"
 
 
 class DocumentSection(Base):

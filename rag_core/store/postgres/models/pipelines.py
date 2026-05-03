@@ -24,6 +24,8 @@ class IngestionRunPhase(str, enum.Enum):
     PARSING = "PARSING"
     CHUNKING = "CHUNKING"
     EMBEDDING = "EMBEDDING"
+    INGESTING ="INGESTING"
+    RECONCILING="RECONCILING"
 
 class IngestionRun(Base):
     __tablename__ = "ingestion_runs"
@@ -31,12 +33,14 @@ class IngestionRun(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
 
     status: Mapped[IngestionRunStatus] = mapped_column(
-        SQLEnum(IngestionRunStatus, name="run_status_enum",native_enum=False,length=50),
+        SQLEnum(IngestionRunStatus, name="run_status_enum",native_enum=False,validate_strings=True,
+                create_constraint=True, length=50),
         default=IngestionRunStatus.PENDING,
         nullable=False,
     )
     phase: Mapped[IngestionRunPhase] = mapped_column(
-        SQLEnum(IngestionRunStatus, name="run_phase_enum",native_enum=False,length=50),
+        SQLEnum(IngestionRunStatus, name="run_phase_enum",native_enum=False,validate_strings=True,
+                create_constraint=True, length=50),
         nullable=False,
     )
     error_message: Mapped[Optional[str]] = mapped_column(Text)
