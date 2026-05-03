@@ -2,32 +2,39 @@ from pgvector.sqlalchemy import Vector
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import configure_mappers
 
-from rag_core.store.postgres.models.documents import (
+from rag_core.store.postgres.models.documents import DocumentChunk, DocumentSection
+from rag_core.store.postgres.models.ingestion import (
     AssetStatus,
-    DocumentChunk,
-    DocumentSection,
+    IngestionRun,
+    IngestionRunPhase,
+    IngestionRunStatus,
     SourceAsset,
 )
-from rag_core.store.postgres.models.pipelines import PipelineRun, PipelineType, RunPhase
 
 
 def test_postgres_domain_models_configure() -> None:
     configure_mappers()
 
-    assert PipelineRun.__tablename__ == "pipeline_runs"
+    assert IngestionRun.__tablename__ == "ingestion_runs"
     assert SourceAsset.__tablename__ == "source_assets"
     assert DocumentSection.__tablename__ == "document_sections"
     assert DocumentChunk.__tablename__ == "document_chunks"
 
 
 def test_postgres_domain_enums_match_contract() -> None:
-    assert {item.name for item in PipelineType} == {"INGESTION", "EVALUATION"}
-    assert {item.name for item in RunPhase} == {
-        "SCANNING",
-        "RECONCILING",
-        "INGESTING",
+    assert {item.name for item in IngestionRunStatus} == {
+        "PENDING",
+        "RUNNING",
         "COMPLETED",
         "FAILED",
+    }
+    assert {item.name for item in IngestionRunPhase} == {
+        "SCANNING",
+        "PARSING",
+        "CHUNKING",
+        "EMBEDDING",
+        "INGESTING",
+        "RECONCILING",
     }
     assert {item.name for item in AssetStatus} == {
         "PENDING",
@@ -44,7 +51,7 @@ def test_postgres_domain_foreign_keys_match_contract() -> None:
     section_fk = next(iter(DocumentSection.__table__.c.asset_id.foreign_keys))
     chunk_fk = next(iter(DocumentChunk.__table__.c.section_id.foreign_keys))
 
-    assert source_asset_fk.target_fullname == "pipeline_runs.id"
+    assert source_asset_fk.target_fullname == "ingestion_runs.id"
     assert source_asset_fk.ondelete == "SET NULL"
     assert section_fk.target_fullname == "source_assets.id"
     assert section_fk.ondelete == "CASCADE"
@@ -53,7 +60,7 @@ def test_postgres_domain_foreign_keys_match_contract() -> None:
 
 
 def test_postgres_domain_relationships_are_bottom_up_only() -> None:
-    assert set(PipelineRun.__mapper__.relationships.keys()) == set()
+    assert set(IngestionRun.__mapper__.relationships.keys()) == set()
     assert set(SourceAsset.__mapper__.relationships.keys()) == {"last_seen_run"}
     assert set(DocumentSection.__mapper__.relationships.keys()) == {"asset"}
     assert set(DocumentChunk.__mapper__.relationships.keys()) == {"section"}
