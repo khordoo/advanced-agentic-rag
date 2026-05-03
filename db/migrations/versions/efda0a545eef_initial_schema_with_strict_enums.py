@@ -1,8 +1,8 @@
-"""Initial complete schema with strict enums
+"""Initial schema with strict enums
 
-Revision ID: 0be180926fe1
+Revision ID: efda0a545eef
 Revises: 729088a76e80
-Create Date: 2026-05-03 14:22:06.590910
+Create Date: 2026-05-03 14:37:14.402181
 
 """
 from typing import Sequence, Union
@@ -13,7 +13,7 @@ from sqlalchemy.dialects import postgresql
 import pgvector.sqlalchemy
 
 # revision identifiers, used by Alembic.
-revision: str = '0be180926fe1'
+revision: str = 'efda0a545eef'
 down_revision: Union[str, Sequence[str], None] = '729088a76e80'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -25,7 +25,7 @@ def upgrade() -> None:
     op.create_table('ingestion_runs',
     sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
     sa.Column('status', sa.Enum('PENDING', 'RUNNING', 'COMPLETED', 'FAILED', name='run_status_enum', native_enum=False, create_constraint=True, length=50), nullable=False),
-    sa.Column('phase', sa.Enum('PENDING', 'RUNNING', 'COMPLETED', 'FAILED', name='run_phase_enum', native_enum=False, create_constraint=True, length=50), nullable=False),
+    sa.Column('phase', sa.Enum('SCANNING', 'PARSING', 'CHUNKING', 'EMBEDDING', 'INGESTING', 'RECONCILING', name='run_phase_enum', native_enum=False, create_constraint=True, length=50), nullable=False),
     sa.Column('error_message', sa.Text(), nullable=True),
     sa.Column('started_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('completed_at', sa.DateTime(timezone=True), nullable=True),

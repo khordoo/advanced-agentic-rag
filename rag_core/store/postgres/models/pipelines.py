@@ -39,7 +39,7 @@ class IngestionRun(Base):
         nullable=False,
     )
     phase: Mapped[IngestionRunPhase] = mapped_column(
-        SQLEnum(IngestionRunStatus, name="run_phase_enum",native_enum=False,validate_strings=True,
+        SQLEnum(IngestionRunPhase, name="run_phase_enum",native_enum=False,validate_strings=True,
                 create_constraint=True, length=50),
         nullable=False,
     )
