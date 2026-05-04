@@ -5,6 +5,7 @@ import enum
 from typing import Optional
 
 from sqlalchemy import (
+    ARRAY,
     DateTime,
     Enum as SQLEnum,
     ForeignKey,
@@ -113,6 +114,13 @@ class SourceAsset(Base):
     )
     worker_id: Mapped[Optional[str]] = mapped_column(String(50))
     error_message: Mapped[Optional[str]] = mapped_column(Text)
+    tags: Mapped[list[str]] = mapped_column(
+            ARRAY(String), server_default="{}", nullable=False
+        )
+    scopes: Mapped[list[str]] = mapped_column(
+        ARRAY(String), server_default="{}", nullable=False
+    )
+
     asset_metadata: Mapped[dict] = mapped_column(
         JSONB, server_default="{}", nullable=False
     )

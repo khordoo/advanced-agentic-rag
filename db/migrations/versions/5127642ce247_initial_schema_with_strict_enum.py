@@ -1,8 +1,8 @@
-"""initial schema with strict enums
+"""initial schema with strict enum
 
-Revision ID: 4be26814581c
+Revision ID: 5127642ce247
 Revises: 729088a76e80
-Create Date: 2026-05-03 15:36:33.827902
+Create Date: 2026-05-04 13:54:16.639723
 
 """
 from typing import Sequence, Union
@@ -13,7 +13,7 @@ from sqlalchemy.dialects import postgresql
 import pgvector.sqlalchemy
 
 # revision identifiers, used by Alembic.
-revision: str = '4be26814581c'
+revision: str = '5127642ce247'
 down_revision: Union[str, Sequence[str], None] = '729088a76e80'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -41,6 +41,8 @@ def upgrade() -> None:
     sa.Column('state', sa.Enum('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', 'DELETED', 'IGNORED', name='asset_state_enum', native_enum=False, create_constraint=True, length=50), nullable=False),
     sa.Column('worker_id', sa.String(length=50), nullable=True),
     sa.Column('error_message', sa.Text(), nullable=True),
+    sa.Column('tags', sa.ARRAY(sa.String()), server_default='{}', nullable=False),
+    sa.Column('scopes', sa.ARRAY(sa.String()), server_default='{}', nullable=False),
     sa.Column('asset_metadata', postgresql.JSONB(astext_type=sa.Text()), server_default='{}', nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
