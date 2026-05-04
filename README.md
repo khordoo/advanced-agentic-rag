@@ -56,6 +56,8 @@ make migrate-status
 - Folder-tag behavior and ignore rules for ingestion are documented in:
   - [`docs/ingestion/README.md`](docs/ingestion/README.md)
   - [`data/source_docs/README.md`](data/source_docs/README.md)
+- Metadata extraction extension hooks (scopes/tags/extended metadata) are also documented in:
+  - [`docs/ingestion/README.md`](docs/ingestion/README.md)
 
 ## Project Structure
 
