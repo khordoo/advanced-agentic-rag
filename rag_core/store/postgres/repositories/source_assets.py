@@ -15,10 +15,10 @@ class SourceAssetRepository:
             .with_for_update(skip_locked=True)
             .first()
         )
-    def get_asset(self,file_id:str) ->SourceAsset | None:
+    def get_asset(self,asset_key:str) ->SourceAsset | None:
         stmt =(
             select(SourceAsset)
-            .where(SourceAsset.file_id ==file_id)
+            .where(SourceAsset.asset_key == asset_key)
         )
         return self.session.execute(stmt).scalar_one_or_none()
 

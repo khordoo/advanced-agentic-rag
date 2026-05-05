@@ -1,20 +1,9 @@
 import logging
-import os
 import datetime
-from pathlib import Path
 
-from rag_core.converter import convert_pdf_to_markdown
-from rag_core.chunker import chunk_markdown
 from rag_core.core.config import get_ingestion_settings, load_config, setup_logging
-from rag_core.indexing.base import BaseIndexer
-from rag_core.indexing.qdrant_indexer import QdrantIndexer
 from rag_core.ingestion.metadata import extract_metadata_from_uri
 from rag_core.ingestion.scanner import FileScanner
-from rag_core.store.storage import provider
-from rag_core.utils import Stopwatch, generate_file_id
-from rag_core.agents import TableSummarizer
-from rag_core.chunker import summerize_and_chunk_table
-from rag_core.core.config import IngestionSettings
 from rag_core.ingestion.eligibility import IngestionEligibilityService
 from rag_core.store.postgres.repositories.source_assets import SourceAssetRepository
 from rag_core.store.postgres.repositories.ingestion_runs import IngestionRunRepository
@@ -42,23 +31,23 @@ def execute_scan_loop(session, run_id, settings, source_provider, scanner, eligi
     metrics=RunMetrics()
     for file_uri in scanner.discover_eligible_files(settings.base_source_uri):
         metrics.discovered_total += 1
-        current_asset_id = None
+        current_asset_pk = None
         try:
             logger.debug(f"Evaluating file: {file_uri}")
             eval_result = eligibility_service.evaluate_file(file_uri)
-            current_asset_id = eval_result.existing_asset_id
+            current_asset_pk = eval_result.existing_asset_pk
             logger.debug(
-                "Eligibility evaluated for file_uri=%s decision=%s should_process=%s existing_asset_id=%s",
+                "Eligibility evaluated for file_uri=%s decision=%s should_process=%s existing_asset_pk=%s",
                 file_uri,
                 eval_result.decision.name,
                 eval_result.should_process,
-                eval_result.existing_asset_id,
+                eval_result.existing_asset_pk,
             )
             if not eval_result.should_process:
                 metrics.skipped_unchanged+=1
-                if eval_result.existing_asset_id:
+                if eval_result.existing_asset_pk:
                     asset_repo.update_asset(
-                        eval_result.existing_asset_id,
+                        eval_result.existing_asset_pk,
                         last_seen_run_id = run_id
                     )
                     session.commit()
@@ -70,11 +59,11 @@ def execute_scan_loop(session, run_id, settings, source_provider, scanner, eligi
             if eval_result.decision == EligibilityDecision.PROCESS_NEW:
                 metrics.queued_new += 1
                 asset = SourceAsset(
-                    file_id=eval_result.file_id,
+                    asset_key=eval_result.asset_key,
                     content_hash=eval_result.content_hash,
                     source_uri=source_provider.get_access_url(file_uri),
-                    file_name = metadata.file_name,
-                    folder_name=metadata.folder_name,
+                    asset_name=metadata.file_name,
+                    parent_name=metadata.folder_name,
                     tags=metadata.tags,
                     scopes=metadata.scopes,
                     asset_metadata=metadata.extended_metadata,
@@ -84,23 +73,23 @@ def execute_scan_loop(session, run_id, settings, source_provider, scanner, eligi
                 )
                 asset_repo.create_asset(asset)
                 logger.info(
-                    "Queued new asset for processing file_uri=%s file_id=%s",
+                    "Queued new asset for processing file_uri=%s asset_key=%s",
                     file_uri,
-                    eval_result.file_id,
+                    eval_result.asset_key,
                 )
             elif eval_result.decision == EligibilityDecision.REPROCESS_UPDATED:
                 metrics.queued_reprocess += 1
                 asset_repo.update_asset(
-                    asset_id=eval_result.existing_asset_id,
+                    asset_id=eval_result.existing_asset_pk,
                     content_hash=eval_result.content_hash,
                     state=AssetState.PENDING,
                     last_seen_run_id=run_id,
                     updated_at=datetime.datetime.now(datetime.UTC),
                 )
                 logger.info(
-                    "Queued existing asset for reprocessing file_uri=%s asset_id=%s",
+                    "Queued existing asset for reprocessing file_uri=%s asset_pk=%s",
                     file_uri,
-                    eval_result.existing_asset_id,
+                    eval_result.existing_asset_pk,
                 )
 
             session.commit()
@@ -111,10 +100,10 @@ def execute_scan_loop(session, run_id, settings, source_provider, scanner, eligi
             logger.exception("Ingestion failed for file_uri=%s", file_uri)
             # If we know the asset ID, we can safely mark it as FAILED in the DB.
             # If it failed before we got an ID, we just log it and move on.
-            if current_asset_id:
+            if current_asset_pk:
                 try:
                     asset_repo.update_asset(
-                        asset_id=current_asset_id,
+                        asset_id=current_asset_pk,
                         state=AssetState.FAILED,
                         last_seen_run_id=run_id
                     )
