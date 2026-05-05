@@ -105,13 +105,9 @@ class SourceAsset(Base):
     __tablename__ = "source_assets"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    file_id: Mapped[str] = mapped_column(String(255), unique=True, index=True)
-
-    folder_name: Mapped[str] = mapped_column(String(255))
-    file_name: Mapped[str] = mapped_column(String(255))
-    source_uri: Mapped[str] = mapped_column(String(4096))
-    content_hash: Mapped[str] = mapped_column(String(64))
-
+    asset_key: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    source_system: Mapped[str]= mapped_column(String(100),server_default="local_fs",nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64),nullable=False)
     state: Mapped[AssetState] = mapped_column(
         SQLEnum(
             AssetState,
@@ -125,20 +121,9 @@ class SourceAsset(Base):
         nullable=False,
     )
     worker_id: Mapped[Optional[str]] = mapped_column(String(50))
-    error_message: Mapped[Optional[str]] = mapped_column(Text)
-    tags: Mapped[list[str]] = mapped_column(
-            ARRAY(String), server_default="{}", nullable=False
-        )
-    scopes: Mapped[list[str]] = mapped_column(
-        ARRAY(String), server_default="{}", nullable=False
+    last_seen_run_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("ingestion_runs.id", ondelete="SET NULL"), index=True
     )
-
-    source_system: Mapped[str]= mapped_column(String(100),server_default="local_fs",nullable=False)
-
-    asset_metadata: Mapped[dict] = mapped_column(
-        JSONB, server_default="{}", nullable=False
-    )
-
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -149,15 +134,30 @@ class SourceAsset(Base):
         nullable=False,
     )
 
-    last_seen_run_id: Mapped[Optional[int]] = mapped_column(
-        ForeignKey("ingestion_runs.id", ondelete="SET NULL"), index=True
+    asset_name: Mapped[str] = mapped_column(Text,nullable=False)
+    parent_name: Mapped[str] = mapped_column(Text,nullable=True)
+    source_uri: Mapped[str] = mapped_column(Text,nullable=False)
+    error_message: Mapped[Optional[str]] = mapped_column(Text)
+
+    tags: Mapped[list[str]] = mapped_column(
+            ARRAY(String), server_default="{}", nullable=False
+        )
+    scopes: Mapped[list[str]] = mapped_column(
+        ARRAY(String), server_default="{}", nullable=False
     )
+    asset_metadata: Mapped[dict] = mapped_column(
+        JSONB, server_default="{}", nullable=False
+    )
+
+
+
+
 
     last_seen_run: Mapped[Optional["IngestionRun"]] = relationship()
 
     __table_args__ = (
         UniqueConstraint(
-            "folder_name", "file_name", name="uix_source_asset_folder_file"
+            "parent_name", "asset_name", name="uix_asset_parent_name"
         ),
     )
 
@@ -165,9 +165,9 @@ class SourceAsset(Base):
         return (
             "SourceAsset("
             f"id={self.id}, "
-            f"file_id={self.file_id!r}, "
-            f"folder_name={self.folder_name!r}, "
-            f"file_name={self.file_name!r}, "
+            f"asset_key={self.asset_key!r}, "
+            f"parent_name={self.parent_name!r}, "
+            f"asset_name={self.asset_name!r}, "
             f"state={self.state}, "
             f"last_seen_run_id={self.last_seen_run_id}"
             ")"
