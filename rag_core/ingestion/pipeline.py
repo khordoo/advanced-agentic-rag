@@ -11,6 +11,7 @@ from rag_core.ingestion.eligibility import EligibilityDecision,EligibilityResult
 from rag_core.store.postgres.models.ingestion import AssetState, IngestionRun, SourceAsset
 from rag_core.store.storage.provider import LocalFileSourceProvider
 from rag_core.store.postgres.session import get_database
+from rag_core.ingestion.reconciliation import reconcile_source_assets
 from pydantic import BaseModel, Field
 
 setup_logging()
@@ -24,7 +25,8 @@ class RunMetrics(BaseModel):
     queued_new: int = Field(default=0)
     queued_reprocess: int = Field(default=0)
     skipped_unchanged: int = Field(default=0)
-    failed_files: int = Field(default=0)
+    failed: int = Field(default=0)
+    deleted:int = Field(default=0)
 
 def execute_scan_loop(session, run_id, settings, source_provider, scanner, eligibility_service, asset_repo) ->RunMetrics:
     """The core work loop. Raises exceptions if something catastrophic happens."""
@@ -95,7 +97,7 @@ def execute_scan_loop(session, run_id, settings, source_provider, scanner, eligi
             session.commit()
 
         except Exception as e:
-            metrics.failed_files += 1
+            metrics.failed += 1
             session.rollback()  # Clear any broken transactions so the loop can continue
             logger.exception("Ingestion failed for file_uri=%s", file_uri)
             # If we know the asset ID, we can safely mark it as FAILED in the DB.
@@ -114,9 +116,11 @@ def execute_scan_loop(session, run_id, settings, source_provider, scanner, eligi
 
     return metrics
 
+
+
 def run_pipeline():
     logger.info("Starting ingestion run pipeline")
-    ingestion_run_id: int = -1
+    ingestion_run_id: int = None
     settings = get_ingestion_settings()
     source_provider= LocalFileSourceProvider()
     scanner = FileScanner(provider=source_provider,settings=settings)
@@ -146,6 +150,14 @@ def run_pipeline():
             scanner, eligibility_service, asset_repo
             )
         logger.info("Scan loop completed run_id=%s metrics=%s", ingestion_run_id, metrics.model_dump())
+        logger.info("Starting reconciliation for system: %s", source_provider.source_system)
+        deleted_asset_count = reconcile_source_assets(
+            db_manager=db,
+            source_system=source_provider.source_system,
+            run_id=ingestion_run_id
+        )
+        metrics.deleted+=deleted_asset_count
+        logger.info("Reconciliation completed run_id=%s, deleted=%d", ingestion_run_id, metrics.deleted)
 
         with db.get_session() as session:
             with session.begin():
