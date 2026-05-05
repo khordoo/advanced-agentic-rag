@@ -77,16 +77,27 @@ class IngestionRun(Base):
         DateTime(timezone=True)
     )
 
+    def __repr__(self) -> str:
+        return (
+            "IngestionRun("
+            f"id={self.id}, "
+            f"state={self.state}, "
+            f"step={self.step}, "
+            f"started_at={self.started_at}, "
+            f"completed_at={self.completed_at}"
+            ")"
+        )
+
 
 class AssetState(str, enum.Enum):
     """Latest processing state for a source asset."""
 
-    PENDING = "PENDING"
-    PROCESSING = "PROCESSING"
-    COMPLETED = "COMPLETED"
-    FAILED = "FAILED"
-    DELETED = "DELETED"
-    IGNORED = "IGNORED"
+    PENDING = "PENDING"       # Ready to be chunked
+    PROCESSING = "PROCESSING" # Worker currently has it
+    COMPLETED = "COMPLETED"   # Successfully embedded
+    FAILED = "FAILED"         # Worker crashed on this file
+    DELETED = "DELETED"       # File vanished from the source drive
+    EXCLUDED = "EXCLUDED"     # Human explicitly set "Do not read this"
 
 
 class SourceAsset(Base):
