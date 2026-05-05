@@ -76,6 +76,7 @@ class IngestionRun(Base):
     completed_at: Mapped[Optional[datetime.datetime]] = mapped_column(
         DateTime(timezone=True)
     )
+    metrics: Mapped[dict]= mapped_column(JSONB, server_default="{}", nullable=True)
 
     def __repr__(self) -> str:
         return (
@@ -159,4 +160,13 @@ class SourceAsset(Base):
     )
 
     def __repr__(self) -> str:
-        return f"SourceAsset(file_name={self.file_name}, state={self.state})"
+        return (
+            "SourceAsset("
+            f"id={self.id}, "
+            f"file_id={self.file_id!r}, "
+            f"folder_name={self.folder_name!r}, "
+            f"file_name={self.file_name!r}, "
+            f"state={self.state}, "
+            f"last_seen_run_id={self.last_seen_run_id}"
+            ")"
+        )
