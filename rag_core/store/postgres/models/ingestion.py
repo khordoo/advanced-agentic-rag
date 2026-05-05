@@ -133,6 +133,8 @@ class SourceAsset(Base):
         ARRAY(String), server_default="{}", nullable=False
     )
 
+    source_system: Mapped[str]= mapped_column(String(100),server_default="local_fs",nullable=False)
+
     asset_metadata: Mapped[dict] = mapped_column(
         JSONB, server_default="{}", nullable=False
     )
