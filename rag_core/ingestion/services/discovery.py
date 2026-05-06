@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Iterator
 from datetime import UTC, datetime
 import logging
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -28,10 +28,8 @@ from rag_core.store.storage.provider import LocalFileSourceProvider, SourceProvi
 
 logger = logging.getLogger(__name__)
 
-MetricCounter = Literal["queued_new", "queued_reprocess", "skipped_unchanged"]
 
-
-class RunMetrics(BaseModel):
+class DiscoveryRunMetrics(BaseModel):
     """Strongly typed state tracker for pipeline execution."""
 
     discovered_total: int = Field(default=0)
@@ -43,8 +41,6 @@ class RunMetrics(BaseModel):
 
 
 class SourceDiscoveryService:
-    DEFAULT_BATCH_SIZE = 500
-
     def __init__(
         self,
         settings: IngestionSettings,
@@ -58,7 +54,7 @@ class SourceDiscoveryService:
         self.db = db
         self.run_id: int | None = None
 
-    def run(self) -> RunMetrics | None:
+    def run(self) -> DiscoveryRunMetrics | None:
         try:
             self._initialize()
             metrics = self._execute_scan_loop()
@@ -82,10 +78,10 @@ class SourceDiscoveryService:
                 self.run_id = run.id
                 logger.info("Created ingestion run run_id=%s", run.id)
 
-    def _execute_scan_loop(self) -> RunMetrics:
+    def _execute_scan_loop(self) -> DiscoveryRunMetrics:
         """The core work loop. Raises exceptions if something catastrophic happens."""
         self._update_progress(step=IngestionRunStep.SCANNING)
-        metrics = RunMetrics()
+        metrics = DiscoveryRunMetrics()
 
         with self.db.get_session() as session:
             asset_repo = SourceAssetRepository(session)
@@ -96,7 +92,7 @@ class SourceDiscoveryService:
             )
 
             asset_uris = self.scanner.discover_assets(self.settings.base_source_uri)
-            for batch in self._iter_batches(asset_uris, self.DEFAULT_BATCH_SIZE):
+            for batch in self._iter_batches(asset_uris, self.settings.discovery_batch_size):
                 with session.begin():
                     for asset_uri in batch:
                         self._process_asset_with_savepoint(
@@ -115,7 +111,7 @@ class SourceDiscoveryService:
         asset_uri: str,
         asset_repo: SourceAssetRepository,
         eligibility_service: IngestionEligibilityService,
-        metrics: RunMetrics,
+        metrics: DiscoveryRunMetrics,
         session: Any,
     ) -> None:
         metrics.discovered_total += 1
@@ -127,13 +123,13 @@ class SourceDiscoveryService:
                 eval_result = eligibility_service.evaluate_file(asset_uri)
                 current_asset_pk = eval_result.existing_asset_pk
 
-                metric_counter = self._apply_eligibility_decision(
+                self._apply_eligibility_decision(
                     asset_uri=asset_uri,
                     eval_result=eval_result,
                     asset_repo=asset_repo,
+                    metrics=metrics,
                 )
                 session.flush()
-                self._increment_metric(metrics, metric_counter)
 
         except Exception:
             metrics.failed += 1
@@ -150,7 +146,8 @@ class SourceDiscoveryService:
         asset_uri: str,
         eval_result: EligibilityResult,
         asset_repo: SourceAssetRepository,
-    ) -> MetricCounter | None:
+        metrics: DiscoveryRunMetrics,
+    ) -> None:
         logger.debug(
             "Eligibility evaluated for asset_uri=%s decision=%s should_process=%s existing_asset_pk=%s",
             asset_uri,
@@ -162,31 +159,24 @@ class SourceDiscoveryService:
         if not eval_result.should_process:
             self._mark_asset_seen(asset_repo, eval_result.existing_asset_pk)
             logger.debug("Skipped asset_uri=%s decision=%s", asset_uri, eval_result.decision.name)
-            return "skipped_unchanged"
+            metrics.skipped_unchanged += 1
+            return
 
         if eval_result.decision == EligibilityDecision.PROCESS_NEW:
             self._queue_new_asset(asset_uri, eval_result, asset_repo)
-            return "queued_new"
+            metrics.queued_new += 1
+            return
 
         if eval_result.decision == EligibilityDecision.REPROCESS_UPDATED:
             self._queue_updated_asset(asset_uri, eval_result, asset_repo)
-            return "queued_reprocess"
+            metrics.queued_reprocess += 1
+            return
 
         logger.warning(
             "Unhandled eligibility decision asset_uri=%s decision=%s",
             asset_uri,
             eval_result.decision.name,
         )
-        return None
-
-    @staticmethod
-    def _increment_metric(metrics: RunMetrics, counter: MetricCounter | None) -> None:
-        if counter == "queued_new":
-            metrics.queued_new += 1
-        elif counter == "queued_reprocess":
-            metrics.queued_reprocess += 1
-        elif counter == "skipped_unchanged":
-            metrics.skipped_unchanged += 1
 
     def _queue_new_asset(
         self,
@@ -315,7 +305,7 @@ class SourceDiscoveryService:
                     state,
                 )
 
-    def _transition_to_ingestion(self, metrics: RunMetrics) -> None:
+    def _transition_to_ingestion(self, metrics: DiscoveryRunMetrics) -> None:
         """Signals that Discovery is done and the Worker can take over."""
         self._update_progress(
             step=IngestionRunStep.INGESTING,
@@ -347,7 +337,7 @@ class SourceDiscoveryService:
         return value
 
 
-def run_discovery() -> RunMetrics | None:
+def run_discovery() -> DiscoveryRunMetrics | None:
     settings = get_ingestion_settings()
     provider = LocalFileSourceProvider()
     scanner = FileScanner(provider, settings)

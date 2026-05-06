@@ -11,7 +11,7 @@ import torch
 from pydantic import computed_field
 from typing import Literal
 from dotenv import dotenv_values, load_dotenv
-from pydantic import BaseModel, Field, field_validator
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
@@ -279,6 +279,14 @@ class IngestionSettings(BaseSettings):
     chunk_size: int = 1000
     chunk_overlap: int = 200
     max_retries: int = 3
+    discovery_batch_size: int = Field(
+        default=500,
+        ge=1,
+        description=(
+            "Number of discovered assets to commit per discovery database "
+            "transaction."
+        ),
+    )
 
     allowed_extensions_raw: str = "pdf,md"
     hash_algorithm: Literal["md5", "sha1", "sha256", "sha512"] = "sha256"
