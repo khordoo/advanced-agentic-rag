@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Iterable, Iterator
 from datetime import UTC, datetime
 import logging
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -27,6 +28,8 @@ from rag_core.store.storage.provider import LocalFileSourceProvider, SourceProvi
 
 logger = logging.getLogger(__name__)
 
+MetricCounter = Literal["queued_new", "queued_reprocess", "skipped_unchanged"]
+
 
 class RunMetrics(BaseModel):
     """Strongly typed state tracker for pipeline execution."""
@@ -40,6 +43,8 @@ class RunMetrics(BaseModel):
 
 
 class SourceDiscoveryService:
+    DEFAULT_BATCH_SIZE = 500
+
     def __init__(
         self,
         settings: IngestionSettings,
@@ -90,81 +95,110 @@ class SourceDiscoveryService:
                 hash_algorithm=self.settings.hash_algorithm,
             )
 
-            for file_uri in self.scanner.discover_assets(self.settings.base_source_uri):
-                metrics.discovered_total += 1
-                current_asset_pk = None
-
-                try:
-                    logger.debug("Evaluating file_uri=%s", file_uri)
-                    eval_result = eligibility_service.evaluate_file(file_uri)
-                    current_asset_pk = eval_result.existing_asset_pk
-
-                    self._apply_eligibility_decision(
-                        file_uri=file_uri,
-                        eval_result=eval_result,
-                        asset_repo=asset_repo,
-                        metrics=metrics,
-                    )
-                    session.commit()
-
-                except Exception:
-                    metrics.failed += 1
-                    session.rollback()
-                    logger.exception("Discovery failed for file_uri=%s", file_uri)
-                    if current_asset_pk:
-                        self._mark_asset_failed(asset_repo, session, current_asset_pk)
+            asset_uris = self.scanner.discover_assets(self.settings.base_source_uri)
+            for batch in self._iter_batches(asset_uris, self.DEFAULT_BATCH_SIZE):
+                with session.begin():
+                    for asset_uri in batch:
+                        self._process_asset_with_savepoint(
+                            asset_uri=asset_uri,
+                            asset_repo=asset_repo,
+                            eligibility_service=eligibility_service,
+                            metrics=metrics,
+                            session=session,
+                        )
 
         logger.info("Scan loop completed run_id=%s metrics=%s", self.run_id, metrics.model_dump())
         return metrics
 
+    def _process_asset_with_savepoint(
+        self,
+        asset_uri: str,
+        asset_repo: SourceAssetRepository,
+        eligibility_service: IngestionEligibilityService,
+        metrics: RunMetrics,
+        session: Any,
+    ) -> None:
+        metrics.discovered_total += 1
+        current_asset_pk = None
+
+        try:
+            with session.begin_nested():
+                logger.debug("Evaluating asset_uri=%s", asset_uri)
+                eval_result = eligibility_service.evaluate_file(asset_uri)
+                current_asset_pk = eval_result.existing_asset_pk
+
+                metric_counter = self._apply_eligibility_decision(
+                    asset_uri=asset_uri,
+                    eval_result=eval_result,
+                    asset_repo=asset_repo,
+                )
+                session.flush()
+                self._increment_metric(metrics, metric_counter)
+
+        except Exception:
+            metrics.failed += 1
+            logger.exception("Discovery failed for asset_uri=%s", asset_uri)
+            if current_asset_pk is not None:
+                self._mark_asset_failed_with_savepoint(
+                    asset_repo=asset_repo,
+                    session=session,
+                    asset_id=current_asset_pk,
+                )
+
     def _apply_eligibility_decision(
         self,
-        file_uri: str,
+        asset_uri: str,
         eval_result: EligibilityResult,
         asset_repo: SourceAssetRepository,
-        metrics: RunMetrics,
-    ) -> None:
+    ) -> MetricCounter | None:
         logger.debug(
-            "Eligibility evaluated for file_uri=%s decision=%s should_process=%s existing_asset_pk=%s",
-            file_uri,
+            "Eligibility evaluated for asset_uri=%s decision=%s should_process=%s existing_asset_pk=%s",
+            asset_uri,
             eval_result.decision.name,
             eval_result.should_process,
             eval_result.existing_asset_pk,
         )
 
         if not eval_result.should_process:
-            metrics.skipped_unchanged += 1
             self._mark_asset_seen(asset_repo, eval_result.existing_asset_pk)
-            logger.debug("Skipped file_uri=%s decision=%s", file_uri, eval_result.decision.name)
-            return
+            logger.debug("Skipped asset_uri=%s decision=%s", asset_uri, eval_result.decision.name)
+            return "skipped_unchanged"
 
         if eval_result.decision == EligibilityDecision.PROCESS_NEW:
-            self._queue_new_asset(file_uri, eval_result, asset_repo)
-            metrics.queued_new += 1
-            return
+            self._queue_new_asset(asset_uri, eval_result, asset_repo)
+            return "queued_new"
 
         if eval_result.decision == EligibilityDecision.REPROCESS_UPDATED:
-            self._queue_updated_asset(file_uri, eval_result, asset_repo)
-            metrics.queued_reprocess += 1
-            return
+            self._queue_updated_asset(asset_uri, eval_result, asset_repo)
+            return "queued_reprocess"
 
         logger.warning(
-            "Unhandled eligibility decision file_uri=%s decision=%s",
-            file_uri,
+            "Unhandled eligibility decision asset_uri=%s decision=%s",
+            asset_uri,
             eval_result.decision.name,
         )
+        return None
+
+    @staticmethod
+    def _increment_metric(metrics: RunMetrics, counter: MetricCounter | None) -> None:
+        if counter == "queued_new":
+            metrics.queued_new += 1
+        elif counter == "queued_reprocess":
+            metrics.queued_reprocess += 1
+        elif counter == "skipped_unchanged":
+            metrics.skipped_unchanged += 1
 
     def _queue_new_asset(
         self,
-        file_uri: str,
+        asset_uri: str,
         eval_result: EligibilityResult,
         asset_repo: SourceAssetRepository,
     ) -> None:
-        metadata = extract_metadata_from_uri(file_uri)
+        metadata = extract_metadata_from_uri(asset_uri)
         asset = SourceAsset(
             asset_key=self._require_value(eval_result.asset_key, "asset_key"),
             content_hash=self._require_value(eval_result.content_hash, "content_hash"),
-            source_uri=self.source_provider.get_access_url(file_uri),
+            source_uri=self.source_provider.get_access_url(asset_uri),
             asset_name=metadata.file_name,
             parent_name=metadata.folder_name,
             tags=metadata.tags,
@@ -176,14 +210,14 @@ class SourceDiscoveryService:
         )
         asset_repo.create_asset(asset)
         logger.info(
-            "Queued new asset for processing file_uri=%s asset_key=%s",
-            file_uri,
+            "Queued new asset for processing asset_uri=%s asset_key=%s",
+            asset_uri,
             eval_result.asset_key,
         )
 
     def _queue_updated_asset(
         self,
-        file_uri: str,
+        asset_uri: str,
         eval_result: EligibilityResult,
         asset_repo: SourceAssetRepository,
     ) -> None:
@@ -195,8 +229,8 @@ class SourceDiscoveryService:
             updated_at=datetime.now(UTC),
         )
         logger.info(
-            "Queued existing asset for reprocessing file_uri=%s asset_pk=%s",
-            file_uri,
+            "Queued existing asset for reprocessing asset_uri=%s asset_pk=%s",
+            asset_uri,
             eval_result.existing_asset_pk,
         )
 
@@ -213,22 +247,35 @@ class SourceDiscoveryService:
             last_seen_run_id=self._require_run_id(),
         )
 
-    def _mark_asset_failed(
+    def _mark_asset_failed_with_savepoint(
         self,
         asset_repo: SourceAssetRepository,
         session: Any,
         asset_id: int,
     ) -> None:
         try:
-            asset_repo.update_asset(
-                asset_id=asset_id,
-                state=AssetState.FAILED,
-                last_seen_run_id=self._require_run_id(),
-            )
-            session.commit()
+            with session.begin_nested():
+                asset_repo.update_asset(
+                    asset_id=asset_id,
+                    state=AssetState.FAILED,
+                    last_seen_run_id=self._require_run_id(),
+                )
+                session.flush()
         except Exception:
-            session.rollback()
             logger.exception("Failed to update asset state to FAILED asset_id=%s", asset_id)
+
+    @staticmethod
+    def _iter_batches(asset_uris: Iterable[str], batch_size: int) -> Iterator[list[str]]:
+        batch: list[str] = []
+
+        for asset_uri in asset_uris:
+            batch.append(asset_uri)
+            if len(batch) >= batch_size:
+                yield batch
+                batch = []
+
+        if batch:
+            yield batch
 
     def _reconcile_source_assets(self) -> int:
         """Handles the transactional logic for soft-deleting absent assets."""
