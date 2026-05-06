@@ -33,14 +33,14 @@ def _build_pipeline(source_dir: Path, processed_dir: Path) -> IngestionPipeline:
     )
 
 
-def test_load_config_defaults_docs_dir_to_source_docs(tmp_path: Path, monkeypatch):
+def test_load_config_defaults_docs_dir_to_source_documents(tmp_path: Path, monkeypatch):
     monkeypatch.delenv("DOCS_DIR", raising=False)
     config = load_config(env_path=tmp_path / ".env.does.not.exist")
-    assert config["DOCS_DIR"] == "data/source_docs"
+    assert config["DOCS_DIR"] == "data/source_documents"
 
 
 def test_iter_files_accepts_pdf_and_md_with_ignore_lists(tmp_path: Path):
-    source_dir = tmp_path / "source_docs"
+    source_dir = tmp_path / "source_documents"
     processed_dir = tmp_path / "processed"
     (source_dir / "finance").mkdir(parents=True, exist_ok=True)
     (source_dir / "legal").mkdir(parents=True, exist_ok=True)
@@ -62,7 +62,7 @@ def test_iter_files_accepts_pdf_and_md_with_ignore_lists(tmp_path: Path):
 
 
 def test_folder_name_is_used_as_tag(tmp_path: Path):
-    source_dir = tmp_path / "source_docs"
+    source_dir = tmp_path / "source_documents"
     processed_dir = tmp_path / "processed"
     pipeline = _build_pipeline(source_dir=source_dir, processed_dir=processed_dir)
 
@@ -71,11 +71,11 @@ def test_folder_name_is_used_as_tag(tmp_path: Path):
     ]
     assert pipeline._get_tags_for_file(str(source_dir / "legal" / "b.pdf")) == ["legal"]
     assert pipeline._get_tags_for_file(str(source_dir / "hr" / "c.pdf")) == ["hr"]
-    assert pipeline._get_tags_for_file(str(source_dir / "root.pdf")) == ["source_docs"]
+    assert pipeline._get_tags_for_file(str(source_dir / "root.pdf")) == ["source_documents"]
 
 
 def test_run_skips_ignored_files_and_processes_pdf_and_md(tmp_path: Path, monkeypatch):
-    source_dir = tmp_path / "source_docs"
+    source_dir = tmp_path / "source_documents"
     processed_dir = tmp_path / "processed"
     (source_dir / "finance").mkdir(parents=True, exist_ok=True)
     (source_dir / "legal").mkdir(parents=True, exist_ok=True)
