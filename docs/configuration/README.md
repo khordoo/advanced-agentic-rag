@@ -11,7 +11,7 @@ Project runtime behavior is configured through `.env` (see `.env.example`).
 
 ## Important Paths
 
-- `DOCS_DIR` defaults to `data/source_docs`.
+- `DOCS_DIR` defaults to `data/source_documents`.
 - `PROCESSED_DOCS_DIR` defaults to `data/processed`.
 
 ## Generation Models

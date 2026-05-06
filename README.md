@@ -23,7 +23,7 @@ uv sync --extra dev
 # Configure
 cp .env.example .env
 
-# Ingest source files from data/source_docs/
+# Ingest source files from data/source_documents/
 uv run rag_core/pipelines/ingestion.py
 
 # Start CLI
@@ -52,10 +52,10 @@ make migrate-status
 ## Folder Conventions
 
 - `docs/` contains project guides and operational documentation.
-- `data/source_docs/` contains ingestable source files (`.pdf`, `.md`).
+- `data/source_documents/` contains ingestable source files (`.pdf`, `.md`).
 - Folder-tag behavior and ignore rules for ingestion are documented in:
   - [`docs/ingestion/README.md`](docs/ingestion/README.md)
-  - [`data/source_docs/README.md`](data/source_docs/README.md)
+  - [`data/source_documents/README.md`](data/source_documents/README.md)
 - Metadata extraction extension hooks (scopes/tags/extended metadata) are also documented in:
   - [`docs/ingestion/README.md`](docs/ingestion/README.md)
 
@@ -65,7 +65,7 @@ make migrate-status
 advanced-rag/
 ├── rag_core/
 ├── docs/
-├── data/source_docs/
+├── data/source_documents/
 ├── examples/
 ├── evaluation/
 ├── docker/

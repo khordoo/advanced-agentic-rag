@@ -5,9 +5,9 @@ For project documentation and usage guides, use `docs/`.
 
 ## How It Works
 
-- Put source files (`.pdf` or `.md`) anywhere under `data/source_docs/`.
+- Put source files (`.pdf` or `.md`) anywhere under `data/source_documents/`.
 - The immediate parent folder name is used as a category tag during ingestion.
-- Example: `data/source_docs/finance/q1-report.pdf` gets the tag `finance`.
+- Example: `data/source_documents/finance/q1-report.pdf` gets the tag `finance`.
 
 ## Organizing by Category
 

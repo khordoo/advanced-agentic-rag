@@ -1,6 +1,6 @@
 # Ingestion
 
-The ingestion input root is `data/source_docs/`.
+The ingestion input root is `data/source_documents/`.
 
 ## Metadata Extension Hooks
 
@@ -30,8 +30,8 @@ Recommended contract:
 The immediate parent folder name is mapped to the document tag.
 
 Examples:
-- `data/source_docs/finance/report.pdf` -> `finance`
-- `data/source_docs/hr/policy.md` -> `hr`
+- `data/source_documents/finance/report.pdf` -> `finance`
+- `data/source_documents/hr/policy.md` -> `hr`
 
 ## Files and Folders Ignored by Ingestion
 
@@ -45,4 +45,4 @@ Ignored files:
 - `LICENSE`
 - `.gitignore`
 
-This is why guidance docs should live in `docs/` or as `README.md` files inside `data/source_docs/`.
+This is why guidance docs should live in `docs/` or as `README.md` files inside `data/source_documents/`.
