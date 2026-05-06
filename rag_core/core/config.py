@@ -11,7 +11,7 @@ import torch
 from pydantic import computed_field
 from typing import Literal
 from dotenv import dotenv_values, load_dotenv
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
@@ -23,7 +23,7 @@ _REQUIRED_KEYS: list[str] = []
 _DEFAULTS: dict[str, str] = {
     "CHROMA_COLLECTION_NAME": "docs",
     "CHROMA_PERSIST_DIRECTORY": "artifacts/chroma_db",
-    "DOCS_DIR": "data/source_docs",
+    "DOCS_DIR": "data/source_documents",
     "PROCCESED_DOCS_DIR": "data/processed",
     "DOCUMENT_STORE_PERSIST_PATH": "artifacts/document_store/document_store.pkl",
     "SYNTHETIC_QA_PERSIST_PATH": "data/synthetic/eval_question_answers.json",
@@ -257,6 +257,7 @@ class PostgresSettings(BaseSettings):
         """Build the connection string dynamically too!"""
         return f"postgresql+psycopg://{self.user}:{self.password}@{self.host}:{self.port}/{self.rag_db}"
     # Pydantic will ONLY look for variables starting with "POSTGRES_"
+
     model_config = SettingsConfigDict(
         env_prefix="POSTGRES_", env_file=".env", extra="ignore"
     )
@@ -267,15 +268,34 @@ class PostgresSettings(BaseSettings):
 
 class IngestionSettings(BaseSettings):
     """Strictly for tuning how the pipeline processes data."""
-
+    base_source_uri: str = Field(
+            default="./data/source_documents",
+            description=(
+                "The root URI or local directory path where the scanner looks for "
+                "source documents to ingest. Supports local relative paths (e.g., 'docs', './data/docs), "
+                "absolute paths (e.g., 'file:///data/docs',), or cloud URIs (e.g., 's3://bucket/docs')."
+            )
+        )
     chunk_size: int = 1000
     chunk_overlap: int = 200
     max_retries: int = 3
-    ALLOWED_EXTENSIONS: set = {".pdf", ".md"}
-    # You can add things like 'enable_ocr' or 'target_folder' here
+
+    allowed_extensions_raw: str = "pdf,md"
+    hash_algorithm: Literal["md5", "sha1", "sha256", "sha512"] = "sha256"
+    @property
+    def allowed_extensions(self) -> set[str]:
+        return {
+            f'.{ext.strip().lower().lstrip(".")}'
+            for ext in self.allowed_extensions_raw.split(",")
+            if ext.strip()
+        }
+
+
 
     model_config = SettingsConfigDict(
-        env_prefix="INGESTION_", env_file=".env", extra="ignore"
+        env_prefix="INGESTION_",
+        env_file=".env",
+        extra="ignore",
     )
 
 

@@ -38,15 +38,9 @@ class Database:
 
     @contextmanager
     def get_session(self):
-        """Yield a short-lived session wrapped in commit/rollback handling."""
+        """Yield a raw, open session. The caller MUST manage transactions."""
         with self.session_factory() as session:
-            try:
-                yield session
-                session.commit()
-            except Exception as e:
-                logger.error(f"Database transaction failed. Rolling back. Error: {e}")
-                session.rollback()
-                raise
+             yield session
 
 @lru_cache(maxsize=1)
 def get_database() ->Database:
