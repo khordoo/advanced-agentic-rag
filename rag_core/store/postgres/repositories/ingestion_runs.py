@@ -17,6 +17,7 @@ class IngestionRunRepository:
         self.session = session
 
     def create_run(self) -> IngestionRun:
+        """Initializes a new run. started_at is handled by DB server_default."""
         run = IngestionRun(
             state=IngestionRunState.RUNNING,
             step=IngestionRunStep.SCANNING,
@@ -25,54 +26,61 @@ class IngestionRunRepository:
         self.session.flush()
         return run
 
-    def mark_reconciling(self, run_id: int) -> IngestionRun:
-        return self._update_run(run_id, step=IngestionRunStep.RECONCILING)
+    # --- PROGRESS METHODS ---
 
-    def mark_ingesting(self, run_id: int) -> IngestionRun:
-        return self._update_run(run_id, step=IngestionRunStep.INGESTING)
+    def update_progress(
+        self,
+        run_id: int,
+        step: IngestionRunStep,
+        state: IngestionRunState = IngestionRunState.RUNNING,
+        metrics: dict | None = None
+    ) -> None:
+        """Updates milestones (scanning_at, reconciling_at, ingesting_at)."""
+        milestone_map = {
+            IngestionRunStep.SCANNING: "scanning_at",
+            IngestionRunStep.RECONCILING: "reconciling_at",
+            IngestionRunStep.INGESTING: "ingesting_at",
+        }
 
-    def mark_completed(self, run_id: int, metrics:dict) -> IngestionRun:
+        update_data = {"step": step, "state": state}
+        if metrics:
+            update_data["metrics"] = metrics
+
+        col_name = milestone_map.get(step)
+        if col_name:
+            update_data[col_name] = func.now()
+
+        self._update_run(run_id, **update_data)
+
+    # --- FINALIZATION METHODS ---
+
+    def complete(self, run_id: int, metrics: dict) -> None:
+        """Closes the run successfully."""
+        self._update_run(
+            run_id,
+            state=IngestionRunState.COMPLETED,
+            completed_at=func.now(),
+            metrics=metrics
+        )
+
+    def fail(self, run_id: int, error: str | None = None) -> None:
+        """Closes the run with a failure state."""
+        update_data = {
+            "state": IngestionRunState.FAILED,
+            "completed_at": func.now(),
+        }
+        if error:
+           update_data["error_message"]=error
+        # If you add an 'error_log' column later, add it here
+        self._update_run(run_id, **update_data)
+
+    # --- THE ENGINE ---
+
+    def _update_run(self, run_id: int, **values) -> None:
         stmt = (
             update(IngestionRun)
             .where(IngestionRun.id == run_id)
-            .values(
-                state=IngestionRunState.COMPLETED,
-                completed_at=datetime.datetime.now(datetime.UTC),
-                metrics=metrics
-            )
+            .values(**values)
         )
         self.session.execute(stmt)
-
-    def mark_failed(self, run_id: int, error_message: str) -> IngestionRun:
-        stmt = (
-            update(IngestionRun)
-            .where(IngestionRun.id == run_id)
-            .values(
-                state=IngestionRunState.FAILED,
-                completed_at=datetime.datetime.now(datetime.UTC),
-            )
-        )
-        self.session.execute(stmt)
-
-    def finalize_run(self, run_id: int, state: IngestionRunState, metrics: dict) -> None:
-        stmt = (
-            update(IngestionRun)
-            .where(IngestionRun.id == run_id)
-            .values(
-                state=state,
-                completed_at=func.now(),
-                metrics=metrics
-            )
-        )
-        self.session.execute(stmt)
-
-    def _update_run(self, run_id: int, **kwargs) -> IngestionRun:
-        run = self.session.get(IngestionRun, run_id)
-        if run is None:
-            raise RuntimeError(f"Ingestion run not found. ID: {run_id}")
-
-        for key, value in kwargs.items():
-            setattr(run, key, value)
-
-        logger.info("Ingestion run updated: %s", run)
-        return run
+        logger.info("Run %s status update: %s", run_id, values)
