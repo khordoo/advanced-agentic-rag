@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import datetime
+from datetime import datetime
 import enum
 from typing import Optional
 
@@ -32,12 +32,18 @@ class IngestionRunState(str, enum.Enum):
 class IngestionRunStep(str, enum.Enum):
     """Current processing phase for a running ingestion run."""
 
+    # Stage 1: Discovery (Metadata Sync)
     SCANNING = "SCANNING"
-    PARSING = "PARSING"
-    CHUNKING = "CHUNKING"
-    EMBEDDING = "EMBEDDING"
-    INGESTING = "INGESTING"
     RECONCILING = "RECONCILING"
+
+    # Stage 2: Ingestion (Content Processing)
+    # Note: Usually PARSING/CHUNKING/EMBEDDING happen in one loop per file.
+    # for internal file-level logging.
+    INGESTING = "INGESTING"
+
+    # Optional: In case we want to track a terminal 'CLEANUP' or 'OPTIMIZING'
+    # phase for the Vector DB (like building indices).
+    FINALIZING = "FINALIZING"
 
 
 class IngestionRun(Base):
@@ -70,11 +76,27 @@ class IngestionRun(Base):
     )
     error_message: Mapped[Optional[str]] = mapped_column(Text)
 
-    started_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
+    started_at: Mapped[datetime] = mapped_column(
+            DateTime(timezone=True),
+            server_default=func.now(),
+            nullable=False
+        )
+    # Changed to nullable=True and removed server_default
+    scanning_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True
     )
-    completed_at: Mapped[Optional[datetime.datetime]] = mapped_column(
-        DateTime(timezone=True)
+    reconciling_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True
+    )
+    ingesting_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True
+    )
+    completed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True
     )
     metrics: Mapped[dict]= mapped_column(JSONB, server_default="{}", nullable=True)
 
@@ -124,10 +146,10 @@ class SourceAsset(Base):
     last_seen_run_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("ingestion_runs.id", ondelete="SET NULL"), index=True
     )
-    created_at: Mapped[datetime.datetime] = mapped_column(
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-    updated_at: Mapped[datetime.datetime] = mapped_column(
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now(),
