@@ -41,6 +41,22 @@ class DiscoveryRunMetrics(BaseModel):
 
 
 class SourceDiscoveryService:
+    """Coordinate the discovery phase of an ingestion run.
+
+    This service scans the configured source location, evaluates each discovered
+    asset for ingestion eligibility, queues new or changed assets for downstream
+    processing, and reconciles previously known assets that are no longer present
+    in the source. It owns the ingestion-run lifecycle transitions for discovery:
+    creating a run, marking scanning and reconciliation progress, and then handing
+    the run off to the ingestion worker phase.
+
+    Dependencies are injected so discovery remains storage- and database-aware
+    without hard-coding either concern. Per-asset failures are isolated using
+    nested transactions, ensuring one corrupted file does not abort the entire
+    scan, while catastrophic failures gracefully mark the ingestion run as failed
+    where possible.
+    """
+
     def __init__(
         self,
         settings: IngestionSettings,
@@ -55,6 +71,18 @@ class SourceDiscoveryService:
         self.run_id: int | None = None
 
     def run(self) -> DiscoveryRunMetrics | None:
+        """Executes the discovery pipeline and manages the ingestion run state.
+
+        This method orchestrates the full discovery lifecycle: initialization,
+        scanning, reconciliation, and worker handoff. It serves as the primary
+        error boundary for the service, catching unhandled exceptions to ensure
+        the run is marked as failed in the database before exiting.
+
+        Returns:
+            DiscoveryRunMetrics: The final aggregated metrics if the run succeeds.
+            None: If a catastrophic failure occurs and the run is aborted.
+        """
+
         try:
             self._initialize()
             metrics = self._execute_scan_loop()
