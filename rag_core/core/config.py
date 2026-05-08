@@ -278,7 +278,6 @@ class IngestionSettings(BaseSettings):
         )
     chunk_size: int = 1000
     chunk_overlap: int = 200
-    max_retries: int = 3
     discovery_batch_size: int = Field(
         default=500,
         ge=1,
@@ -287,7 +286,18 @@ class IngestionSettings(BaseSettings):
             "transaction."
         ),
     )
-
+    worker_max_attempts: int = Field(
+            default=3,
+            ge=1,
+            description=(
+                "The maximum number of times a worker will attempt to process a single asset "
+                "before it is permanently ignored (Poison Pill protection)."
+            )
+        )
+    worker_lease_duration_seconds: int = Field(
+            default=300, # 5 minutes
+            description="How long a worker claims an asset before the lease expires and another worker can retry it."
+        )
     allowed_extensions_raw: str = "pdf,md"
     hash_algorithm: Literal["md5", "sha1", "sha256", "sha512"] = "sha256"
     @property
