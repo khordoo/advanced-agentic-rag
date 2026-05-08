@@ -147,7 +147,7 @@ class SourceAsset(Base):
     last_seen_run_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("ingestion_runs.id", ondelete="SET NULL"), index=True
     )
-    worker_id: Mapped[Optional[str]] = mapped_column(String(50))
+    worker_id: Mapped[Optional[str]] = mapped_column(String(255))
     attempt_count: Mapped[int] = mapped_column(INT, server_default="0", nullable=False)
     leased_until: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True),
