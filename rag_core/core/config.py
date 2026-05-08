@@ -14,6 +14,8 @@ from dotenv import dotenv_values, load_dotenv
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from pythonjsonlogger.json import JsonFormatter
+
 logger = logging.getLogger(__name__)
 
 # Keys that MUST exist in the environment / .env
@@ -97,15 +99,29 @@ def load_config(env_path: str | Path | None = None) -> dict[str, str]:
 
 
 def setup_logging():
-    """Independent logging setup that reads directly from the environment."""
+    """Independent logging setup that reads directly from the environment and outputs JSON."""
     load_dotenv()
     level_name = os.environ.get("LOG_LEVEL", "INFO").upper()
     level = getattr(logging, level_name, logging.INFO)
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-        force=True,
+
+    # 1. Grab the root logger and set your dynamic level
+    logger = logging.getLogger()
+    logger.setLevel(level)
+
+    # 2. Clear any default handlers to prevent duplicate logs
+    logger.handlers.clear()
+
+    # 3. Create a console handler
+    log_handler = logging.StreamHandler()
+
+    # 4. Attach the JSON formatter using your exact preferred fields
+    formatter = JsonFormatter(
+        '%(asctime)s %(levelname)s %(name)s %(message)s'
     )
+    log_handler.setFormatter(formatter)
+
+    # 5. Add the handler to the root logger
+    logger.addHandler(log_handler)
 
 
 class SecuritySettings(BaseSettings):
@@ -287,17 +303,28 @@ class IngestionSettings(BaseSettings):
         ),
     )
     worker_max_attempts: int = Field(
-            default=3,
-            ge=1,
-            description=(
-                "The maximum number of times a worker will attempt to process a single asset "
-                "before it is permanently ignored (Poison Pill protection)."
-            )
+        default=3,
+        ge=1,
+        description=(
+            "The maximum number of times a worker will attempt to process a single asset "
+            "before it is permanently ignored (Poison Pill protection)."
         )
+    )
     worker_lease_duration_seconds: int = Field(
-            default=300, # 5 minutes
-            description="How long a worker claims an asset before the lease expires and another worker can retry it."
-        )
+        default=300,  # 5 minutes
+        description=(
+            "How long a worker claims an asset before the lease expires and another "
+            "worker can retry it."
+        ),
+    )
+    worker_preflight_extension_seconds: int = Field(
+        default=60,
+        ge=1,
+        description=(
+            "How long a worker extends an asset lease before writing indexed "
+            "chunks to the vector store."
+        ),
+    )
     allowed_extensions_raw: str = "pdf,md"
     hash_algorithm: Literal["md5", "sha1", "sha256", "sha512"] = "sha256"
     @property

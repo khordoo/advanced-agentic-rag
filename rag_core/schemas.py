@@ -126,6 +126,9 @@ class TableChunk(BaseModel):
     summary: TableSummary
 
 
+TableMetadata = dict[str, Any]
+
+
 class ExtractedTable(BaseModel):
     # 1. The Atomic Parts (Stored Separately)
     raw_markdown_table: str
@@ -145,6 +148,21 @@ class ExtractedTable(BaseModel):
 # ---------------------------------------------------------------------------
 # Data structures
 # ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ClaimedSourceAsset:
+    """An immutable snapshot of a claimed asset for processing."""
+
+    id: int
+    asset_key: str
+    asset_name: str
+    parent_name: str | None
+    source_system: str
+    source_uri: str
+    tags: list[str]
+    scopes: list[str]
+    asset_metadata: dict[str, Any]
 
 
 @dataclass
