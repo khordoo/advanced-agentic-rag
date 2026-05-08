@@ -9,6 +9,7 @@ from sqlalchemy import (
     DateTime,
     Enum as SQLEnum,
     ForeignKey,
+    Index,
     String,
     Text,
     UniqueConstraint,
@@ -16,6 +17,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
+from sqlalchemy.types import INT
 
 from rag_core.store.postgres.models.base import Base
 
@@ -142,9 +144,14 @@ class SourceAsset(Base):
         default=AssetState.PENDING,
         nullable=False,
     )
-    worker_id: Mapped[Optional[str]] = mapped_column(String(50))
     last_seen_run_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("ingestion_runs.id", ondelete="SET NULL"), index=True
+    )
+    worker_id: Mapped[Optional[str]] = mapped_column(String(50))
+    attempt_count: Mapped[int] = mapped_column(INT, server_default="0", nullable=False)
+    leased_until: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -181,16 +188,16 @@ class SourceAsset(Base):
         UniqueConstraint(
             "parent_name", "asset_name", name="uix_asset_parent_name"
         ),
+        Index("ix_source_assets_queue_state", "state", "leased_until")
     )
 
     def __repr__(self) -> str:
         return (
-            "SourceAsset("
-            f"id={self.id}, "
-            f"asset_key={self.asset_key!r}, "
-            f"parent_name={self.parent_name!r}, "
-            f"asset_name={self.asset_name!r}, "
-            f"state={self.state}, "
-            f"last_seen_run_id={self.last_seen_run_id}"
-            ")"
-        )
+                    "SourceAsset("
+                    f"id={self.id}, "
+                    f"asset_key={self.asset_key!r}, "
+                    f"state={self.state}, "
+                    f"worker_id={self.worker_id}, "
+                    f"leased_until={self.leased_until}"
+                    ")"
+                )
