@@ -11,7 +11,7 @@ from rag_core.prompts import AgentPrompt
 
 logger = logging.getLogger(__name__)
 
-
+#TODO: rename this to generation
 class RAGPipeline:
     """Orchestrates retrieval and generation.
 

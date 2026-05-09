@@ -327,6 +327,23 @@ class IngestionSettings(BaseSettings):
     )
     allowed_extensions_raw: str = "pdf,md"
     hash_algorithm: Literal["md5", "sha1", "sha256", "sha512"] = "sha256"
+    indexer_backend: str = Field(
+        default="qdrant",
+        description=(
+            "Which vector store backend to use for indexing. "
+            "Supported values: 'qdrant', 'pgvector'."
+        ),
+    )
+    embedding_dimension: int = Field(
+        default=384,
+        ge=1,
+        description=(
+            "Dimension of the embedding vectors produced by the configured "
+            "fastembed model (e.g., 384 for BAAI/bge-small-en-v1.5). "
+            "Must match the pgvector Vector() column size when using pgvector."
+        ),
+    )
+
     @property
     def allowed_extensions(self) -> set[str]:
         return {

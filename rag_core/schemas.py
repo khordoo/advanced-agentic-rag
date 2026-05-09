@@ -173,6 +173,7 @@ class ParentChunk:
     enriched_text: str
     metadata: ParentMetadata
     children: list[Document] = field(default_factory=list)
+    asset_id: int | None = None
 
 
 class BaseChunkMetadata(BaseModel):

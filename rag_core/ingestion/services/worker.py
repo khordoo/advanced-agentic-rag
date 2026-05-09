@@ -123,9 +123,12 @@ class SourceIngestionWorkerService:
         settings: IngestionSettings | None = None,
         worker_id: str | None = None,
     ) -> SourceIngestionWorkerService:
-        """Builds a production-ready worker using the configured defaults."""
-        # We import these HERE, inside the method, so they don't bloat the global scope
-        from rag_core.indexing.qdrant_indexer import QdrantIndexer
+        """Builds a production-ready worker using the configured defaults.
+
+        The indexer backend (Qdrant or pgvector) is resolved from
+        ``IngestionSettings.indexer_backend`` via the factory.
+        """
+        from rag_core.indexing.factory import create_indexer
         from rag_core.ingestion.processing.markdown_processor import MarkdownProcessor
 
         resolved_settings = settings or get_ingestion_settings()
@@ -134,7 +137,7 @@ class SourceIngestionWorkerService:
             db=db,
             settings=resolved_settings,
             processor=MarkdownProcessor(),
-            indexer=QdrantIndexer(),
+            indexer=create_indexer(resolved_settings.indexer_backend),
             worker_id=worker_id,
         )
 
