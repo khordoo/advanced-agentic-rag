@@ -144,6 +144,7 @@ class SourceAsset(Base):
         ForeignKey("ingestion_runs.id", ondelete="SET NULL"), index=True
     )
     worker_id: Mapped[Optional[str]] = mapped_column(String(255))
+    lease_version: Mapped[int] = mapped_column(INT, server_default="0", nullable=False)
     attempt_count: Mapped[int] = mapped_column(INT, server_default="0", nullable=False)
     leased_until: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -186,6 +187,7 @@ class SourceAsset(Base):
             f"id={self.id}, "
             f"asset_key={self.asset_key!r}, "
             f"state={self.state}, "
+            f"lease_version={self.lease_version}, "
             f"worker_id={self.worker_id}, "
             f"leased_until={self.leased_until}"
             ")"
