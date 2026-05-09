@@ -1,8 +1,8 @@
 """initial schema
 
-Revision ID: fa758fba308e
+Revision ID: 5c2a22fc9e59
 Revises: 729088a76e80
-Create Date: 2026-05-09 16:45:41.964092
+Create Date: 2026-05-09 18:33:24.251575
 
 """
 from typing import Sequence, Union
@@ -13,7 +13,7 @@ from sqlalchemy.dialects import postgresql
 import pgvector.sqlalchemy
 
 # revision identifiers, used by Alembic.
-revision: str = 'fa758fba308e'
+revision: str = '5c2a22fc9e59'
 down_revision: Union[str, Sequence[str], None] = '729088a76e80'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -70,11 +70,13 @@ def upgrade() -> None:
     sa.Column('doc_type', sa.String(length=50), nullable=False),
     sa.Column('page_numbers', postgresql.ARRAY(sa.Integer()), server_default='{}', nullable=False),
     sa.Column('text', sa.Text(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.ForeignKeyConstraint(['asset_id'], ['source_assets.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_document_sections_asset_id'), 'document_sections', ['asset_id'], unique=False)
     op.create_index(op.f('ix_document_sections_asset_key'), 'document_sections', ['asset_key'], unique=False)
+    op.create_index(op.f('ix_document_sections_created_at'), 'document_sections', ['created_at'], unique=False)
     op.create_table('document_chunks',
     sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
     sa.Column('section_id', sa.Integer(), nullable=False),
@@ -85,10 +87,12 @@ def upgrade() -> None:
     sa.Column('scopes', postgresql.ARRAY(sa.String()), server_default='{}', nullable=False),
     sa.Column('tags', postgresql.ARRAY(sa.String()), server_default='{}', nullable=False),
     sa.Column('chunk_metadata', postgresql.JSONB(astext_type=sa.Text()), server_default='{}', nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.ForeignKeyConstraint(['section_id'], ['document_sections.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_document_chunks_asset_key'), 'document_chunks', ['asset_key'], unique=False)
+    op.create_index(op.f('ix_document_chunks_created_at'), 'document_chunks', ['created_at'], unique=False)
     op.create_index('ix_document_chunks_scopes_gin', 'document_chunks', ['scopes'], unique=False, postgresql_using='gin')
     op.create_index(op.f('ix_document_chunks_section_id'), 'document_chunks', ['section_id'], unique=False)
     op.create_index('ix_document_chunks_tags_gin', 'document_chunks', ['tags'], unique=False, postgresql_using='gin')
@@ -101,8 +105,10 @@ def downgrade() -> None:
     op.drop_index('ix_document_chunks_tags_gin', table_name='document_chunks', postgresql_using='gin')
     op.drop_index(op.f('ix_document_chunks_section_id'), table_name='document_chunks')
     op.drop_index('ix_document_chunks_scopes_gin', table_name='document_chunks', postgresql_using='gin')
+    op.drop_index(op.f('ix_document_chunks_created_at'), table_name='document_chunks')
     op.drop_index(op.f('ix_document_chunks_asset_key'), table_name='document_chunks')
     op.drop_table('document_chunks')
+    op.drop_index(op.f('ix_document_sections_created_at'), table_name='document_sections')
     op.drop_index(op.f('ix_document_sections_asset_key'), table_name='document_sections')
     op.drop_index(op.f('ix_document_sections_asset_id'), table_name='document_sections')
     op.drop_table('document_sections')

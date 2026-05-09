@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
+    DateTime,
     ForeignKey,
     Index,
     Integer,
     String,
     Text,
+    func,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -34,6 +37,12 @@ class DocumentSection(Base):
         ARRAY(Integer), server_default="{}", nullable=False
     )
     text: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+        index=True,
+    )
 
     asset: Mapped["SourceAsset"] = relationship()
 
@@ -61,6 +70,12 @@ class DocumentChunk(Base):
     )
     chunk_metadata: Mapped[dict] = mapped_column(
         JSONB, server_default="{}", nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+        index=True,
     )
 
     section: Mapped["DocumentSection"] = relationship()
