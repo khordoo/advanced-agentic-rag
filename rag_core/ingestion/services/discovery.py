@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Iterator
-from datetime import UTC, datetime
 import logging
 from typing import Any
 
@@ -239,12 +238,10 @@ class SourceDiscoveryService:
         eval_result: EligibilityResult,
         asset_repo: SourceAssetRepository,
     ) -> None:
-        asset_repo.update_asset(
+        asset_repo.queue_asset_for_reprocessing(
             asset_id=self._require_value(eval_result.existing_asset_pk, "existing_asset_pk"),
             content_hash=self._require_value(eval_result.content_hash, "content_hash"),
-            state=AssetState.PENDING,
-            last_seen_run_id=self._require_run_id(),
-            updated_at=datetime.now(UTC),
+            run_id=self._require_run_id(),
         )
         logger.info(
             "Queued existing asset for reprocessing asset_uri=%s asset_pk=%s",

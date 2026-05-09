@@ -51,6 +51,7 @@ class SourceAssetRepository:
             .values(
                 state=AssetState.PROCESSING,
                 worker_id=worker_id,
+                lease_version=SourceAsset.lease_version + 1,
                 leased_until=lease_expiration,
                 updated_at=func.now(),
                 attempt_count=SourceAsset.attempt_count + 1,
@@ -65,6 +66,7 @@ class SourceAssetRepository:
                 SourceAsset.tags,
                 SourceAsset.scopes,
                 SourceAsset.asset_metadata,
+                SourceAsset.lease_version,
             )
         )
         row = self.session.execute(stmt).mappings().one_or_none()
@@ -81,19 +83,23 @@ class SourceAssetRepository:
             tags=list(row["tags"] or []),
             scopes=list(row["scopes"] or []),
             asset_metadata=dict(row["asset_metadata"] or {}),
+            lease_version=row["lease_version"],
         )
 
-    def mark_asset_complete_if_owned(self, worker_id: str, asset_id: int) -> bool:
+    def mark_asset_complete_if_owned(
+        self, expected_version: int, asset_id: int
+    ) -> bool:
         """
-        Mark an asset completed when the current worker still owns it.
+        Mark an asset completed when the caller's lease version still matches.
 
-        Returns True when the row was updated, False when the worker lost ownership.
+        Returns True when the row was updated, False when another worker
+        claimed the asset (lease_version changed).
         """
         stmt = (
             update(SourceAsset)
             .where(
                 SourceAsset.id == asset_id,
-                SourceAsset.worker_id == worker_id,
+                SourceAsset.lease_version == expected_version,
                 SourceAsset.state == AssetState.PROCESSING,
             )
             .values(
@@ -108,20 +114,21 @@ class SourceAssetRepository:
 
     def extend_asset_lease(
         self,
-        worker_id: str,
+        expected_version: int,
         asset_id: int,
         extra_seconds: int = 60,
     ) -> bool:
         """
-        Extend an asset lease when the current worker still owns it.
+        Extend an asset lease when the caller's lease version still matches.
 
-        Returns True when the row was updated, False when the worker lost ownership.
+        Returns True when the row was updated, False when another worker
+        claimed the asset (lease_version changed).
         """
         stmt = (
             update(SourceAsset)
             .where(
                 SourceAsset.id == asset_id,
-                SourceAsset.worker_id == worker_id,
+                SourceAsset.lease_version == expected_version,
                 SourceAsset.state == AssetState.PROCESSING,
             )
             .values(
@@ -133,24 +140,25 @@ class SourceAssetRepository:
 
     def mark_asset_failed_or_retry_if_owned(
         self,
-        worker_id: str,
+        expected_version: int,
         asset_id: int,
         error_message: str,
         max_attempts: int,
     ) -> AssetState | None:
         """
-        Release a failed asset when the current worker still owns it.
+        Release a failed asset when the caller's lease version still matches.
 
         If the asset has retries left, it returns to PENDING. If it is out of
         retries, it becomes permanently FAILED.
 
-        Returns the new asset state, or None when the worker lost ownership.
+        Returns the new asset state, or None when another worker claimed the
+        asset (lease_version changed).
         """
         stmt = (
             update(SourceAsset)
             .where(
                 SourceAsset.id == asset_id,
-                SourceAsset.worker_id == worker_id,
+                SourceAsset.lease_version == expected_version,
                 SourceAsset.state == AssetState.PROCESSING,
             )
             .values(
@@ -199,6 +207,30 @@ class SourceAssetRepository:
             update(SourceAsset)
             .where(SourceAsset.id == asset_id)
             .values(**kwargs)
+            .returning(SourceAsset)
+        )
+        return self.session.execute(stmt).scalar_one_or_none()
+
+    def queue_asset_for_reprocessing(
+        self,
+        asset_id: int,
+        content_hash: str,
+        run_id: int,
+    ) -> SourceAsset | None:
+        stmt = (
+            update(SourceAsset)
+            .where(SourceAsset.id == asset_id)
+            .values(
+                content_hash=content_hash,
+                state=AssetState.PENDING,
+                attempt_count=0,
+                worker_id=None,
+                leased_until=None,
+                error_message=None,
+                lease_version=SourceAsset.lease_version + 1,
+                last_seen_run_id=run_id,
+                updated_at=func.now(),
+            )
             .returning(SourceAsset)
         )
         return self.session.execute(stmt).scalar_one_or_none()

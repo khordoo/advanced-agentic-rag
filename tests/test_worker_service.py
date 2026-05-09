@@ -24,7 +24,7 @@ def _settings(preflight_extension_seconds: int = 17) -> IngestionSettings:
     )
 
 
-def _asset(asset_id: int = 1) -> ClaimedSourceAsset:
+def _asset(asset_id: int = 1, lease_version: int = 1) -> ClaimedSourceAsset:
     return ClaimedSourceAsset(
         id=asset_id,
         asset_key=f"asset-{asset_id}",
@@ -35,6 +35,7 @@ def _asset(asset_id: int = 1) -> ClaimedSourceAsset:
         tags=["test"],
         scopes=["public"],
         asset_metadata={"asset_id": asset_id},
+        lease_version=lease_version,
     )
 
 
@@ -102,17 +103,21 @@ class _WorkerHarness(SourceIngestionWorkerService):
             return None
         return self.claimable_assets.pop(0)
 
-    def _extend_asset_lease(self, asset_id: int, extra_seconds: int) -> bool:
+    def _extend_asset_lease(
+        self, asset_id: int, *, lease_version: int, extra_seconds: int
+    ) -> bool:
         self.extended_leases.append((asset_id, extra_seconds))
         return self.extend_result
 
-    def _mark_asset_complete(self, asset_id: int) -> bool:
+    def _mark_asset_complete(self, asset_id: int, *, lease_version: int) -> bool:
         self.completed_assets.append(asset_id)
         return self.complete_result
 
     def _mark_asset_failed(
         self,
         asset_id: int,
+        *,
+        lease_version: int,
         error_message: str,
     ) -> AssetState | None:
         self.failed_assets.append((asset_id, error_message))
@@ -161,6 +166,7 @@ def test_claim_next_asset_returns_claimed_source_asset_snapshot() -> None:
                 "tags": None,
                 "scopes": None,
                 "asset_metadata": None,
+                "lease_version": 1,
             }
 
     class _FakeSession:
@@ -186,6 +192,7 @@ def test_claim_next_asset_returns_claimed_source_asset_snapshot() -> None:
         tags=[],
         scopes=[],
         asset_metadata={},
+        lease_version=1,
     )
 
 
@@ -202,7 +209,7 @@ def test_mark_asset_failed_or_retry_returns_new_state() -> None:
     repo = SourceAssetRepository(_FakeSession())
 
     new_state = repo.mark_asset_failed_or_retry_if_owned(
-        worker_id="worker-test",
+        expected_version=5,
         asset_id=80,
         error_message="boom",
         max_attempts=3,
@@ -337,7 +344,7 @@ def test_completion_failure_after_indexing_logs_critical(caplog: pytest.LogCaptu
 def test_extend_asset_lease_forwards_extra_seconds(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    calls: list[tuple[str, int, int]] = []
+    calls: list[tuple[int, int, int]] = []
 
     class _FakeSession:
         def __enter__(self):
@@ -359,11 +366,11 @@ def test_extend_asset_lease_forwards_extra_seconds(
 
         def extend_asset_lease(
             self,
-            worker_id: str,
+            expected_version: int,
             asset_id: int,
             extra_seconds: int = 60,
         ) -> bool:
-            calls.append((worker_id, asset_id, extra_seconds))
+            calls.append((expected_version, asset_id, extra_seconds))
             return True
 
     monkeypatch.setattr(worker_module, "SourceAssetRepository", _FakeRepository)
@@ -375,5 +382,5 @@ def test_extend_asset_lease_forwards_extra_seconds(
         worker_id="worker-test",
     )
 
-    assert worker._extend_asset_lease(60, extra_seconds=42) is True
-    assert calls == [("worker-test", 60, 42)]
+    assert worker._extend_asset_lease(60, lease_version=7, extra_seconds=42) is True
+    assert calls == [(7, 60, 42)]

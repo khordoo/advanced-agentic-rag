@@ -163,6 +163,7 @@ class ClaimedSourceAsset:
     tags: list[str]
     scopes: list[str]
     asset_metadata: dict[str, Any]
+    lease_version: int = 0
 
 
 @dataclass

@@ -100,8 +100,15 @@ def test_postgres_domain_postgres_column_optimizations() -> None:
     assert DocumentChunk.__table__.c.vector.type.dim is None
 
 
-def test_source_asset_worker_telemetry() -> None:
+def test_source_asset_fencing_and_telemetry_columns() -> None:
     worker_id = SourceAsset.__table__.c.worker_id
+    lease_version = SourceAsset.__table__.c.lease_version
 
-    assert worker_id.type.length == 50
+    # worker_id is telemetry-only (nullable string)
+    assert worker_id.type.length == 255
     assert worker_id.nullable is True
+
+    # lease_version is the fencing token (non-nullable integer, default 0)
+    assert lease_version.nullable is False
+    assert lease_version.server_default is not None
+    assert lease_version.server_default.arg == "0"

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
+from io import BytesIO
 import logging
 from pathlib import Path
 from typing import Any
@@ -7,7 +9,11 @@ from typing import Any
 from pytest import LogCaptureFixture, MonkeyPatch
 
 from rag_core.core.config import IngestionSettings
-from rag_core.ingestion.eligibility import EligibilityDecision, EligibilityResult
+from rag_core.ingestion.eligibility import (
+    EligibilityDecision,
+    EligibilityResult,
+    IngestionEligibilityService,
+)
 from rag_core.ingestion.services.discovery import (
     DiscoveryRunMetrics,
     SourceDiscoveryService,
@@ -17,10 +23,16 @@ from rag_core.store.postgres.models.ingestion import (
     IngestionRunStep,
     SourceAsset,
 )
+from rag_core.store.postgres.repositories.source_assets import SourceAssetRepository
 
 
 class _FakeProvider:
     source_system = "test_fs"
+
+    @contextmanager
+    def open_stream(self, uri: str):
+        del uri
+        yield BytesIO(b"content")
 
     def get_access_url(self, uri: str) -> str:
         return f"access://{uri}"
@@ -30,6 +42,7 @@ class _FakeAssetRepo:
     def __init__(self) -> None:
         self.created: list[SourceAsset] = []
         self.updated: list[tuple[int, dict[str, Any]]] = []
+        self.requeued: list[tuple[int, str, int]] = []
 
     def create_asset(self, asset: SourceAsset) -> SourceAsset:
         self.created.append(asset)
@@ -37,6 +50,14 @@ class _FakeAssetRepo:
 
     def update_asset(self, asset_id: int, **kwargs: Any) -> None:
         self.updated.append((asset_id, kwargs))
+
+    def queue_asset_for_reprocessing(
+        self,
+        asset_id: int,
+        content_hash: str,
+        run_id: int,
+    ) -> None:
+        self.requeued.append((asset_id, content_hash, run_id))
 
 
 class _NestedTransaction:
@@ -105,6 +126,49 @@ def _build_service() -> SourceDiscoveryService:
     return service
 
 
+def _build_asset(
+    *,
+    state: AssetState,
+    content_hash: str = "old-hash",
+    asset_id: int = 10,
+) -> SourceAsset:
+    return SourceAsset(
+        id=asset_id,
+        asset_key="asset-key",
+        content_hash=content_hash,
+        state=state,
+        asset_name="policy.md",
+        source_uri="source/legal/policy.md",
+    )
+
+
+def _evaluate_existing_asset(
+    monkeypatch: MonkeyPatch,
+    asset: SourceAsset,
+    discovered_hash: str,
+) -> EligibilityResult:
+    class _AssetRepository:
+        def get_asset(self, asset_key: str) -> SourceAsset:
+            assert asset_key == "asset-key"
+            return asset
+
+    monkeypatch.setattr(
+        "rag_core.ingestion.eligibility.generate_asset_key",
+        lambda source_uri: "asset-key",
+    )
+    monkeypatch.setattr(
+        "rag_core.ingestion.eligibility.compute_content_hash",
+        lambda stream_manager, algorithm: discovered_hash,
+    )
+
+    service = IngestionEligibilityService(
+        repo=_AssetRepository(),  # type: ignore[arg-type]
+        storage_provider=_FakeProvider(),  # type: ignore[arg-type]
+        hash_algorithm="sha256",
+    )
+    return service.evaluate_file("source/legal/policy.md")
+
+
 def test_iter_batches_yields_full_and_partial_batches() -> None:
     batches = SourceDiscoveryService._iter_batches((str(i) for i in range(5)), 2)
 
@@ -148,6 +212,56 @@ def test_process_new_asset_creates_pending_source_asset(tmp_path: Path) -> None:
     assert asset.asset_metadata == {"file_size_bytes": 8}
 
 
+def test_hash_mismatch_requeues_failed_asset(monkeypatch: MonkeyPatch) -> None:
+    result = _evaluate_existing_asset(
+        monkeypatch,
+        asset=_build_asset(state=AssetState.FAILED, content_hash="old-hash"),
+        discovered_hash="new-hash",
+    )
+
+    assert result.decision == EligibilityDecision.REPROCESS_UPDATED
+    assert result.existing_asset_pk == 10
+    assert result.content_hash == "new-hash"
+
+
+def test_hash_mismatch_requeues_processing_asset(monkeypatch: MonkeyPatch) -> None:
+    result = _evaluate_existing_asset(
+        monkeypatch,
+        asset=_build_asset(state=AssetState.PROCESSING, content_hash="old-hash"),
+        discovered_hash="new-hash",
+    )
+
+    assert result.decision == EligibilityDecision.REPROCESS_UPDATED
+    assert result.existing_asset_pk == 10
+    assert result.content_hash == "new-hash"
+
+
+def test_hash_mismatch_does_not_override_excluded_asset(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    result = _evaluate_existing_asset(
+        monkeypatch,
+        asset=_build_asset(state=AssetState.EXCLUDED, content_hash="old-hash"),
+        discovered_hash="new-hash",
+    )
+
+    assert result.decision == EligibilityDecision.IGNORE_EXCLUDED
+    assert result.existing_asset_pk == 10
+    assert result.content_hash is None
+
+
+def test_unchanged_failed_asset_is_not_requeued(monkeypatch: MonkeyPatch) -> None:
+    result = _evaluate_existing_asset(
+        monkeypatch,
+        asset=_build_asset(state=AssetState.FAILED, content_hash="same-hash"),
+        discovered_hash="same-hash",
+    )
+
+    assert result.decision == EligibilityDecision.IGNORE_UNCHANGED
+    assert result.existing_asset_pk == 10
+    assert result.content_hash is None
+
+
 def test_reprocess_updated_asset_marks_existing_asset_pending() -> None:
     repo = _FakeAssetRepo()
     metrics = DiscoveryRunMetrics()
@@ -165,14 +279,42 @@ def test_reprocess_updated_asset_marks_existing_asset_pending() -> None:
     assert metrics.queued_new == 0
     assert metrics.queued_reprocess == 1
     assert repo.created == []
-    assert len(repo.updated) == 1
+    assert repo.updated == []
+    assert repo.requeued == [(7, "new-hash", 42)]
 
-    asset_id, fields = repo.updated[0]
-    assert asset_id == 7
-    assert fields["content_hash"] == "new-hash"
-    assert fields["state"] == AssetState.PENDING
-    assert fields["last_seen_run_id"] == 42
-    assert fields["updated_at"].tzinfo is not None
+def test_queue_updated_asset_resets_worker_retry_and_lease_state() -> None:
+    class _RecordingRepository:
+        def __init__(self) -> None:
+            self.statement = None
+
+        def execute(self, stmt):
+            self.statement = stmt
+
+            class _Result:
+                def scalar_one_or_none(self):
+                    return None
+
+            return _Result()
+
+    session = _RecordingRepository()
+    repo = SourceAssetRepository(session)  # type: ignore[arg-type]
+
+    repo.queue_asset_for_reprocessing(
+        asset_id=7,
+        content_hash="new-hash",
+        run_id=42,
+    )
+
+    assert session.statement is not None
+    values = session.statement._values
+    assert values[SourceAsset.__table__.c.content_hash].value == "new-hash"
+    assert values[SourceAsset.__table__.c.state].value == AssetState.PENDING
+    assert values[SourceAsset.__table__.c.attempt_count].value == 0
+    assert values[SourceAsset.__table__.c.worker_id].value is None
+    assert values[SourceAsset.__table__.c.leased_until].value is None
+    assert values[SourceAsset.__table__.c.error_message].value is None
+    assert values[SourceAsset.__table__.c.last_seen_run_id].value == 42
+    assert "lease_version + " in str(values[SourceAsset.__table__.c.lease_version])
 
 
 def test_unchanged_asset_is_marked_seen_without_queueing() -> None:

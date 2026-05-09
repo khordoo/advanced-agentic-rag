@@ -184,6 +184,7 @@ class SourceIngestionWorkerService:
 
             if not self._extend_asset_lease(
                 asset.id,
+                lease_version=asset.lease_version,
                 extra_seconds=self.settings.worker_preflight_extension_seconds,
             ):
                 logger.warning(
@@ -194,7 +195,7 @@ class SourceIngestionWorkerService:
 
             self._index_chunks(chunks)
 
-            if self._mark_asset_complete(asset.id):
+            if self._mark_asset_complete(asset.id, lease_version=asset.lease_version):
                 logger.info(
                     "Source asset completed",
                     extra={"worker_id": self.worker_id, "asset_id": asset.id},
@@ -212,6 +213,7 @@ class SourceIngestionWorkerService:
             )
             new_state = self._mark_asset_failed(
                 asset.id,
+                lease_version=asset.lease_version,
                 error_message=str(exc),
             )
             if new_state == AssetState.PENDING:
@@ -265,21 +267,23 @@ class SourceIngestionWorkerService:
         )
         return asset
 
-    def _mark_asset_complete(self, asset_id: int) -> bool:
+    def _mark_asset_complete(self, asset_id: int, *, lease_version: int) -> bool:
         with self.db.get_session() as session:
             with session.begin():
                 repo = SourceAssetRepository(session)
                 return repo.mark_asset_complete_if_owned(
-                    worker_id=self.worker_id,
+                    expected_version=lease_version,
                     asset_id=asset_id,
                 )
 
-    def _extend_asset_lease(self, asset_id: int, extra_seconds: int) -> bool:
+    def _extend_asset_lease(
+        self, asset_id: int, *, lease_version: int, extra_seconds: int
+    ) -> bool:
         with self.db.get_session() as session:
             with session.begin():
                 repo = SourceAssetRepository(session)
                 return repo.extend_asset_lease(
-                    worker_id=self.worker_id,
+                    expected_version=lease_version,
                     asset_id=asset_id,
                     extra_seconds=extra_seconds,
                 )
@@ -287,13 +291,15 @@ class SourceIngestionWorkerService:
     def _mark_asset_failed(
         self,
         asset_id: int,
+        *,
+        lease_version: int,
         error_message: str,
     ) -> AssetState | None:
         with self.db.get_session() as session:
             with session.begin():
                 repo = SourceAssetRepository(session)
                 return repo.mark_asset_failed_or_retry_if_owned(
-                    worker_id=self.worker_id,
+                    expected_version=lease_version,
                     asset_id=asset_id,
                     error_message=error_message,
                     max_attempts=self.settings.worker_max_attempts,
