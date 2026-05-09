@@ -1,7 +1,10 @@
+from langchain_core.documents import Document
 from pgvector.sqlalchemy import Vector
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import configure_mappers
 
+from rag_core.indexing.pgvector_indexer import PgVectorIndexer
+from rag_core.schemas import ParentChunk, ParentMetadata
 from rag_core.store.postgres.models.documents import DocumentChunk, DocumentSection
 from rag_core.store.postgres.models.ingestion import (
     AssetState,
@@ -30,11 +33,9 @@ def test_postgres_domain_enums_match_contract() -> None:
     }
     assert {item.name for item in IngestionRunStep} == {
         "SCANNING",
-        "PARSING",
-        "CHUNKING",
-        "EMBEDDING",
-        "INGESTING",
         "RECONCILING",
+        "INGESTING",
+        "FINALIZING",
     }
     assert {item.name for item in AssetState} == {
         "PENDING",
@@ -42,7 +43,7 @@ def test_postgres_domain_enums_match_contract() -> None:
         "COMPLETED",
         "FAILED",
         "DELETED",
-        "IGNORED",
+        "EXCLUDED",
     }
 
 
@@ -75,6 +76,11 @@ def test_postgres_domain_relationships_are_bottom_up_only() -> None:
 
 
 def test_postgres_domain_postgres_column_optimizations() -> None:
+    assert "asset_key" in DocumentSection.__table__.c
+    assert "file_id" not in DocumentSection.__table__.c
+    assert "asset_key" in DocumentChunk.__table__.c
+    assert "file_id" not in DocumentChunk.__table__.c
+
     array_columns = [
         DocumentSection.__table__.c.page_numbers,
         DocumentChunk.__table__.c.page_numbers,
@@ -98,6 +104,46 @@ def test_postgres_domain_postgres_column_optimizations() -> None:
 
     assert isinstance(DocumentChunk.__table__.c.vector.type, Vector)
     assert DocumentChunk.__table__.c.vector.type.dim is None
+
+
+def test_pgvector_row_builders_use_asset_key() -> None:
+    block = ParentChunk(
+        id="parent-1",
+        enriched_text="parent text",
+        metadata=ParentMetadata(
+            asset_key="annual_report_a1b2c3d4.pdf",
+            file_name="Annual Report.pdf",
+            source="/docs/Annual Report.pdf",
+            pages=[1],
+        ),
+        children=[
+            Document(
+                page_content="child text",
+                metadata={
+                    "asset_key": "annual_report_a1b2c3d4.pdf",
+                    "file_name": "Annual Report.pdf",
+                    "pages": [1],
+                    "scopes": ["public"],
+                    "tags": ["finance"],
+                },
+            )
+        ],
+        asset_id=42,
+    )
+
+    section = PgVectorIndexer._build_section(block)
+    section.id = 123
+    chunk = PgVectorIndexer._build_chunk(
+        section=section,
+        child=block.children[0],
+        block=block,
+        vector=[0.1, 0.2],
+    )
+
+    assert section.asset_key == "annual_report_a1b2c3d4.pdf"
+    assert chunk.asset_key == "annual_report_a1b2c3d4.pdf"
+    assert "asset_key" not in chunk.chunk_metadata
+    assert "file_name" not in chunk.chunk_metadata
 
 
 def test_source_asset_fencing_and_telemetry_columns() -> None:

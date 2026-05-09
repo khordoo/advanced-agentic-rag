@@ -55,7 +55,6 @@ def convert_pdf_to_markdown(
     logger.info("Converting %s to markdown …", input_path.name)
     result = converter.convert(str(input_path))
 
-    file_name = input_path.name
     # Export with page-break placeholders
     raw_markdown = result.document.export_to_markdown(
         page_break_placeholder=PAGE_TMPL
@@ -115,7 +114,8 @@ def _enrich_tables_with_surrounding_text(document: DoclingDocument,source_path:P
         page_no = current.prov[0].page_no if current.prov else 'UNKNOWN'
         table_enriched='\n\n'.join(table_context)
         enriched_tables.append({
-            'file_name': file_id or source_path.name,
+            'asset_key': file_id or source_path.name,
+            'file_name': source_path.name,
             'source_path':str(source_path),
             'page_no': page_no,
             'markdown':table_enriched
@@ -130,7 +130,7 @@ def _remove_tables_from_markdown(raw_markdown: str, doc):
     """Replaces tables in the markdown with a string placeholder.
     Tables are processed separately with LLM summary and later added to the text.
     """
-    logger.info(f"Removing table started...")
+    logger.info("Removing table started...")
     for i, table in enumerate(doc.tables):
         try:
             table_id = f"DATA_TABLE_{i:03d}" #Base 1

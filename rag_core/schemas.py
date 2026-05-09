@@ -182,7 +182,8 @@ class BaseChunkMetadata(BaseModel):
     Base schema for document chunk metadata.
 
     Attributes:
-        file_name: The original name of the source file.
+        asset_key: The stable canonical identifier for the source asset.
+        file_name: The human-readable display name of the source file.
         source: The URI or path source of the document.
         pages: List of page numbers associated with this chunk [1,2] or [1].
         tags: Categorization labels used for logical grouping (e.g., ['finance', 'legal']).
@@ -191,6 +192,7 @@ class BaseChunkMetadata(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
+    asset_key: str
     file_name: str
     source: str
     pages: list[int]

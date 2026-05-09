@@ -155,12 +155,8 @@ class PgVectorIndexer(BaseIndexer):
         logger.info("Resetting pgvector document tables …")
         with self._db.get_session() as session:
             with session.begin():
-                session.execute(
-                    DocumentChunk.__table__.delete()
-                )
-                session.execute(
-                    DocumentSection.__table__.delete()
-                )
+                session.execute(DocumentChunk.__table__.delete())
+                session.execute(DocumentSection.__table__.delete())
         logger.info("pgvector document tables truncated.")
 
     # ------------------------------------------------------------------
@@ -198,7 +194,7 @@ class PgVectorIndexer(BaseIndexer):
         meta = block.metadata
         return DocumentSection(
             asset_id=block.asset_id,
-            file_id=meta.file_name,
+            asset_key=meta.asset_key,
             source_uri=meta.source,
             doc_type="table" if meta.table_id else "text",
             page_numbers=meta.pages,
@@ -214,9 +210,10 @@ class PgVectorIndexer(BaseIndexer):
     ) -> DocumentChunk:
         """Build a DocumentChunk row from a child document."""
         meta = child.metadata if hasattr(child, "metadata") else {}
+        meta["parent_id"] = section.id
         return DocumentChunk(
             section_id=section.id,
-            file_id=meta.get("file_name", block.metadata.file_name),
+            asset_key=meta.get("asset_key", block.metadata.asset_key),
             page_numbers=meta.get("pages", block.metadata.pages),
             text=child.page_content,
             vector=vector,
@@ -225,6 +222,6 @@ class PgVectorIndexer(BaseIndexer):
             chunk_metadata={
                 k: v
                 for k, v in meta.items()
-                if k not in {"file_name", "pages", "scopes", "tags"}
+                if k not in {"asset_key", "file_name", "pages", "scopes", "tags"}
             },
         )

@@ -16,7 +16,6 @@ from rag_core.agents import TableSummarizer
 from rag_core.ingestion.processing.base import BaseProcessor
 from rag_core.ingestion.processing.converter import convert_pdf_to_markdown
 from rag_core.ingestion.processing.chunker import chunk_markdown, summerize_and_chunk_table
-from rag_core.ingestion.fingerprinting import generate_asset_key
 from rag_core.schemas import ClaimedSourceAsset, ParentChunk
 
 logger = logging.getLogger(__name__)
