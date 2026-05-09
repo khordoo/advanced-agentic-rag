@@ -4,7 +4,7 @@ import logging
 from urllib.parse import urlparse
 from urllib.request import url2pathname
 from pathlib import Path
-from typing import Protocol, BinaryIO, Generator, Iterator
+from typing import BinaryIO, Generator, Iterator
 import contextlib
 
 logger = logging.getLogger(__name__)

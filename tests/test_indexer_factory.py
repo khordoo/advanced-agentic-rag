@@ -91,16 +91,18 @@ class TestCreateIndexer:
 class TestIngestionSettingsIndexerFields:
     """Verify the new config fields have correct defaults."""
 
-    def test_default_indexer_backend(self):
+    def test_default_indexer_backend(self, monkeypatch):
+        monkeypatch.delenv("INGESTION_INDEXER_BACKEND", raising=False)
         from rag_core.core.config import IngestionSettings
 
-        settings = IngestionSettings()
+        settings = IngestionSettings(_env_file=None)
         assert settings.indexer_backend == "qdrant"
 
-    def test_default_embedding_dimension(self):
+    def test_default_embedding_dimension(self, monkeypatch):
+        monkeypatch.delenv("INGESTION_EMBEDDING_DIMENSION", raising=False)
         from rag_core.core.config import IngestionSettings
 
-        settings = IngestionSettings()
+        settings = IngestionSettings(_env_file=None)
         assert settings.embedding_dimension == 384
 
     def test_custom_indexer_backend(self, monkeypatch):

@@ -1,7 +1,6 @@
 """Retriever with hierarchical parent-child search and cross-encoder reranking."""
 
 from __future__ import annotations
-import json
 import logging
 import pickle
 from pathlib import Path

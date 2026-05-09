@@ -1,6 +1,5 @@
 from pydantic import BaseModel, Field
 from typing import List
-import json
 
 
 class Citation(BaseModel):

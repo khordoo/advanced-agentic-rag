@@ -1,6 +1,5 @@
 """Interactive CLI for communicating with the RAG agent graph."""
 
-import json
 import logging
 from langchain_core.messages import HumanMessage, AIMessage
 

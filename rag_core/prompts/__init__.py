@@ -1,1 +1,1 @@
-from rag_core.prompts.loader import AgentPrompt
+from rag_core.prompts.loader import AgentPrompt as AgentPrompt
