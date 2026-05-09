@@ -27,7 +27,7 @@ class DocumentSection(Base):
         ForeignKey("source_assets.id", ondelete="CASCADE"), index=True
     )
 
-    file_id: Mapped[str] = mapped_column(String(255), index=True)
+    asset_key: Mapped[str] = mapped_column(String(255), index=True)
     source_uri: Mapped[str] = mapped_column(String(4096))
     doc_type: Mapped[str] = mapped_column(String(50))
     page_numbers: Mapped[list[int]] = mapped_column(
@@ -46,7 +46,7 @@ class DocumentChunk(Base):
         ForeignKey("document_sections.id", ondelete="CASCADE"), index=True
     )
 
-    file_id: Mapped[str] = mapped_column(String(255), index=True)
+    asset_key: Mapped[str] = mapped_column(String(255), index=True)
     page_numbers: Mapped[list[int]] = mapped_column(
         ARRAY(Integer), server_default="{}", nullable=False
     )
