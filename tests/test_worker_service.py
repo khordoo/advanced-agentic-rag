@@ -59,7 +59,16 @@ class _FakeProcessor(BaseProcessor):
 class _FakeIndexer(BaseIndexer):
     def __init__(self, error: Exception | None = None) -> None:
         self.error = error
+        self.indexed_assets: list[tuple[ClaimedSourceAsset, list[ParentChunk]]] = []
         self.ingested_batches: list[list[ParentChunk]] = []
+
+    def index_asset(
+        self,
+        asset: ClaimedSourceAsset,
+        document_blocks: list[ParentChunk],
+    ) -> None:
+        self.indexed_assets.append((asset, document_blocks))
+        self.ingest_documents(document_blocks)
 
     def ingest_documents(self, document_blocks: list[ParentChunk]) -> None:
         if self.error is not None:
@@ -227,6 +236,9 @@ def test_run_once_processes_indexes_and_marks_complete() -> None:
 
     assert [asset.id for asset in processor.processed_assets] == [10]
     assert indexer.ingested_batches == [[]]
+    assert [(asset.id, chunks) for asset, chunks in indexer.indexed_assets] == [
+        (10, [])
+    ]
     assert worker.extended_leases == [(10, 17)]
     assert worker.completed_assets == [10]
     assert worker.failed_assets == []
@@ -249,6 +261,7 @@ def test_lease_extension_failure_skips_indexing_and_completion() -> None:
     assert worker.run_once() is True
 
     assert indexer.ingested_batches == []
+    assert indexer.indexed_assets == []
     assert worker.completed_assets == []
     assert worker.failed_assets == []
     assert worker.extended_leases == [(20, 17)]
@@ -337,6 +350,9 @@ def test_completion_failure_after_indexing_logs_critical(caplog: pytest.LogCaptu
     assert worker.run_once() is True
 
     assert indexer.ingested_batches == [[]]
+    assert [(asset.id, chunks) for asset, chunks in indexer.indexed_assets] == [
+        (50, [])
+    ]
     assert worker.completed_assets == [50]
     assert "deterministic chunk IDs are required for safe retries" in caplog.text
 

@@ -193,7 +193,7 @@ class SourceIngestionWorkerService:
                 )
                 return True
 
-            self._index_chunks(chunks)
+            self._index_chunks(asset, chunks)
 
             if self._mark_asset_complete(asset.id, lease_version=asset.lease_version):
                 logger.info(
@@ -308,8 +308,12 @@ class SourceIngestionWorkerService:
     def _process_asset(self, asset: ClaimedSourceAsset) -> list[ParentChunk]:
         return self.processor.process_asset(asset)
 
-    def _index_chunks(self, chunks: list[ParentChunk]) -> None:
-        self.indexer.ingest_documents(chunks)
+    def _index_chunks(
+        self,
+        asset: ClaimedSourceAsset,
+        chunks: list[ParentChunk],
+    ) -> None:
+        self.indexer.index_asset(asset, chunks)
 
 if __name__ == "__main__":
     from rag_core.core.config import setup_logging

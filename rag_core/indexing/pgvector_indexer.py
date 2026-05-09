@@ -21,8 +21,9 @@ from rag_core.core.config import (
     get_qdrant_settings,
 )
 from rag_core.indexing.base import BaseIndexer
-from rag_core.schemas import ParentChunk
+from rag_core.schemas import ClaimedSourceAsset, ParentChunk
 from rag_core.store.postgres.models.documents import DocumentChunk, DocumentSection
+from rag_core.store.postgres.repositories.documents import DocumentRepository
 from rag_core.store.postgres.session import Database, get_database
 
 logger = logging.getLogger(__name__)
@@ -89,23 +90,64 @@ class PgVectorIndexer(BaseIndexer):
     # BaseIndexer contract
     # ------------------------------------------------------------------
 
-    def ingest_documents(self, document_blocks: list[ParentChunk]) -> None:
-        """Persist parent + child chunks into Postgres.
+    def index_asset(
+        self,
+        asset: ClaimedSourceAsset,
+        document_blocks: list[ParentChunk],
+    ) -> None:
+        """Atomically replace the Postgres index for one claimed source asset."""
+        self._validate_blocks_for_asset(asset.id, document_blocks)
+        self._sync_document_blocks(asset.id, document_blocks)
 
-        Each :class:`ParentChunk` produces:
-        * One :class:`DocumentSection` row (the parent / LLM payload).
-        * Multiple :class:`DocumentChunk` rows (embedded child chunks).
+    def ingest_documents(self, document_blocks: list[ParentChunk]) -> None:
+        """Persist parent + child chunks into Postgres for one asset.
+
+        This legacy entry point derives the asset ID from the batch and then
+        uses the same asset-scoped replacement path as :meth:`index_asset`.
         """
         if not document_blocks:
             logger.info("No document blocks to ingest — skipping.")
             return
 
+        asset_id = self._infer_single_asset_id(document_blocks)
+        self._sync_document_blocks(asset_id, document_blocks)
+
+    def _sync_document_blocks(
+        self,
+        asset_id: int,
+        document_blocks: list[ParentChunk],
+    ) -> None:
+        """Build fresh rows and replace all indexed rows for one asset."""
         logger.info(
-            "Preparing %d document blocks for pgvector ingestion …",
+            "Preparing %d document blocks for pgvector asset sync …",
             len(document_blocks),
         )
 
-        # Collect all child texts for batch embedding
+        sections, chunks = self._build_index_rows(document_blocks)
+
+        with self._db.get_session() as session:
+            with session.begin():
+                repo = DocumentRepository(session)
+                deleted_sections = repo.sync_document_index(
+                    asset_id=asset_id,
+                    sections=sections,
+                    chunks=chunks,
+                )
+
+        logger.info(
+            "pgvector asset sync complete: asset_id=%d, deleted_sections=%d, "
+            "%d sections, %d chunks.",
+            asset_id,
+            deleted_sections,
+            len(sections),
+            len(chunks),
+        )
+
+    def _build_index_rows(
+        self,
+        document_blocks: list[ParentChunk],
+    ) -> tuple[list[DocumentSection], list[DocumentChunk]]:
+        """Build unsaved section and chunk rows for a validated asset batch."""
         all_child_texts: list[str] = []
         child_index_map: list[tuple[int, int]] = []  # (block_idx, child_idx)
 
@@ -114,37 +156,31 @@ class PgVectorIndexer(BaseIndexer):
                 all_child_texts.append(child.page_content)
                 child_index_map.append((block_idx, child_idx))
 
-        # Batch embed
         vectors = self._embed_texts(all_child_texts) if all_child_texts else []
 
-        # Build a lookup: (block_idx, child_idx) → vector
         vector_lookup: dict[tuple[int, int], list[float]] = {}
         for (block_idx, child_idx), vec in zip(child_index_map, vectors):
             vector_lookup[(block_idx, child_idx)] = vec
 
-        # Write to Postgres
-        with self._db.get_session() as session:
-            with session.begin():
-                for block_idx, block in enumerate(document_blocks):
-                    section = self._build_section(block)
-                    session.add(section)
-                    session.flush()  # get section.id
+        sections: list[DocumentSection] = []
+        chunks: list[DocumentChunk] = []
 
-                    for child_idx, child in enumerate(block.children):
-                        vec = vector_lookup.get((block_idx, child_idx), [])
-                        chunk = self._build_chunk(
-                            section=section,
-                            child=child,
-                            block=block,
-                            vector=vec,
-                        )
-                        session.add(chunk)
+        for block_idx, block in enumerate(document_blocks):
+            section = self._build_section(block)
+            sections.append(section)
 
-        logger.info(
-            "pgvector ingestion complete: %d sections, %d chunks.",
-            len(document_blocks),
-            len(all_child_texts),
-        )
+            for child_idx, child in enumerate(block.children):
+                vec = vector_lookup.get((block_idx, child_idx), [])
+                chunks.append(
+                    self._build_chunk(
+                        section=section,
+                        child=child,
+                        block=block,
+                        vector=vec,
+                    )
+                )
+
+        return sections, chunks
 
     def reset_collections(self) -> None:
         """Truncate document_chunks and document_sections tables.
@@ -184,6 +220,47 @@ class PgVectorIndexer(BaseIndexer):
     # ------------------------------------------------------------------
 
     @staticmethod
+    def _validate_blocks_for_asset(
+        asset_id: int,
+        document_blocks: list[ParentChunk],
+    ) -> None:
+        """Ensure every processed block belongs to the claimed asset."""
+        for block in document_blocks:
+            if block.asset_id is None:
+                raise ValueError(
+                    f"ParentChunk '{block.id}' is missing asset_id. "
+                    "The processor must stamp each chunk with the source asset PK."
+                )
+            if block.asset_id != asset_id:
+                raise ValueError(
+                    f"ParentChunk '{block.id}' belongs to asset_id={block.asset_id}, "
+                    f"but the claimed asset is asset_id={asset_id}."
+                )
+
+    @classmethod
+    def _infer_single_asset_id(cls, document_blocks: list[ParentChunk]) -> int:
+        """Infer the single asset ID represented by a legacy ingest batch."""
+        asset_id: int | None = None
+        for block in document_blocks:
+            if block.asset_id is None:
+                raise ValueError(
+                    f"ParentChunk '{block.id}' is missing asset_id. "
+                    "Use index_asset(asset, blocks) for asset-scoped indexing."
+                )
+            if asset_id is None:
+                asset_id = block.asset_id
+            elif block.asset_id != asset_id:
+                raise ValueError(
+                    "PgVectorIndexer.ingest_documents only supports one asset_id "
+                    "per batch. Use index_asset(asset, blocks) per claimed asset."
+                )
+
+        if asset_id is None:
+            raise ValueError("Cannot infer asset_id from an empty document batch.")
+        cls._validate_blocks_for_asset(asset_id, document_blocks)
+        return asset_id
+
+    @staticmethod
     def _build_section(block: ParentChunk) -> DocumentSection:
         """Build a DocumentSection row from a ParentChunk."""
         if block.asset_id is None:
@@ -209,19 +286,24 @@ class PgVectorIndexer(BaseIndexer):
         vector: list[float],
     ) -> DocumentChunk:
         """Build a DocumentChunk row from a child document."""
-        meta = child.metadata if hasattr(child, "metadata") else {}
-        meta["parent_id"] = section.id
-        return DocumentChunk(
-            section_id=section.id,
-            asset_key=meta.get("asset_key", block.metadata.asset_key),
-            page_numbers=meta.get("pages", block.metadata.pages),
-            text=child.page_content,
-            vector=vector,
-            scopes=meta.get("scopes", block.metadata.scopes),
-            tags=meta.get("tags", block.metadata.tags),
-            chunk_metadata={
+        meta = dict(child.metadata if hasattr(child, "metadata") else {})
+        if section.id is not None:
+            meta["parent_id"] = section.id
+
+        fields: dict[str, Any] = {
+            "section": section,
+            "asset_key": meta.get("asset_key", block.metadata.asset_key),
+            "page_numbers": meta.get("pages", block.metadata.pages),
+            "text": child.page_content,
+            "vector": vector,
+            "scopes": meta.get("scopes", block.metadata.scopes),
+            "tags": meta.get("tags", block.metadata.tags),
+            "chunk_metadata": {
                 k: v
                 for k, v in meta.items()
                 if k not in {"asset_key", "file_name", "pages", "scopes", "tags"}
             },
-        )
+        }
+        if section.id is not None:
+            fields["section_id"] = section.id
+        return DocumentChunk(**fields)
