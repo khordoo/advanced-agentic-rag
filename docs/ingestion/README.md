@@ -2,6 +2,38 @@
 
 The ingestion input root is `data/source_documents/`.
 
+## Pipeline Entrypoint
+
+Use the canonical ingestion module for end-to-end ingestion:
+
+```bash
+uv run python -m rag_core.ingestion.pipeline
+```
+
+Discovery queues source files in Postgres. The ingestion worker then claims
+queued assets, processes them, and exits when no claimable work remains.
+
+## Worker Job Limits
+
+By default, `max_jobs` is `None`. That means the worker runs until the queue is
+empty and processes all available files.
+
+`INGESTION_DEFAULT_MAX_JOBS` is an optional limit for one ingestion run. Keep it
+commented out for the default drain-the-queue behavior:
+
+```bash
+# Optional limit for one ingestion run. If left commented out, max_jobs
+# defaults to None and the worker runs until the queue is empty.
+# INGESTION_DEFAULT_MAX_JOBS=100
+```
+
+Use this setting for local testing, smoke tests, canary runs, or bounded
+orchestrator tasks. It is not the primary fix for memory leaks; if long ingestion
+runs leak memory, investigate the processor or indexer lifecycle directly.
+
+Multiple workers can process the same queue concurrently because each worker
+claims assets through database leases.
+
 ## Metadata Extension Hooks
 
 Metadata extraction lives in `rag_core/ingestion/metadata.py`.

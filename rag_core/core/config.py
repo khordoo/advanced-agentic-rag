@@ -325,6 +325,14 @@ class IngestionSettings(BaseSettings):
             "chunks to the vector store."
         ),
     )
+    default_max_jobs: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Default max jobs for one ingestion run. None means run until the "
+            "queue is empty and process all available files."
+        ),
+    )
     allowed_extensions_raw: str = "pdf,md"
     hash_algorithm: Literal["md5", "sha1", "sha256", "sha512"] = "sha256"
     indexer_backend: str = Field(

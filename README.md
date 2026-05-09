@@ -24,7 +24,7 @@ uv sync --extra dev
 cp .env.example .env
 
 # Ingest source files from data/source_documents/
-uv run rag_core/pipelines/ingestion.py
+uv run python -m rag_core.ingestion.pipeline
 
 # Start CLI
 uv run rag_core/cli.py
@@ -48,6 +48,20 @@ make migrate-new MSG="describe schema change"
 # Show migration history
 make migrate-status
 ```
+
+## Ingestion Worker Behavior
+
+The canonical ingestion entrypoint is `rag_core.ingestion.pipeline`. Discovery
+queues source files in Postgres, then the ingestion worker claims queued assets
+and processes them until no claimable work remains.
+
+By default, `max_jobs` is `None`, which means the worker drains the queue and
+processes all available files. Multiple workers can run at the same time because
+asset claims are coordinated through database leases.
+
+`INGESTION_DEFAULT_MAX_JOBS` is an optional limit for local testing, smoke tests,
+canary runs, or bounded orchestrator tasks. Leave it commented out for the
+default drain-the-queue behavior.
 
 ## Folder Conventions
 

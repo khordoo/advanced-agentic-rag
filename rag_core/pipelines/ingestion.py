@@ -2,11 +2,11 @@
 
 .. deprecated::
     This module is a backward-compatibility shim.  All new code should use
-    :class:`~rag_core.ingestion.services.worker.SourceIngestionWorkerService`
-    directly.  This shim will be removed in a future release.
+    ``rag_core.ingestion.pipeline``.  This shim will be removed in a future
+    release.
 
-The ``IngestionPipeline`` class now delegates to
-:meth:`SourceIngestionWorkerService.default_production().run()`.
+The ``IngestionPipeline`` class now delegates to the canonical
+``rag_core.ingestion.pipeline`` entrypoints.
 """
 
 from __future__ import annotations
@@ -21,16 +21,16 @@ logger = logging.getLogger(__name__)
 
 
 class IngestionPipeline:
-    """Deprecated wrapper around the modern worker-based ingestion service.
+    """Deprecated wrapper around the canonical ingestion pipeline.
 
     .. deprecated::
-        Use ``SourceIngestionWorkerService.default_production()`` instead.
+        Use ``rag_core.ingestion.pipeline.run_ingestion_pipeline`` instead.
     """
 
     def __init__(self, config: dict | None = None, overwrite: bool = True, **kwargs):
         warnings.warn(
             "IngestionPipeline is deprecated and will be removed in a future release. "
-            "Use SourceIngestionWorkerService.default_production() instead.",
+            "Use rag_core.ingestion.pipeline.run_ingestion_pipeline() instead.",
             DeprecationWarning,
             stacklevel=2,
         )
@@ -38,21 +38,15 @@ class IngestionPipeline:
         self.overwrite = overwrite
         logger.info(
             "IngestionPipeline (deprecated shim) initialised. "
-            "Delegates to SourceIngestionWorkerService."
+            "Delegates to rag_core.ingestion.pipeline."
         )
 
     def run(self):
-        """Execute ingestion via the modern worker service."""
-        from rag_core.ingestion.services.worker import SourceIngestionWorkerService
+        """Execute ingestion via the canonical pipeline entrypoint."""
+        from rag_core.ingestion.pipeline import run_ingestion_pipeline
 
-        logger.info("IngestionPipeline.run() delegating to worker service …")
-        worker = SourceIngestionWorkerService.default_production()
-
-        if self.overwrite:
-            worker.indexer.reset_collections()
-            logger.info("Collections reset (overwrite=True)")
-
-        processed = worker.run()
+        logger.info("IngestionPipeline.run() delegating to canonical pipeline ...")
+        processed = run_ingestion_pipeline(overwrite=self.overwrite)
         logger.info("Worker completed: %d jobs processed", processed)
         return processed
 
