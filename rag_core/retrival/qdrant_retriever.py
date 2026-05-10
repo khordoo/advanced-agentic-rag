@@ -50,13 +50,18 @@ class QdrantRetriever(BaseRetriever):
 
     def exact_lookup(
         self,
-        scopes: list[str] | None = None,
+        asset_key: str | None = None,
         filters: dict[str, Any] | None = None,
+        scopes: list[str] | None = None,
         limit: int | None = None,
     ) -> list[Document]:
         """Perform a deterministic metadata lookup."""
-        limit = limit if limit is None else self.retrieval_settings.top_k
-        qdrant_filter = self._build_filters(scopes, exact_filters=filters)
+        limit = limit if limit is not None else self.retrieval_settings.top_k
+        qdrant_filter = self._build_filters(
+            scopes,
+            asset_key=asset_key,
+            exact_filters=filters,
+        )
 
         points, _ = self._client.scroll(
             collection_name=self._settings.parent_collection_name,
@@ -80,10 +85,11 @@ class QdrantRetriever(BaseRetriever):
     def search(
         self,
         query: str,
-        retrival_top_k: int | None = None,
-        rerank_top_k: int | None = None,
+        asset_key: str | None = None,
         scopes: list[str] | None = None,
         filters: dict[str, Any] | None = None,
+        retrival_top_k: int | None = None,
+        rerank_top_k: int | None = None,
         rerank: bool = True,
     ) -> list[Document]:
         """Execute hybrid search (dense + sparse RRF) with parent document reconstruction."""
@@ -99,7 +105,11 @@ class QdrantRetriever(BaseRetriever):
         #     if rrf_score_threshold is not None
         #     else self.retrieval_settings.rrf_score_threshold
         # )
-        qdrant_filter = self._build_filters(scopes, exact_filters=filters)
+        qdrant_filter = self._build_filters(
+            scopes,
+            asset_key=asset_key,
+            exact_filters=filters,
+        )
         fetch_limit = actual_retrival_top_k * self.retrieval_settings.oversample_factor
 
         # Embed query for both dense and sparse search
@@ -211,7 +221,8 @@ class QdrantRetriever(BaseRetriever):
     def _build_filters(
         self,
         scopes: list[str] | None,
-        exact_filters: dict[str, Any] | None,
+        asset_key: str | None = None,
+        exact_filters: dict[str, Any] | None = None,
     ) -> models.Filter:
         """Construct Qdrant Filter from scopes and exact metadata matches."""
 
@@ -225,8 +236,17 @@ class QdrantRetriever(BaseRetriever):
                 )
             )
 
+        if asset_key is not None:
+            must_conditions.append(
+                models.FieldCondition(
+                    key=PayloadKeys.ASSET_KEY.value,
+                    match=models.MatchValue(value=asset_key),
+                )
+            )
+
         if exact_filters:
             valid_keys = {k.value for k in PayloadKeys if k != PayloadKeys.TEXT}
+            valid_keys.discard(PayloadKeys.FILE_NAME.value)
             for key, val in exact_filters.items():
                 if key not in valid_keys:
                     raise KeyError(f"Invalid filter key: {key}. Allowed: {valid_keys}")

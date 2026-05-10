@@ -10,6 +10,12 @@ from pydantic import ValidationError
 from rag_core.core.config import GenerationSettings
 from rag_core.genetation.graph import RagGraphFactory
 from rag_core.genetation.nodes import GraphNodes, NodeName
+from rag_core.genetation.tools import (
+    AgentToolFactory,
+    FetchPageToolSchema,
+    TableLookupToolSchema,
+)
+from rag_core.schemas import VectorDatabasePayloadKeys as PayloadKeys
 
 
 def _noop_tool() -> str:
@@ -41,6 +47,32 @@ class _DummyToolExecutor:
 
     def invoke(self, payload):
         return {"messages": self.tool_messages}
+
+
+class _DummyRetriever:
+    def __init__(self) -> None:
+        self.search_calls = []
+        self.lookup_calls = []
+
+    def search(self, query, asset_key=None, **kwargs):
+        self.search_calls.append({"query": query, "asset_key": asset_key, **kwargs})
+        return [
+            Document(
+                page_content="search result",
+                metadata={PayloadKeys.ASSET_KEY.value: asset_key or "asset-search"},
+            )
+        ]
+
+    def exact_lookup(self, asset_key=None, filters=None, **kwargs):
+        self.lookup_calls.append(
+            {"asset_key": asset_key, "filters": filters, **kwargs}
+        )
+        return [
+            Document(
+                page_content="lookup result",
+                metadata={PayloadKeys.ASSET_KEY.value: asset_key},
+            )
+        ]
 
 
 def test_initial_router_uses_intent_router_when_enabled():
@@ -161,6 +193,48 @@ def test_generation_settings_enforce_safe_minimums():
 
     with pytest.raises(ValidationError):
         GenerationSettings(max_self_correction_attempts=0)
+
+
+def test_generation_tool_schemas_require_asset_key():
+    with pytest.raises(ValidationError):
+        FetchPageToolSchema(file_name="Annual Report.pdf", page_number=3)
+
+    with pytest.raises(ValidationError):
+        TableLookupToolSchema(table_id="DATA_TABLE_001", file_name="Annual Report.pdf")
+
+    assert FetchPageToolSchema(asset_key="asset-42", page_number=3).asset_key == "asset-42"
+    assert (
+        TableLookupToolSchema(table_id="DATA_TABLE_001", asset_key="asset-42").asset_key
+        == "asset-42"
+    )
+
+
+def test_generation_lookup_tools_filter_by_asset_key():
+    retriever = _DummyRetriever()
+    factory = AgentToolFactory(retriever=retriever)
+
+    factory._page_lookup(asset_key="asset-42", page_number=3)
+    factory._table_lookup(table_id="DATA_TABLE_001", asset_key="asset-42")
+
+    assert retriever.lookup_calls == [
+        {
+            "asset_key": "asset-42",
+            "filters": {PayloadKeys.PAGE.value: [3]},
+        },
+        {
+            "asset_key": "asset-42",
+            "filters": {PayloadKeys.TABLE_ID.value: "DATA_TABLE_001"},
+        },
+    ]
+
+
+def test_semantic_search_tool_passes_optional_asset_key():
+    retriever = _DummyRetriever()
+    factory = AgentToolFactory(retriever=retriever)
+
+    factory._semantic_search(query="revenue", asset_key="asset-42")
+
+    assert retriever.search_calls == [{"query": "revenue", "asset_key": "asset-42"}]
 
 
 def test_primary_rag_agent_increments_global_iteration_count():
@@ -367,3 +441,48 @@ def test_post_processing_handles_list_answer_content():
     payload = json.loads(result["messages"][0].content)
     assert payload["answer"] == "I cannot find the answer in the provided documents."
     assert payload["citations"] == []
+
+
+def test_post_processing_matches_citations_by_exact_asset_key():
+    model = _DummyModel()
+    nodes = GraphNodes(
+        reasoning_llm=model,
+        verifier_llm=model,
+        fast_llm=model,
+        tools=[_make_tool()],
+        settings=GenerationSettings(),
+    )
+
+    result = nodes.execute_post_processing(
+        {
+            "messages": [
+                AIMessage(
+                    content=(
+                        "Revenue increased [1]. Display-name citations do not match [2]."
+                        "\n\n### Sources\n"
+                        "[1] asset-42 (Page 3)\n"
+                        "[2] Annual Report.pdf (Page 4)"
+                    )
+                )
+            ],
+            "source_docs": [
+                Document(
+                    page_content="doc",
+                    metadata={
+                        "asset_key": "asset-42",
+                        "file_name": "Annual Report.pdf",
+                        "source": "/docs/Annual Report.pdf",
+                    },
+                )
+            ],
+            "token_budget": 0,
+            "intent_route": "domain_expert",
+        }
+    )
+
+    payload = json.loads(result["messages"][0].content)
+    assert payload["citations"][0]["asset_key"] == "asset-42"
+    assert payload["citations"][0]["source_url"] == "/docs/Annual Report.pdf"
+    assert "file_name" not in payload["citations"][0]
+    assert payload["citations"][1]["asset_key"] == "Annual Report.pdf"
+    assert payload["citations"][1]["source_url"] == ""

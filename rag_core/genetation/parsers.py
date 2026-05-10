@@ -49,8 +49,8 @@ def extract_clean_json(raw_response: str) -> dict:
 
 # ── Regex for parsing source lines ──────────────────────────────────────
 # Matches lines like:
-#   [1] report.pdf (Page 5)
-#   [2] Q3_Earnings_Report.pdf
+#   [1] annual_report_a1b2c3d4.pdf (Page 5)
+#   [2] q3_earnings_report_472.pdf
 _SOURCE_LINE_WITH_PAGE = re.compile(
     r"\[(\d+)\]\s+(.+?)\s+\(Page\s+(\d+)\)", re.IGNORECASE
 )
@@ -64,10 +64,10 @@ def parse_markdown_response(raw: str) -> RagFinalResponseSchema:
         Some answer text with citations [1] and [2].
 
         ### Sources
-        [1] report.pdf (Page 5)
-        [2] data.csv
+        [1] annual_report_a1b2c3d4.pdf (Page 5)
+        [2] finance_data_4f5e6d7c.csv
 
-    Returns a RagFinalResponseSchema with the answer text and parsed citations.
+    Returns a RagFinalResponseSchema with the answer text and parsed asset_key citations.
     If no ### Sources section is found, returns the full text as the answer with
     an empty citations list.
     """
@@ -101,7 +101,7 @@ def parse_markdown_response(raw: str) -> RagFinalResponseSchema:
             citations.append(
                 Citation(
                     document_index=idx,
-                    file_name=match.group(2).strip(),
+                    asset_key=match.group(2).strip(),
                     page_number=int(match.group(3)),
                 )
             )
@@ -111,13 +111,13 @@ def parse_markdown_response(raw: str) -> RagFinalResponseSchema:
         idx = int(match.group(1))
         if idx not in seen_indices:
             seen_indices.add(idx)
-            file_name = match.group(2).strip()
+            asset_key = match.group(2).strip()
             # Clean trailing parenthetical if regex caught partial junk
-            file_name = re.sub(r"\s*\(.*$", "", file_name).strip()
+            asset_key = re.sub(r"\s*\(.*$", "", asset_key).strip()
             citations.append(
                 Citation(
                     document_index=idx,
-                    file_name=file_name,
+                    asset_key=asset_key,
                     page_number=0,  # 0 signals "unknown" to the frontend
                 )
             )

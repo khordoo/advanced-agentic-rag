@@ -68,15 +68,16 @@ def test_asset_key_none_falls_back_to_basename():
         assert chunk.metadata.file_name == "report.pdf"
 
 
-def test_file_name_appears_in_enriched_text():
-    """The [Doc: ...] header in enriched text should contain the display name."""
+def test_asset_key_appears_in_enriched_text():
+    """The LLM-facing header should contain the asset_key, not the display name."""
     chunks = chunk_markdown(
         _SIMPLE_MD,
         source_path="/some/path/report.pdf",
         file_id="earnings_annual_report_123.pdf",
     )
     for chunk in chunks:
-        assert "[Doc: report.pdf]" in chunk.enriched_text
+        assert "[Asset: earnings_annual_report_123.pdf]" in chunk.enriched_text
+        assert "[Doc: report.pdf]" not in chunk.enriched_text
 
 
 def test_table_chunks_carry_asset_key_and_display_file_name():
@@ -98,5 +99,9 @@ def test_table_chunks_carry_asset_key_and_display_file_name():
     chunk = table_chunks[0]
     assert chunk.metadata.asset_key == "annual_report_a1b2c3d4.pdf"
     assert chunk.metadata.file_name == "Annual Report.pdf"
+    assert "[Asset: annual_report_a1b2c3d4.pdf]" in chunk.enriched_text
+    assert "[Doc: Annual Report.pdf]" not in chunk.enriched_text
     assert chunk.children[0].metadata["asset_key"] == "annual_report_a1b2c3d4.pdf"
     assert chunk.children[0].metadata["file_name"] == "Annual Report.pdf"
+    assert "[Asset: annual_report_a1b2c3d4.pdf]" in chunk.children[0].page_content
+    assert "[Doc: Annual Report.pdf]" not in chunk.children[0].page_content

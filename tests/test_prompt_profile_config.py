@@ -39,6 +39,20 @@ def test_general_assistant_prompt_renders_with_profile_values():
     assert "warm, helpful, and strictly professional" in rendered
 
 
+def test_primary_rag_prompt_uses_asset_key_for_tools_and_sources():
+    _reset_prompt_caches()
+    prompt = AgentPrompt.from_package("primary_rag_agent").chat_template.invoke(
+        {"question": "what changed?"}
+    )
+    rendered = "\n".join(str(message.content) for message in prompt.to_messages())
+
+    assert "asset_key" in rendered
+    assert "[Asset: ...]" in rendered
+    assert "tool" in rendered
+    assert "[N] asset_key (Page X)" in rendered
+    assert "file_name" not in rendered
+
+
 def test_intent_router_context_omits_response_style():
     _reset_prompt_caches()
     context = resolve_prompt_profile_context("intent_router")

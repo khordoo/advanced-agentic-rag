@@ -12,16 +12,16 @@ def test_markdown_with_citations():
         "Higher pricing of 4% was the specific driver [1]. "
         "Foreign exchange was unfavorable at 2% [2].\n\n"
         "### Sources\n"
-        "[1] report.pdf (Page 5)\n"
-        "[2] annual.pdf (Page 12)"
+        "[1] report_a1b2c3d4.pdf (Page 5)\n"
+        "[2] annual_d4c3b2a1.pdf (Page 12)"
     )
     result = parse_markdown_response(md)
     print("Test 1 (Markdown + citations):")
     print(result.model_dump_json(indent=2))
     assert len(result.citations) == 2
     assert result.citations[0].page_number == 5
-    assert result.citations[0].file_name == "report.pdf"
-    assert result.citations[1].file_name == "annual.pdf"
+    assert result.citations[0].asset_key == "report_a1b2c3d4.pdf"
+    assert result.citations[1].asset_key == "annual_d4c3b2a1.pdf"
     assert result.citations[1].page_number == 12
     print("  PASSED\n")
 
@@ -37,13 +37,13 @@ def test_no_sources():
 
 
 def test_source_without_page():
-    md = "The data shows growth [1].\n\n### Sources\n[1] data.csv"
+    md = "The data shows growth [1].\n\n### Sources\n[1] data_9a8b7c6d.csv"
     result = parse_markdown_response(md)
     print("Test 3 (No page number):")
     print(result.model_dump_json(indent=2))
     assert len(result.citations) == 1
     assert result.citations[0].page_number == 0
-    assert result.citations[0].file_name == "data.csv"
+    assert result.citations[0].asset_key == "data_9a8b7c6d.csv"
     print("  PASSED\n")
 
 
@@ -58,7 +58,7 @@ def test_json_fallback():
 
 
 def test_code_fenced_markdown():
-    md = "```\nAnswer text [1].\n\n### Sources\n[1] file.pdf (Page 3)\n```"
+    md = "```\nAnswer text [1].\n\n### Sources\n[1] file_1a2b3c4d.pdf (Page 3)\n```"
     result = parse_markdown_response(md)
     print("Test 5 (Code-fenced):")
     print(result.model_dump_json(indent=2))
@@ -72,9 +72,9 @@ def test_mixed_sources():
         "Growth was driven by pricing [1] and volume [2]. "
         "Additional detail in [3].\n\n"
         "### Sources\n"
-        "[1] report.pdf (Page 5)\n"
-        "[2] data.csv\n"
-        "[3] summary.pdf (Page 10)"
+        "[1] report_a1b2c3d4.pdf (Page 5)\n"
+        "[2] data_9a8b7c6d.csv\n"
+        "[3] summary_1234abcd.pdf (Page 10)"
     )
     result = parse_markdown_response(md)
     print("Test 6 (Mixed with/without pages):")
@@ -87,7 +87,7 @@ def test_mixed_sources():
 
 
 def test_file_id_style_citations():
-    """Parser handles sanitised file_id values (folder_stem_NNN.ext)."""
+    """Parser handles asset_key values."""
     md = (
         "Revenue grew 15% [1]. Details in [2].\n\n"
         "### Sources\n"
@@ -98,9 +98,9 @@ def test_file_id_style_citations():
     print("Test 7 (file_id-style citations):")
     print(result.model_dump_json(indent=2))
     assert len(result.citations) == 2
-    assert result.citations[0].file_name == "q3_earnings_report_472.pdf"
+    assert result.citations[0].asset_key == "q3_earnings_report_472.pdf"
     assert result.citations[0].page_number == 8
-    assert result.citations[1].file_name == "q4_earnings_report_831.pdf"
+    assert result.citations[1].asset_key == "q4_earnings_report_831.pdf"
     assert result.citations[1].page_number == 0
     print("  PASSED\n")
 

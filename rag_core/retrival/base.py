@@ -9,7 +9,9 @@ class BaseRetriever(ABC):
     def search(
         self,
         query: str,
+        asset_key: str | None = None,
         scopes: list[str] | None = None,
+        filters: dict | None = None,
         retrival_top_k: int | None = None,
         rerank_top_k: int | None = None,
         rerank: bool = True,
@@ -19,7 +21,11 @@ class BaseRetriever(ABC):
 
     @abstractmethod
     def exact_lookup(
-        self, filters: dict, scopes: list[str] = None, limit: int = None
+        self,
+        asset_key: str | None = None,
+        filters: dict | None = None,
+        scopes: list[str] | None = None,
+        limit: int | None = None,
     ) -> list[Document]:
         """Executes a deterministic metadata lookup."""
         raise NotImplementedError

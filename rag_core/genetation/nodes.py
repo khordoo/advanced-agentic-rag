@@ -1,8 +1,6 @@
 import json
 import logging
 from enum import StrEnum
-from pathlib import Path
-from urllib.parse import urlparse
 from pydantic import ValidationError
 from langgraph.prebuilt import ToolNode
 from langchain_core.tools import BaseTool
@@ -301,18 +299,6 @@ class GraphNodes:
         }
 
     @staticmethod
-    def _extract_display_name(source: str) -> str:
-        """Extract the human-readable filename from a source path or URL.
-
-        Works with filesystem paths ('docs/Annual Report.pdf')
-        and URLs ('https://example.com/Annual Report.pdf').
-        Always returns the last path segment.
-        """
-        parsed = urlparse(source)
-        path = parsed.path if parsed.scheme else source
-        return Path(path).name or source
-
-    @staticmethod
     def _get_doc_source(doc: Document) -> str:
         """Return the best available source reference from document metadata."""
         metadata = doc.metadata or {}
@@ -325,35 +311,11 @@ class GraphNodes:
 
     @staticmethod
     def _find_source_doc(
-        citation_file_name: str,
+        citation_asset_key: str,
         docs_lookup: dict[str, Document],
-        docs: list[Document],
     ) -> Document | None:
-        """Find the source document matching a citation's file_name.
-
-        Tries exact match on file_id first, then on display name,
-        then falls back to case-insensitive substring match.
-        """
-        # 1. Exact match on sanitized file_id (e.g. "annual_report_draft_219.pdf")
-        doc = docs_lookup.get(citation_file_name)
-        if doc:
-            return doc
-
-        # 2. Case-insensitive exact match
-        doc = docs_lookup.get(citation_file_name.lower())
-        if doc:
-            return doc
-
-        # 3. Substring match: citation name appears in doc's file_name or display name
-        citation_lower = citation_file_name.lower()
-        for doc in docs:
-            fn = doc.metadata.get("file_name", "").lower()
-            source = GraphNodes._get_doc_source(doc)
-            display = Path(source).name.lower() if source else ""
-            if citation_lower in fn or citation_lower in display:
-                return doc
-
-        return None
+        """Find the source document matching a citation's exact asset_key."""
+        return docs_lookup.get(citation_asset_key)
 
     @observe(name=NodeName.POST_PROCESSING, as_type="tool")
     def execute_post_processing(self, state: RagState) -> dict:
@@ -362,28 +324,18 @@ class GraphNodes:
             raw_content = extract_text_from_message(state["messages"][-1].content)
             parsed_response = parse_agent_response(raw_content)
 
-            # Build lookup from actual retrieved documents keyed by
-            # file_id, display name, and case-insensitive variants
+            # Build lookup from actual retrieved documents keyed only by asset_key.
             docs = state.get("source_docs", [])
             docs_lookup: dict[str, Document] = {}
             for doc in docs:
-                fn = doc.metadata.get("file_name", "")
-                if fn:
-                    docs_lookup[fn] = doc
-                    docs_lookup[fn.lower()] = doc
-                source = self._get_doc_source(doc)
-                display_name = self._extract_display_name(source)
-                if display_name:
-                    docs_lookup[display_name] = doc
-                    docs_lookup[display_name.lower()] = doc
+                asset_key = doc.metadata.get("asset_key", "")
+                if asset_key:
+                    docs_lookup[asset_key] = doc
 
             for citation in parsed_response.citations:
-                doc = self._find_source_doc(citation.file_name, docs_lookup, docs)
+                doc = self._find_source_doc(citation.asset_key, docs_lookup)
                 if doc:
-                    source = self._get_doc_source(doc)
-                    citation.source_url = source
-                    if source:
-                        citation.file_name = self._extract_display_name(source)
+                    citation.source_url = self._get_doc_source(doc)
 
             logger.info(
                 "Post-Processing node completed. Parsed response: %s", parsed_response

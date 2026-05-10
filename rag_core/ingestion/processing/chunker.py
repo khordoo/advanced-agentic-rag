@@ -169,7 +169,7 @@ def chunk_markdown(
             )
 
             header = (
-                f"[Doc: {parent_doc.metadata.get('file_name')}] "
+                f"[Asset: {parent_doc.metadata.get('asset_key')}] "
                 f"[Section: {breadcrumb}] "
                 f"[Location: {page_label}]\n\n"
             )
@@ -267,7 +267,12 @@ def summerize_and_chunk_table(
     for i, table_data in enumerate(table_data_list):
         table_id = f"DATA_TABLE_{i:03d}"
         raw_md = table_data["markdown"]
-        base_header = f"[Doc: {table_data['file_name']}] [Section: Data Table] [Location: Page {table_data['page_no']}]"
+        asset_key = table_data.get("asset_key", table_data["file_name"])
+        base_header = (
+            f"[Asset: {asset_key}] "
+            f"[Section: Data Table] "
+            f"[Location: Page {table_data['page_no']}]"
+        )
 
         logger.debug(
             "Summarizing table %s from %s page %s",
@@ -290,7 +295,7 @@ def summerize_and_chunk_table(
         # schema-driven extraction that text chunks use.
         table_meta_raw = {
             "source_path": table_data["source_path"],
-            "asset_key": table_data.get("asset_key", table_data["file_name"]),
+            "asset_key": asset_key,
             "file_name": table_data["file_name"],
             "pages": [table_data["page_no"]],
             "tags": tags,
