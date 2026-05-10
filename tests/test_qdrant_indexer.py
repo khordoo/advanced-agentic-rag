@@ -37,6 +37,7 @@ def _block(
     asset_key: str = "asset-42",
     *,
     child_asset_key: str | None = None,
+    child_parent_id: str = "parent-1",
 ) -> ParentChunk:
     resolved_child_asset_key = asset_key if child_asset_key is None else child_asset_key
     return ParentChunk(
@@ -58,7 +59,7 @@ def _block(
                     "file_name": "Asset 42.md",
                     "source": "file:///asset-42.md",
                     "pages": [1],
-                    "parent_id": "parent-1",
+                    "parent_id": child_parent_id,
                     "scopes": ["public"],
                     "tags": ["finance"],
                 },
@@ -177,6 +178,7 @@ def test_index_asset_deletes_existing_points_before_upserting_fresh_points() -> 
     assert child_created_at == parent_created_at
     assert child_points[0].payload[PayloadKeys.ASSET_KEY.value] == "asset-42"
     assert parent_points[0].payload[PayloadKeys.ASSET_KEY.value] == "asset-42"
+    assert child_points[0].payload[PayloadKeys.PARENT_ID.value] == parent_points[0].id
 
 
 def test_index_asset_empty_blocks_deletes_without_upsert() -> None:
@@ -202,6 +204,31 @@ def test_index_asset_rejects_parent_asset_key_mismatch_before_delete() -> None:
     assert client.events == []
 
 
+def test_index_asset_rejects_missing_child_parent_id_before_delete() -> None:
+    client = _FakeQdrantClient()
+    indexer = _indexer(client)
+    block = _block()
+    del block.children[0].metadata["parent_id"]
+
+    with pytest.raises(ValueError, match="parent_id"):
+        indexer.index_asset(_asset("asset-42"), [block])
+
+    assert client.events == []
+
+
+def test_index_asset_rejects_child_parent_id_mismatch_before_delete() -> None:
+    client = _FakeQdrantClient()
+    indexer = _indexer(client)
+
+    with pytest.raises(ValueError, match="ParentChunk.id"):
+        indexer.index_asset(
+            _asset("asset-42"),
+            [_block("asset-42", child_parent_id="other-parent")],
+        )
+
+    assert client.events == []
+
+
 def test_index_asset_rejects_child_asset_key_mismatch_before_delete() -> None:
     client = _FakeQdrantClient()
     indexer = _indexer(client)
@@ -213,4 +240,3 @@ def test_index_asset_rejects_child_asset_key_mismatch_before_delete() -> None:
         )
 
     assert client.events == []
-

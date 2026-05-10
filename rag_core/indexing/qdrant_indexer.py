@@ -288,11 +288,18 @@ class QdrantIndexer(BaseIndexer):
             for child in block.children:
                 child_meta = child.metadata if hasattr(child, "metadata") else {}
                 child_asset_key = child_meta.get(PayloadKeys.ASSET_KEY.value)
+                child_parent_id = child_meta.get(PayloadKeys.PARENT_ID.value)
                 if child_asset_key != asset_key:
                     raise ValueError(
                         f"Child chunk for parent '{block.id}' has "
                         f"asset_key={child_asset_key!r}, but the claimed asset has "
                         f"asset_key={asset_key!r}."
+                    )
+                if child_parent_id != block.id:
+                    raise ValueError(
+                        f"Child chunk for parent '{block.id}' has "
+                        f"parent_id={child_parent_id!r}, but it must match "
+                        f"ParentChunk.id={block.id!r}."
                     )
 
     def _drop_collection(self, name: str) -> None:
