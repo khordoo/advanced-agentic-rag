@@ -7,6 +7,7 @@ Manages two collections per namespace:
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 import logging
 import uuid
 from typing import Any
@@ -19,6 +20,7 @@ from rag_core.indexing.base import BaseIndexer
 from rag_core.schemas import (
     CHILD_INDEX_SCHEMA,
     PARENT_INDEX_SCHEMA,
+    ClaimedSourceAsset,
     ParentChunk,
     VectorDatabasePayloadKeys as PayloadKeys,
 )
@@ -108,6 +110,17 @@ class QdrantIndexer(BaseIndexer):
             self._drop_collection(name)
         self._ensure_collections()
 
+    def index_asset(
+        self,
+        asset: ClaimedSourceAsset,
+        document_blocks: list[ParentChunk],
+    ) -> None:
+        """Replace all Qdrant points for one claimed source asset."""
+        self._validate_blocks_for_asset(asset.asset_key, document_blocks)
+        created_at = self._created_at_timestamp()
+        self._delete_asset_points(asset.asset_key)
+        self._ingest_document_blocks(document_blocks, created_at=created_at)
+
     def ingest_documents(self, document_blocks: list[ParentChunk]) -> None:
         """Upsert parent + child points into Qdrant.
 
@@ -115,6 +128,18 @@ class QdrantIndexer(BaseIndexer):
         * One payload-only point in the *parents* collection.
         * Multiple child chunks in the *chunks* collection (embedded via fastembed).
         """
+        self._ingest_document_blocks(
+            document_blocks,
+            created_at=self._created_at_timestamp(),
+        )
+
+    def _ingest_document_blocks(
+        self,
+        document_blocks: list[ParentChunk],
+        *,
+        created_at: str,
+    ) -> None:
+        """Upsert parent + child points into Qdrant with one batch timestamp."""
         logger.info(
             "Preparing %d document blocks for ingestion into Qdrant …",
             len(document_blocks),
@@ -126,11 +151,14 @@ class QdrantIndexer(BaseIndexer):
         child_ids: list[str] = []
 
         for block in document_blocks:
-            parent_points.append(self._build_parent_point(block))
+            parent_points.append(self._build_parent_point(block, created_at=created_at))
 
             for child in block.children:
                 child_texts.append(child.page_content)
-                child_metadatas.append(child.metadata)
+                child_meta = dict(child.metadata if hasattr(child, "metadata") else {})
+                child_metadatas.append(
+                    {**child_meta, PayloadKeys.CREATED_AT.value: created_at}
+                )
                 child_ids.append(str(uuid.uuid4()))
 
         if child_texts:
@@ -155,12 +183,27 @@ class QdrantIndexer(BaseIndexer):
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _build_parent_point(block: ParentChunk) -> models.PointStruct:
+    def _created_at_timestamp() -> str:
+        """Return a UTC timestamp suitable for Qdrant datetime payloads."""
+        return datetime.now(UTC).isoformat()
+
+    @staticmethod
+    def _build_parent_point(
+        block: ParentChunk,
+        *,
+        created_at: str | None = None,
+    ) -> models.PointStruct:
         """Build a vector-less point for the parents collection."""
+        payload = {
+            PayloadKeys.TEXT.value: block.enriched_text,
+            **block.metadata.model_dump(),
+        }
+        if created_at is not None:
+            payload[PayloadKeys.CREATED_AT.value] = created_at
         return models.PointStruct(
             id=block.id,
             vector={},
-            payload={"text": block.enriched_text, **block.metadata.model_dump()},
+            payload=payload,
         )
 
     def _build_child_points(
@@ -212,6 +255,57 @@ class QdrantIndexer(BaseIndexer):
     ) -> None:
         logger.info("Upserting %d %s into '%s' …", len(points), label, collection)
         self._client.upsert(collection_name=collection, points=points)
+
+    def _delete_asset_points(self, asset_key: str) -> None:
+        """Delete existing Qdrant points for one source asset."""
+        selector = self._asset_filter_selector(asset_key)
+        for collection in (self._chunk_collection, self._parent_collection):
+            logger.info(
+                "Deleting existing Qdrant points for asset_key=%s from '%s' …",
+                asset_key,
+                collection,
+            )
+            self._client.delete(
+                collection_name=collection,
+                points_selector=selector,
+                wait=True,
+            )
+
+    @staticmethod
+    def _asset_filter_selector(asset_key: str) -> models.FilterSelector:
+        return models.FilterSelector(
+            filter=models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key=PayloadKeys.ASSET_KEY.value,
+                        match=models.MatchValue(value=asset_key),
+                    )
+                ]
+            )
+        )
+
+    @staticmethod
+    def _validate_blocks_for_asset(
+        asset_key: str,
+        document_blocks: list[ParentChunk],
+    ) -> None:
+        """Ensure all Qdrant payloads belong to the claimed source asset."""
+        for block in document_blocks:
+            if block.metadata.asset_key != asset_key:
+                raise ValueError(
+                    f"ParentChunk '{block.id}' has asset_key={block.metadata.asset_key!r}, "
+                    f"but the claimed asset has asset_key={asset_key!r}."
+                )
+
+            for child in block.children:
+                child_meta = child.metadata if hasattr(child, "metadata") else {}
+                child_asset_key = child_meta.get(PayloadKeys.ASSET_KEY.value)
+                if child_asset_key != asset_key:
+                    raise ValueError(
+                        f"Child chunk for parent '{block.id}' has "
+                        f"asset_key={child_asset_key!r}, but the claimed asset has "
+                        f"asset_key={asset_key!r}."
+                    )
 
     def _drop_collection(self, name: str) -> None:
         if self._client.collection_exists(name):

@@ -211,6 +211,8 @@ class ChildMetadata(BaseChunkMetadata):
 
 
 class VectorDatabasePayloadKeys(str, Enum):
+    ASSET_KEY = "asset_key"
+    CREATED_AT = "created_at"
     SOURCE = "source"
     FILE_NAME = "file_name"
     PAGE = "pages"
@@ -222,6 +224,8 @@ class VectorDatabasePayloadKeys(str, Enum):
 
 
 _BASE_INDEX_SCHEMA = {
+    VectorDatabasePayloadKeys.ASSET_KEY.value: models.PayloadSchemaType.KEYWORD,
+    VectorDatabasePayloadKeys.CREATED_AT.value: models.PayloadSchemaType.DATETIME,
     VectorDatabasePayloadKeys.SOURCE.value: models.PayloadSchemaType.KEYWORD,
     VectorDatabasePayloadKeys.FILE_NAME.value: models.PayloadSchemaType.KEYWORD,
     VectorDatabasePayloadKeys.PAGE.value: models.PayloadSchemaType.INTEGER,
