@@ -27,7 +27,7 @@ class IngestionPipeline:
         Use ``rag_core.ingestion.pipeline.run_ingestion_pipeline`` instead.
     """
 
-    def __init__(self, config: dict | None = None, overwrite: bool = True, **kwargs):
+    def __init__(self, config: dict | None = None, overwrite: bool = False, **kwargs):
         warnings.warn(
             "IngestionPipeline is deprecated and will be removed in a future release. "
             "Use rag_core.ingestion.pipeline.run_ingestion_pipeline() instead.",
@@ -53,5 +53,5 @@ class IngestionPipeline:
 
 if __name__ == "__main__":
     cfg = load_config()
-    p = IngestionPipeline(config=cfg, overwrite=True)
+    p = IngestionPipeline(config=cfg, overwrite=False)
     p.run()

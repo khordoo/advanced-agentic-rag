@@ -74,6 +74,29 @@ def test_ingestion_pipeline_shim_has_run_method():
     assert callable(pipeline.run)
 
 
+def test_legacy_ingestion_pipeline_defaults_to_no_overwrite(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[bool] = []
+
+    def _run_ingestion_pipeline(*, overwrite: bool) -> int:
+        calls.append(overwrite)
+        return 12
+
+    monkeypatch.setattr(
+        ingestion_pipeline,
+        "run_ingestion_pipeline",
+        _run_ingestion_pipeline,
+    )
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        pipeline = IngestionPipeline(config={})
+
+    assert pipeline.run() == 12
+    assert calls == [False]
+
+
 def test_run_discovery_pipeline_delegates_to_discovery_service(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
