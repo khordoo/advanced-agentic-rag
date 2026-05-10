@@ -250,6 +250,18 @@ class QdrantSettings(BaseSettings):
     )
 
 
+class EmbeddingSettings(BaseSettings):
+    """Shared dense embedding provider configuration."""
+
+    provider: Literal["fastembed", "openai"] = "fastembed"
+    model_name: str = "BAAI/bge-small-en-v1.5"
+    dimension: int = Field(default=384, ge=1)
+
+    model_config = SettingsConfigDict(
+        env_prefix="EMBEDDING_", env_file=".env", extra="ignore"
+    )
+
+
 class PostgresSettings(BaseSettings):
     user: str = "admin"
     password: str = "password"
@@ -412,6 +424,12 @@ class GenerationSettings(BaseSettings):
 def get_qdrant_settings() -> QdrantSettings:
     logger.info("Reading .env file and caching Qdrant settings...")
     return QdrantSettings()
+
+
+@lru_cache
+def get_embedding_settings() -> EmbeddingSettings:
+    logger.info("Reading .env file and caching embedding settings...")
+    return EmbeddingSettings()
 
 
 @lru_cache

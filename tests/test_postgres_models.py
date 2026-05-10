@@ -110,6 +110,23 @@ class _FakeDb:
         return self.session
 
 
+class _FakeEmbeddingModel:
+    def __init__(self, vectors: list[list[float]]) -> None:
+        self.vectors = vectors
+        self.document_calls: list[list[str]] = []
+
+    @property
+    def dimension(self) -> int:
+        return 2
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        self.document_calls.append(texts)
+        return self.vectors
+
+    def embed_query(self, text: str) -> list[float]:
+        return self.embed_documents([text])[0]
+
+
 def test_postgres_domain_models_configure() -> None:
     configure_mappers()
 
@@ -333,10 +350,13 @@ def test_postgres_index_asset_replaces_by_claimed_asset(
     )
     indexer = object.__new__(PostgresIndexer)
     indexer._db = _FakeDb()
-    indexer._embed_texts = lambda texts: [[0.1, 0.2] for _ in texts]
+    embedding_model = _FakeEmbeddingModel([[0.1, 0.2]])
+    indexer._embedding_model = embedding_model
+    indexer._embedding_dimension = embedding_model.dimension
 
     indexer.index_asset(_claimed_asset(42), [_parent_chunk(42)])
 
+    assert embedding_model.document_calls == [["child text"]]
     asset_id, sections, chunks = calls[0]
     assert asset_id == 42
     assert len(sections) == 1
@@ -363,20 +383,38 @@ def test_postgres_index_asset_empty_batch_still_syncs_asset(
             calls.append((asset_id, sections, chunks))
             return 0
 
-    def fail_embed(texts: list[str]) -> list[list[float]]:
-        raise AssertionError("empty asset sync should not embed")
-
     monkeypatch.setattr(
         "rag_core.indexing.postgres_indexer.DocumentRepository",
         _FakeRepository,
     )
     indexer = object.__new__(PostgresIndexer)
     indexer._db = _FakeDb()
-    indexer._embed_texts = fail_embed
+    embedding_model = _FakeEmbeddingModel([[0.1, 0.2]])
+    indexer._embedding_model = embedding_model
+    indexer._embedding_dimension = embedding_model.dimension
 
     indexer.index_asset(_claimed_asset(99), [])
 
+    assert embedding_model.document_calls == []
     assert calls == [(99, [], [])]
+
+
+def test_postgres_index_asset_rejects_embedding_dimension_mismatch() -> None:
+    indexer = object.__new__(PostgresIndexer)
+    indexer._embedding_model = _FakeEmbeddingModel([[0.1]])
+    indexer._embedding_dimension = 2
+
+    with pytest.raises(ValueError, match="Embedding dimension mismatch"):
+        indexer._build_index_rows([_parent_chunk(42)])
+
+
+def test_postgres_index_asset_rejects_missing_embedding_vectors() -> None:
+    indexer = object.__new__(PostgresIndexer)
+    indexer._embedding_model = _FakeEmbeddingModel([])
+    indexer._embedding_dimension = 2
+
+    with pytest.raises(ValueError, match="1 input texts"):
+        indexer._build_index_rows([_parent_chunk(42)])
 
 
 def test_postgres_index_asset_rejects_missing_asset_id() -> None:

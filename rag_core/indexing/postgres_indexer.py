@@ -4,9 +4,8 @@ Persists :class:`~rag_core.schemas.ParentChunk` trees into Postgres using
 the existing :class:`~rag_core.store.postgres.models.documents.DocumentSection`
 and :class:`~rag_core.store.postgres.models.documents.DocumentChunk` tables.
 
-Embeddings are generated via **fastembed** — the same model used by the Qdrant
-indexer — so vector representations are identical regardless of which backend
-is selected.
+Embeddings are provided through the shared embedding model abstraction so the
+provider can be changed without touching database indexing logic.
 """
 
 from __future__ import annotations
@@ -14,12 +13,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from rag_core.core.config import (
-    IngestionSettings,
-    QdrantSettings,
-    get_ingestion_settings,
-    get_qdrant_settings,
-)
+from rag_core.core.config import IngestionSettings
+from rag_core.embeddings import BaseEmbeddingModel, create_embedding_model
 from rag_core.indexing.base import BaseIndexer
 from rag_core.schemas import ClaimedSourceAsset, ParentChunk
 from rag_core.store.postgres.models.documents import DocumentChunk, DocumentSection
@@ -27,13 +22,6 @@ from rag_core.store.postgres.repositories.documents import DocumentRepository
 from rag_core.store.postgres.session import Database, get_database
 
 logger = logging.getLogger(__name__)
-
-
-def _get_fastembed_model(model_name: str):
-    """Lazy-load a fastembed TextEmbedding model."""
-    from fastembed import TextEmbedding  # type: ignore[import-untyped]
-
-    return TextEmbedding(model_name=model_name)
 
 
 class PostgresIndexer(BaseIndexer):
@@ -45,46 +33,29 @@ class PostgresIndexer(BaseIndexer):
         Database wrapper for session management.  Falls back to the
         process-wide singleton.
     settings:
-        Ingestion settings providing ``embedding_dimension``.
-    qdrant_settings:
-        Qdrant settings providing the fastembed model name.  We reuse this
-        so both backends always embed with the same model.
+        Optional ingestion settings retained for caller compatibility.
+    embedding_model:
+        Dense embedding provider used to embed child chunks.
     """
 
     def __init__(
         self,
         db: Database | None = None,
         settings: IngestionSettings | None = None,
-        qdrant_settings: QdrantSettings | None = None,
+        embedding_model: BaseEmbeddingModel | None = None,
     ) -> None:
         self._db = db or get_database()
-        self._settings = settings or get_ingestion_settings()
-        self._qdrant_settings = qdrant_settings or get_qdrant_settings()
-
-        self._embed_model_name = self._qdrant_settings.embed_model
-        self._embedding_dimension = self._settings.embedding_dimension
-
-        # Lazy-initialised on first use so import cost is deferred
-        self._embed_model = None
+        self._settings = settings
+        self._embedding_model = embedding_model or create_embedding_model()
+        self._embedding_dimension = self._embedding_model.dimension
 
         logger.info(
             "PostgresIndexer initialised",
             extra={
-                "embed_model": self._embed_model_name,
+                "embedding_model": type(self._embedding_model).__name__,
                 "embedding_dimension": self._embedding_dimension,
             },
         )
-
-    @property
-    def embed_model(self):
-        """Lazy-load the fastembed model on first access."""
-        if self._embed_model is None:
-            logger.info(
-                "Loading fastembed model '%s' for Postgres indexing ...",
-                self._embed_model_name,
-            )
-            self._embed_model = _get_fastembed_model(self._embed_model_name)
-        return self._embed_model
 
     # ------------------------------------------------------------------
     # BaseIndexer contract
@@ -187,20 +158,25 @@ class PostgresIndexer(BaseIndexer):
     # ------------------------------------------------------------------
 
     def _embed_texts(self, texts: list[str]) -> list[list[float]]:
-        """Embed a batch of texts using the fastembed model."""
-        logger.info("Embedding %d texts via fastembed …", len(texts))
-        # fastembed returns a generator of numpy arrays
-        embeddings = list(self.embed_model.embed(texts))
-        result = [emb.tolist() for emb in embeddings]
-
-        if result and len(result[0]) != self._embedding_dimension:
-            logger.warning(
-                "Embedding dimension mismatch: model produces %d but config expects %d. "
-                "Update INGESTION_EMBEDDING_DIMENSION to match your model.",
-                len(result[0]),
-                self._embedding_dimension,
+        """Embed a batch of texts and validate provider output."""
+        logger.info("Embedding %d texts for Postgres indexing ...", len(texts))
+        vectors = self._embedding_model.embed_documents(texts)
+        if len(vectors) != len(texts):
+            raise ValueError(
+                "Embedding model returned "
+                f"{len(vectors)} vectors for {len(texts)} input texts."
             )
-        return result
+        self._validate_embedding_vectors(vectors)
+        return vectors
+
+    def _validate_embedding_vectors(self, vectors: list[list[float]]) -> None:
+        for index, vector in enumerate(vectors):
+            if len(vector) != self._embedding_dimension:
+                raise ValueError(
+                    "Embedding dimension mismatch at index "
+                    f"{index}: model produced {len(vector)} values but "
+                    f"configuration expects {self._embedding_dimension}."
+                )
 
     # ------------------------------------------------------------------
     # Row construction helpers
