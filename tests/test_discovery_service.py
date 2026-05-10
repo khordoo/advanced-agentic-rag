@@ -117,7 +117,12 @@ class _FakeDb:
 
 def _build_service() -> SourceDiscoveryService:
     service = SourceDiscoveryService(
-        settings=IngestionSettings(base_source_uri="source", discovery_batch_size=2),
+        settings=IngestionSettings(
+            base_source_uri="source",
+            discovery_batch_size=2,
+            indexer_backend="qdrant",
+            _env_file=None,
+        ),
         scanner=object(),  # type: ignore[arg-type]
         source_provider=_FakeProvider(),  # type: ignore[arg-type]
         db=object(),  # type: ignore[arg-type]

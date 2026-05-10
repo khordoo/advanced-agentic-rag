@@ -5,7 +5,7 @@ from sqlalchemy import DateTime
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import configure_mappers
 
-from rag_core.indexing.pgvector_indexer import PgVectorIndexer
+from rag_core.indexing.postgres_indexer import PostgresIndexer
 from rag_core.schemas import ClaimedSourceAsset, ParentChunk, ParentMetadata
 from rag_core.store.postgres.models.documents import DocumentChunk, DocumentSection
 from rag_core.store.postgres.models.ingestion import (
@@ -214,7 +214,7 @@ def test_postgres_domain_postgres_column_optimizations() -> None:
     assert DocumentChunk.__table__.c.vector.type.dim is None
 
 
-def test_pgvector_row_builders_use_asset_key() -> None:
+def test_postgres_row_builders_use_asset_key() -> None:
     block = ParentChunk(
         id="parent-1",
         enriched_text="parent text",
@@ -239,9 +239,9 @@ def test_pgvector_row_builders_use_asset_key() -> None:
         asset_id=42,
     )
 
-    section = PgVectorIndexer._build_section(block)
+    section = PostgresIndexer._build_section(block)
     section.id = 123
-    chunk = PgVectorIndexer._build_chunk(
+    chunk = PostgresIndexer._build_chunk(
         section=section,
         child=block.children[0],
         block=block,
@@ -309,7 +309,7 @@ def test_document_repository_empty_sync_still_deletes_asset_index() -> None:
     assert session.events == ["execute", "add_all:0", "flush", "add_all:0"]
 
 
-def test_pgvector_index_asset_replaces_by_claimed_asset(
+def test_postgres_index_asset_replaces_by_claimed_asset(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[tuple[int, list[DocumentSection], list[DocumentChunk]]] = []
@@ -328,10 +328,10 @@ def test_pgvector_index_asset_replaces_by_claimed_asset(
             return 0
 
     monkeypatch.setattr(
-        "rag_core.indexing.pgvector_indexer.DocumentRepository",
+        "rag_core.indexing.postgres_indexer.DocumentRepository",
         _FakeRepository,
     )
-    indexer = object.__new__(PgVectorIndexer)
+    indexer = object.__new__(PostgresIndexer)
     indexer._db = _FakeDb()
     indexer._embed_texts = lambda texts: [[0.1, 0.2] for _ in texts]
 
@@ -345,7 +345,7 @@ def test_pgvector_index_asset_replaces_by_claimed_asset(
     assert chunks[0].section is sections[0]
 
 
-def test_pgvector_index_asset_empty_batch_still_syncs_asset(
+def test_postgres_index_asset_empty_batch_still_syncs_asset(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[tuple[int, list[DocumentSection], list[DocumentChunk]]] = []
@@ -367,10 +367,10 @@ def test_pgvector_index_asset_empty_batch_still_syncs_asset(
         raise AssertionError("empty asset sync should not embed")
 
     monkeypatch.setattr(
-        "rag_core.indexing.pgvector_indexer.DocumentRepository",
+        "rag_core.indexing.postgres_indexer.DocumentRepository",
         _FakeRepository,
     )
-    indexer = object.__new__(PgVectorIndexer)
+    indexer = object.__new__(PostgresIndexer)
     indexer._db = _FakeDb()
     indexer._embed_texts = fail_embed
 
@@ -379,15 +379,15 @@ def test_pgvector_index_asset_empty_batch_still_syncs_asset(
     assert calls == [(99, [], [])]
 
 
-def test_pgvector_index_asset_rejects_missing_asset_id() -> None:
-    indexer = object.__new__(PgVectorIndexer)
+def test_postgres_index_asset_rejects_missing_asset_id() -> None:
+    indexer = object.__new__(PostgresIndexer)
 
     with pytest.raises(ValueError, match="missing asset_id"):
         indexer.index_asset(_claimed_asset(42), [_parent_chunk(asset_id=None)])
 
 
-def test_pgvector_index_asset_rejects_mismatched_asset_id() -> None:
-    indexer = object.__new__(PgVectorIndexer)
+def test_postgres_index_asset_rejects_mismatched_asset_id() -> None:
+    indexer = object.__new__(PostgresIndexer)
 
     with pytest.raises(ValueError, match="claimed asset"):
         indexer.index_asset(

@@ -1,6 +1,6 @@
 """Factory for runtime indexer selection based on configuration.
 
-Uses lazy imports so that Qdrant or pgvector dependencies are only loaded
+Uses lazy imports so that Qdrant or Postgres dependencies are only loaded
 when actually selected, keeping cold-start times low.
 """
 
@@ -20,7 +20,7 @@ class IndexerBackend(str, Enum):
     """Supported vector store backends."""
 
     QDRANT = "qdrant"
-    PGVECTOR = "pgvector"
+    POSTGRES = "postgres"
 
 
 def create_indexer(backend: IndexerBackend | str | None = None) -> BaseIndexer:
@@ -55,11 +55,11 @@ def create_indexer(backend: IndexerBackend | str | None = None) -> BaseIndexer:
         logger.info("Indexer backend resolved: Qdrant")
         return QdrantIndexer()
 
-    if backend == IndexerBackend.PGVECTOR:
-        from rag_core.indexing.pgvector_indexer import PgVectorIndexer
+    if backend == IndexerBackend.POSTGRES:
+        from rag_core.indexing.postgres_indexer import PostgresIndexer
 
-        logger.info("Indexer backend resolved: pgvector")
-        return PgVectorIndexer()
+        logger.info("Indexer backend resolved: Postgres")
+        return PostgresIndexer()
 
     # Unreachable when using the enum, but guards against future additions.
     raise ValueError(f"Unknown indexer backend: '{backend}'")

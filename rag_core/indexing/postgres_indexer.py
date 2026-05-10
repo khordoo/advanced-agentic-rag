@@ -1,4 +1,4 @@
-"""pgvector-backed indexer for parent–child document storage.
+"""Postgres-backed indexer for parent-child document storage.
 
 Persists :class:`~rag_core.schemas.ParentChunk` trees into Postgres using
 the existing :class:`~rag_core.store.postgres.models.documents.DocumentSection`
@@ -36,8 +36,8 @@ def _get_fastembed_model(model_name: str):
     return TextEmbedding(model_name=model_name)
 
 
-class PgVectorIndexer(BaseIndexer):
-    """Indexes :class:`ParentChunk` trees into Postgres with pgvector.
+class PostgresIndexer(BaseIndexer):
+    """Indexes :class:`ParentChunk` trees into Postgres document tables.
 
     Parameters
     ----------
@@ -68,7 +68,7 @@ class PgVectorIndexer(BaseIndexer):
         self._embed_model = None
 
         logger.info(
-            "PgVectorIndexer initialised",
+            "PostgresIndexer initialised",
             extra={
                 "embed_model": self._embed_model_name,
                 "embedding_dimension": self._embedding_dimension,
@@ -80,7 +80,7 @@ class PgVectorIndexer(BaseIndexer):
         """Lazy-load the fastembed model on first access."""
         if self._embed_model is None:
             logger.info(
-                "Loading fastembed model '%s' for pgvector …",
+                "Loading fastembed model '%s' for Postgres indexing ...",
                 self._embed_model_name,
             )
             self._embed_model = _get_fastembed_model(self._embed_model_name)
@@ -106,7 +106,7 @@ class PgVectorIndexer(BaseIndexer):
     ) -> None:
         """Build fresh rows and replace all indexed rows for one asset."""
         logger.info(
-            "Preparing %d document blocks for pgvector asset sync …",
+            "Preparing %d document blocks for Postgres asset sync ...",
             len(document_blocks),
         )
 
@@ -122,7 +122,7 @@ class PgVectorIndexer(BaseIndexer):
                 )
 
         logger.info(
-            "pgvector asset sync complete: asset_id=%d, deleted_sections=%d, "
+            "Postgres asset sync complete: asset_id=%d, deleted_sections=%d, "
             "%d sections, %d chunks.",
             asset_id,
             deleted_sections,
@@ -175,12 +175,12 @@ class PgVectorIndexer(BaseIndexer):
         Uses TRUNCATE CASCADE so foreign-key dependents are cleaned up
         atomically.
         """
-        logger.info("Resetting pgvector document tables …")
+        logger.info("Resetting Postgres document tables ...")
         with self._db.get_session() as session:
             with session.begin():
                 session.execute(DocumentChunk.__table__.delete())
                 session.execute(DocumentSection.__table__.delete())
-        logger.info("pgvector document tables truncated.")
+        logger.info("Postgres document tables truncated.")
 
     # ------------------------------------------------------------------
     # Embedding

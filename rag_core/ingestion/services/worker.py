@@ -133,7 +133,7 @@ class SourceIngestionWorkerService:
     ) -> SourceIngestionWorkerService:
         """Builds a production-ready worker using the configured defaults.
 
-        The indexer backend (Qdrant or pgvector) is resolved from
+        The indexer backend (Qdrant or Postgres) is resolved from
         ``IngestionSettings.indexer_backend`` via the factory.
         """
         from rag_core.indexing.factory import create_indexer

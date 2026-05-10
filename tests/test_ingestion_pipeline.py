@@ -36,6 +36,7 @@ def test_load_config_defaults_docs_dir_to_source_documents(tmp_path: Path, monke
 def test_ingestion_settings_default_max_jobs_defaults_to_none(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv("INGESTION_INDEXER_BACKEND", "qdrant")
     monkeypatch.delenv("INGESTION_DEFAULT_MAX_JOBS", raising=False)
 
     settings = IngestionSettings(_env_file=None)
@@ -46,6 +47,7 @@ def test_ingestion_settings_default_max_jobs_defaults_to_none(
 def test_ingestion_settings_default_max_jobs_reads_env_override(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv("INGESTION_INDEXER_BACKEND", "qdrant")
     monkeypatch.setenv("INGESTION_DEFAULT_MAX_JOBS", "100")
 
     settings = IngestionSettings(_env_file=None)

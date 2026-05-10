@@ -21,6 +21,8 @@ def _settings(preflight_extension_seconds: int = 17) -> IngestionSettings:
         worker_max_attempts=3,
         worker_lease_duration_seconds=300,
         worker_preflight_extension_seconds=preflight_extension_seconds,
+        indexer_backend="qdrant",
+        _env_file=None,
     )
 
 
