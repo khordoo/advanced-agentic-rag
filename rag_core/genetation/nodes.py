@@ -335,6 +335,11 @@ class GraphNodes:
             for citation in parsed_response.citations:
                 doc = self._find_source_doc(citation.asset_key, docs_lookup)
                 if doc:
+                    citation.asset_name = (
+                        doc.metadata.get("asset_name")
+                        or doc.metadata.get("file_name")
+                        or ""
+                    )
                     citation.source_url = self._get_doc_source(doc)
 
             logger.info(

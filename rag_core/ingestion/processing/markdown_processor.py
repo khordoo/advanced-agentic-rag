@@ -99,6 +99,7 @@ class MarkdownProcessor(BaseProcessor):
                 input_path=absolute_path,
                 table_context_window=self.table_context_window,
                 file_id=asset.asset_key,
+                asset_name=asset.asset_name,
             )
         elif file_ext == ".md":
             markdown = Path(absolute_path).read_text(encoding="utf-8")
@@ -139,6 +140,7 @@ class MarkdownProcessor(BaseProcessor):
             scopes=asset.scopes,
             config=self.config,
             file_id=asset.asset_key,
+            asset_name=asset.asset_name,
         )
         logger.info(
             "Chunked markdown into parent chunks",

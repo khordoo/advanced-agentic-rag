@@ -48,8 +48,8 @@ def test_qdrant_retriever_documents_include_asset_key_and_created_at() -> None:
         payload={
             PayloadKeys.TEXT.value: "parent text",
             PayloadKeys.ASSET_KEY.value: "asset-42",
+            PayloadKeys.ASSET_NAME.value: "Asset 42.md",
             PayloadKeys.CREATED_AT.value: "2026-05-10T12:00:00+00:00",
-            PayloadKeys.FILE_NAME.value: "Asset 42.md",
             "ignored": "metadata",
         },
     )
@@ -58,8 +58,27 @@ def test_qdrant_retriever_documents_include_asset_key_and_created_at() -> None:
 
     assert doc.page_content == "parent text"
     assert doc.metadata[PayloadKeys.ASSET_KEY.value] == "asset-42"
+    assert doc.metadata[PayloadKeys.ASSET_NAME.value] == "Asset 42.md"
     assert doc.metadata[PayloadKeys.CREATED_AT.value] == "2026-05-10T12:00:00+00:00"
+    assert PayloadKeys.FILE_NAME.value not in doc.metadata
     assert "ignored" not in doc.metadata
+
+
+def test_qdrant_retriever_uses_file_name_as_legacy_asset_name_fallback() -> None:
+    retriever = _retriever()
+    point = SimpleNamespace(
+        id="parent-1",
+        payload={
+            PayloadKeys.TEXT.value: "parent text",
+            PayloadKeys.ASSET_KEY.value: "asset-42",
+            PayloadKeys.FILE_NAME.value: "Legacy Asset 42.md",
+        },
+    )
+
+    doc = retriever._point_to_document(point)
+
+    assert doc.metadata[PayloadKeys.ASSET_NAME.value] == "Legacy Asset 42.md"
+    assert PayloadKeys.FILE_NAME.value not in doc.metadata
 
 
 def test_qdrant_retriever_still_groups_children_by_parent_id() -> None:
@@ -98,6 +117,7 @@ class _FakeQdrantClient:
             payload={
                 PayloadKeys.TEXT.value: "parent text",
                 PayloadKeys.ASSET_KEY.value: "asset-42",
+                PayloadKeys.ASSET_NAME.value: "Asset 42.md",
             },
         )
         return [point], None
@@ -138,6 +158,7 @@ class _FakeQdrantClient:
                 payload={
                     PayloadKeys.TEXT.value: "parent text",
                     PayloadKeys.ASSET_KEY.value: "asset-42",
+                    PayloadKeys.ASSET_NAME.value: "Asset 42.md",
                 },
             )
         ]

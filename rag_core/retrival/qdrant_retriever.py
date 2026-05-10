@@ -78,6 +78,11 @@ class QdrantRetriever(BaseRetriever):
 
         # Only include metadata fields defined in the schema
         metadata = {k: v for k, v in payload.items() if k in PARENT_INDEX_SCHEMA}
+        if (
+            PayloadKeys.ASSET_NAME.value not in metadata
+            and PayloadKeys.FILE_NAME.value in payload
+        ):
+            metadata[PayloadKeys.ASSET_NAME.value] = payload[PayloadKeys.FILE_NAME.value]
         metadata["id"] = point.id
 
         return Document(page_content=text, metadata=metadata)

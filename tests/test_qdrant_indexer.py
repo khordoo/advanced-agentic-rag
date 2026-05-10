@@ -45,7 +45,7 @@ def _block(
         enriched_text="parent text",
         metadata=ParentMetadata(
             asset_key=asset_key,
-            file_name="Asset 42.md",
+            asset_name="Asset 42.md",
             source="file:///asset-42.md",
             pages=[1],
             scopes=["public"],
@@ -56,7 +56,7 @@ def _block(
                 page_content="child text",
                 metadata={
                     "asset_key": resolved_child_asset_key,
-                    "file_name": "Asset 42.md",
+                    "asset_name": "Asset 42.md",
                     "source": "file:///asset-42.md",
                     "pages": [1],
                     "parent_id": child_parent_id,
@@ -136,13 +136,19 @@ def test_qdrant_shared_payload_schema_indexes_asset_key_and_created_at() -> None
     assert _BASE_INDEX_SCHEMA[PayloadKeys.ASSET_KEY.value] == (
         models.PayloadSchemaType.KEYWORD
     )
+    assert _BASE_INDEX_SCHEMA[PayloadKeys.ASSET_NAME.value] == (
+        models.PayloadSchemaType.KEYWORD
+    )
     assert _BASE_INDEX_SCHEMA[PayloadKeys.CREATED_AT.value] == (
         models.PayloadSchemaType.DATETIME
     )
+    assert PayloadKeys.FILE_NAME.value not in _BASE_INDEX_SCHEMA
 
     for schema in (PARENT_INDEX_SCHEMA, CHILD_INDEX_SCHEMA):
         assert schema[PayloadKeys.ASSET_KEY.value] == models.PayloadSchemaType.KEYWORD
+        assert schema[PayloadKeys.ASSET_NAME.value] == models.PayloadSchemaType.KEYWORD
         assert schema[PayloadKeys.CREATED_AT.value] == models.PayloadSchemaType.DATETIME
+        assert PayloadKeys.FILE_NAME.value not in schema
 
 
 def test_index_asset_deletes_existing_points_before_upserting_fresh_points() -> None:
@@ -178,7 +184,23 @@ def test_index_asset_deletes_existing_points_before_upserting_fresh_points() -> 
     assert child_created_at == parent_created_at
     assert child_points[0].payload[PayloadKeys.ASSET_KEY.value] == "asset-42"
     assert parent_points[0].payload[PayloadKeys.ASSET_KEY.value] == "asset-42"
+    assert child_points[0].payload[PayloadKeys.ASSET_NAME.value] == "Asset 42.md"
+    assert parent_points[0].payload[PayloadKeys.ASSET_NAME.value] == "Asset 42.md"
+    assert PayloadKeys.FILE_NAME.value not in child_points[0].payload
+    assert PayloadKeys.FILE_NAME.value not in parent_points[0].payload
     assert child_points[0].payload[PayloadKeys.PARENT_ID.value] == parent_points[0].id
+
+
+def test_qdrant_payload_normalization_replaces_legacy_file_name() -> None:
+    payload = QdrantIndexer._normalize_payload_metadata(
+        {
+            PayloadKeys.ASSET_KEY.value: "asset-42",
+            PayloadKeys.FILE_NAME.value: "Legacy Asset 42.md",
+        }
+    )
+
+    assert payload[PayloadKeys.ASSET_NAME.value] == "Legacy Asset 42.md"
+    assert PayloadKeys.FILE_NAME.value not in payload
 
 
 def test_index_asset_empty_blocks_deletes_without_upsert() -> None:

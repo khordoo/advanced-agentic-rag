@@ -203,6 +203,7 @@ def test_process_new_asset_creates_pending_source_asset(tmp_path: Path) -> None:
     assert asset.content_hash == "hash123"
     assert asset.source_uri == f"access://{asset_path}"
     assert asset.asset_name == "report.md"
+    assert asset.asset_name != asset.asset_key
     assert asset.parent_name == "finance"
     assert asset.source_system == "test_fs"
     assert asset.last_seen_run_id == 42

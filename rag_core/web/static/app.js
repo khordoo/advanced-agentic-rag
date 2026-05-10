@@ -279,7 +279,7 @@
 
   /**
    * Build the citation reference footer section.
-   * Each citation: { document_index, asset_key, page_number }
+   * Each citation: { document_index, asset_key, asset_name, page_number }
    */
   function buildCitationFooter(citations) {
     const section = document.createElement("details");
@@ -306,6 +306,7 @@
     citations.forEach((cit) => {
       const idx = cit.document_index ?? "?";
       const assetKey = cit.asset_key ?? "unknown";
+      const assetName = cit.asset_name || assetKey;
       const page = cit.page_number;
       const sourceUrl = String(cit.source_url || "").trim();
       const sourceHref = normalizeCitationHref(sourceUrl);
@@ -321,7 +322,7 @@
       card.innerHTML = `
         <span class="citation-badge">${escapeHtml(String(idx))}</span>
         <div class="citation-details">
-          <span class="citation-filename">${escapeHtml(assetKey)}</span>
+          <span class="citation-filename">${escapeHtml(assetName)}</span>
           ${page != null && page !== 0 ? `<span class="citation-page">Page ${escapeHtml(String(page))}</span>` : ""}
         </div>
       `;

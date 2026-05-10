@@ -145,7 +145,9 @@ class QdrantIndexer(BaseIndexer):
                 child_texts.append(child.page_content)
                 child_meta = dict(child.metadata if hasattr(child, "metadata") else {})
                 child_metadatas.append(
-                    {**child_meta, PayloadKeys.CREATED_AT.value: created_at}
+                    self._normalize_payload_metadata(
+                        {**child_meta, PayloadKeys.CREATED_AT.value: created_at}
+                    )
                 )
                 child_ids.append(str(uuid.uuid4()))
 
@@ -182,10 +184,12 @@ class QdrantIndexer(BaseIndexer):
         created_at: str | None = None,
     ) -> models.PointStruct:
         """Build a vector-less point for the parents collection."""
-        payload = {
-            PayloadKeys.TEXT.value: block.enriched_text,
-            **block.metadata.model_dump(),
-        }
+        payload = QdrantIndexer._normalize_payload_metadata(
+            {
+                PayloadKeys.TEXT.value: block.enriched_text,
+                **block.metadata.model_dump(),
+            }
+        )
         if created_at is not None:
             payload[PayloadKeys.CREATED_AT.value] = created_at
         return models.PointStruct(
@@ -271,6 +275,15 @@ class QdrantIndexer(BaseIndexer):
                 ]
             )
         )
+
+    @staticmethod
+    def _normalize_payload_metadata(payload: dict[str, Any]) -> dict[str, Any]:
+        """Write asset_name for display and drop legacy file_name payloads."""
+        normalized = dict(payload)
+        legacy_file_name = normalized.pop(PayloadKeys.FILE_NAME.value, None)
+        if not normalized.get(PayloadKeys.ASSET_NAME.value) and legacy_file_name:
+            normalized[PayloadKeys.ASSET_NAME.value] = legacy_file_name
+        return normalized
 
     @staticmethod
     def _validate_blocks_for_asset(

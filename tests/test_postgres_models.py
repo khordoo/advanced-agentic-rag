@@ -43,7 +43,7 @@ def _parent_chunk(
         enriched_text="parent text",
         metadata=ParentMetadata(
             asset_key=f"asset-{asset_id}",
-            file_name=f"asset-{asset_id}.md",
+            asset_name=f"asset-{asset_id}.md",
             source=f"file:///asset-{asset_id}.md",
             pages=[1],
         ),
@@ -52,7 +52,7 @@ def _parent_chunk(
                 page_content="child text",
                 metadata={
                     "asset_key": f"asset-{asset_id}",
-                    "file_name": f"asset-{asset_id}.md",
+                    "asset_name": f"asset-{asset_id}.md",
                     "pages": [1],
                     "scopes": ["public"],
                     "tags": ["finance"],
@@ -220,7 +220,7 @@ def test_pgvector_row_builders_use_asset_key() -> None:
         enriched_text="parent text",
         metadata=ParentMetadata(
             asset_key="annual_report_a1b2c3d4.pdf",
-            file_name="Annual Report.pdf",
+            asset_name="Annual Report.pdf",
             source="/docs/Annual Report.pdf",
             pages=[1],
         ),
@@ -229,7 +229,7 @@ def test_pgvector_row_builders_use_asset_key() -> None:
                 page_content="child text",
                 metadata={
                     "asset_key": "annual_report_a1b2c3d4.pdf",
-                    "file_name": "Annual Report.pdf",
+                    "asset_name": "Annual Report.pdf",
                     "pages": [1],
                     "scopes": ["public"],
                     "tags": ["finance"],
@@ -251,6 +251,7 @@ def test_pgvector_row_builders_use_asset_key() -> None:
     assert section.asset_key == "annual_report_a1b2c3d4.pdf"
     assert chunk.asset_key == "annual_report_a1b2c3d4.pdf"
     assert "asset_key" not in chunk.chunk_metadata
+    assert chunk.chunk_metadata["asset_name"] == "Annual Report.pdf"
     assert "file_name" not in chunk.chunk_metadata
 
 

@@ -25,6 +25,7 @@ def convert_pdf_to_markdown(
     output_path: str | Path | None = None,
     table_context_window: int = 3,
     file_id: str | None = None,
+    asset_name: str | None = None,
 ) -> tuple[str, list]:
     """Convert a PDF file to page-numbered Markdown.
 
@@ -75,13 +76,20 @@ def convert_pdf_to_markdown(
         source_path=input_path,
         table_context_window=table_context_window,
         file_id=file_id,
+        asset_name=asset_name,
     )
 
     logger.info(f"Completed processing {len(enriched_tables)} Tables")
     return numbered_markdown,enriched_tables
 
 
-def _enrich_tables_with_surrounding_text(document: DoclingDocument,source_path:Path,table_context_window=3, file_id: str | None = None) -> List[str]:
+def _enrich_tables_with_surrounding_text(
+    document: DoclingDocument,
+    source_path: Path,
+    table_context_window=3,
+    file_id: str | None = None,
+    asset_name: str | None = None,
+) -> List[str]:
     # Convert to list so we can look ahead/behind by index
     # Dcouments are genrally small for processing in memeory should be fast
     items = [item for item, _ in document.iterate_items()]
@@ -113,9 +121,10 @@ def _enrich_tables_with_surrounding_text(document: DoclingDocument,source_path:P
                 # If it doesn't, it might be the concluding paragraph.
         page_no = current.prov[0].page_no if current.prov else 'UNKNOWN'
         table_enriched='\n\n'.join(table_context)
+        display_name = asset_name or getattr(source_path, "name", "Unknown Asset")
         enriched_tables.append({
             'asset_key': file_id or source_path.name,
-            'file_name': source_path.name,
+            'asset_name': display_name,
             'source_path':str(source_path),
             'page_no': page_no,
             'markdown':table_enriched

@@ -183,7 +183,7 @@ class BaseChunkMetadata(BaseModel):
 
     Attributes:
         asset_key: The stable canonical identifier for the source asset.
-        file_name: The human-readable display name of the source file.
+        asset_name: The human-readable display name of the source asset.
         source: The URI or path source of the document.
         pages: List of page numbers associated with this chunk [1,2] or [1].
         tags: Categorization labels used for logical grouping (e.g., ['finance', 'legal']).
@@ -193,7 +193,7 @@ class BaseChunkMetadata(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     asset_key: str
-    file_name: str
+    asset_name: str
     source: str
     pages: list[int]
     tags: list[str] = Field(default_factory=list)
@@ -212,8 +212,10 @@ class ChildMetadata(BaseChunkMetadata):
 
 class VectorDatabasePayloadKeys(str, Enum):
     ASSET_KEY = "asset_key"
+    ASSET_NAME = "asset_name"
     CREATED_AT = "created_at"
     SOURCE = "source"
+    # Legacy read-only key. New payloads must write asset_name instead.
     FILE_NAME = "file_name"
     PAGE = "pages"
     TABLE_ID = "table_id"
@@ -225,9 +227,9 @@ class VectorDatabasePayloadKeys(str, Enum):
 
 _BASE_INDEX_SCHEMA = {
     VectorDatabasePayloadKeys.ASSET_KEY.value: models.PayloadSchemaType.KEYWORD,
+    VectorDatabasePayloadKeys.ASSET_NAME.value: models.PayloadSchemaType.KEYWORD,
     VectorDatabasePayloadKeys.CREATED_AT.value: models.PayloadSchemaType.DATETIME,
     VectorDatabasePayloadKeys.SOURCE.value: models.PayloadSchemaType.KEYWORD,
-    VectorDatabasePayloadKeys.FILE_NAME.value: models.PayloadSchemaType.KEYWORD,
     VectorDatabasePayloadKeys.PAGE.value: models.PayloadSchemaType.INTEGER,
     VectorDatabasePayloadKeys.SCOPES.value: models.PayloadSchemaType.KEYWORD,
     VectorDatabasePayloadKeys.TAGS.value: models.PayloadSchemaType.KEYWORD,

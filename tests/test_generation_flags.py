@@ -470,7 +470,7 @@ def test_post_processing_matches_citations_by_exact_asset_key():
                     page_content="doc",
                     metadata={
                         "asset_key": "asset-42",
-                        "file_name": "Annual Report.pdf",
+                        "asset_name": "Annual Report.pdf",
                         "source": "/docs/Annual Report.pdf",
                     },
                 )
@@ -482,7 +482,9 @@ def test_post_processing_matches_citations_by_exact_asset_key():
 
     payload = json.loads(result["messages"][0].content)
     assert payload["citations"][0]["asset_key"] == "asset-42"
+    assert payload["citations"][0]["asset_name"] == "Annual Report.pdf"
     assert payload["citations"][0]["source_url"] == "/docs/Annual Report.pdf"
     assert "file_name" not in payload["citations"][0]
     assert payload["citations"][1]["asset_key"] == "Annual Report.pdf"
+    assert payload["citations"][1]["asset_name"] == ""
     assert payload["citations"][1]["source_url"] == ""

@@ -21,6 +21,7 @@ def test_markdown_with_citations():
     assert len(result.citations) == 2
     assert result.citations[0].page_number == 5
     assert result.citations[0].asset_key == "report_a1b2c3d4.pdf"
+    assert result.citations[0].asset_name == ""
     assert result.citations[1].asset_key == "annual_d4c3b2a1.pdf"
     assert result.citations[1].page_number == 12
     print("  PASSED\n")
