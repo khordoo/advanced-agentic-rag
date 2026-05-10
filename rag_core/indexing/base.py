@@ -12,21 +12,13 @@ if TYPE_CHECKING:
 class BaseIndexer(ABC):
     """Contract for indexer implementations (Qdrant, Pinecone, etc.)."""
 
+    @abstractmethod
     def index_asset(
         self,
         asset: ClaimedSourceAsset,
         document_blocks: list[ParentChunk],
     ) -> None:
-        """Index the latest processed content for a single source asset.
-
-        Stateless backends keep their existing behavior by forwarding to the
-        legacy chunk-only ingestion method.
-        """
-        self.ingest_documents(document_blocks)
-
-    @abstractmethod
-    def ingest_documents(self, document_blocks: list[ParentChunk]) -> None:
-        """Persist parent + child chunks into the vector store."""
+        """Index the latest processed content for a single claimed source asset."""
 
     @abstractmethod
     def reset_collections(self) -> None:

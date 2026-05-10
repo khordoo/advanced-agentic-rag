@@ -35,7 +35,7 @@ def create_indexer(backend: IndexerBackend | str | None = None) -> BaseIndexer:
     Returns
     -------
     BaseIndexer
-        A fully initialised indexer ready for ``ingest_documents()`` calls.
+        A fully initialised indexer ready for ``index_asset()`` calls.
 
     Raises
     ------

@@ -99,19 +99,6 @@ class PgVectorIndexer(BaseIndexer):
         self._validate_blocks_for_asset(asset.id, document_blocks)
         self._sync_document_blocks(asset.id, document_blocks)
 
-    def ingest_documents(self, document_blocks: list[ParentChunk]) -> None:
-        """Persist parent + child chunks into Postgres for one asset.
-
-        This legacy entry point derives the asset ID from the batch and then
-        uses the same asset-scoped replacement path as :meth:`index_asset`.
-        """
-        if not document_blocks:
-            logger.info("No document blocks to ingest — skipping.")
-            return
-
-        asset_id = self._infer_single_asset_id(document_blocks)
-        self._sync_document_blocks(asset_id, document_blocks)
-
     def _sync_document_blocks(
         self,
         asset_id: int,
@@ -236,29 +223,6 @@ class PgVectorIndexer(BaseIndexer):
                     f"ParentChunk '{block.id}' belongs to asset_id={block.asset_id}, "
                     f"but the claimed asset is asset_id={asset_id}."
                 )
-
-    @classmethod
-    def _infer_single_asset_id(cls, document_blocks: list[ParentChunk]) -> int:
-        """Infer the single asset ID represented by a legacy ingest batch."""
-        asset_id: int | None = None
-        for block in document_blocks:
-            if block.asset_id is None:
-                raise ValueError(
-                    f"ParentChunk '{block.id}' is missing asset_id. "
-                    "Use index_asset(asset, blocks) for asset-scoped indexing."
-                )
-            if asset_id is None:
-                asset_id = block.asset_id
-            elif block.asset_id != asset_id:
-                raise ValueError(
-                    "PgVectorIndexer.ingest_documents only supports one asset_id "
-                    "per batch. Use index_asset(asset, blocks) per claimed asset."
-                )
-
-        if asset_id is None:
-            raise ValueError("Cannot infer asset_id from an empty document batch.")
-        cls._validate_blocks_for_asset(asset_id, document_blocks)
-        return asset_id
 
     @staticmethod
     def _build_section(block: ParentChunk) -> DocumentSection:

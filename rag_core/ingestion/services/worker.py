@@ -61,10 +61,18 @@ class SimulatedAssetProcessor(BaseProcessor):
 class LoggingIndexer(BaseIndexer):
     """Development indexer that logs received chunks without writing them."""
 
-    def ingest_documents(self, document_blocks: list[ParentChunk]) -> None:
+    def index_asset(
+        self,
+        asset: ClaimedSourceAsset,
+        document_blocks: list[ParentChunk],
+    ) -> None:
         logger.info(
             "Simulated indexer received document blocks",
-            extra={"parent_chunks": len(document_blocks)},
+            extra={
+                "asset_id": asset.id,
+                "asset_key": asset.asset_key,
+                "parent_chunks": len(document_blocks),
+            },
         )
 
     def reset_collections(self) -> None:

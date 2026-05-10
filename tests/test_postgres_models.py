@@ -378,22 +378,20 @@ def test_pgvector_index_asset_empty_batch_still_syncs_asset(
     assert calls == [(99, [], [])]
 
 
-def test_pgvector_ingest_documents_rejects_missing_asset_id() -> None:
+def test_pgvector_index_asset_rejects_missing_asset_id() -> None:
     indexer = object.__new__(PgVectorIndexer)
 
     with pytest.raises(ValueError, match="missing asset_id"):
-        indexer.ingest_documents([_parent_chunk(asset_id=None)])
+        indexer.index_asset(_claimed_asset(42), [_parent_chunk(asset_id=None)])
 
 
-def test_pgvector_ingest_documents_rejects_mixed_asset_ids() -> None:
+def test_pgvector_index_asset_rejects_mismatched_asset_id() -> None:
     indexer = object.__new__(PgVectorIndexer)
 
-    with pytest.raises(ValueError, match="one asset_id per batch"):
-        indexer.ingest_documents(
-            [
-                _parent_chunk(asset_id=1, block_id="parent-1"),
-                _parent_chunk(asset_id=2, block_id="parent-2"),
-            ]
+    with pytest.raises(ValueError, match="claimed asset"):
+        indexer.index_asset(
+            _claimed_asset(1),
+            [_parent_chunk(asset_id=2, block_id="parent-2")],
         )
 
 

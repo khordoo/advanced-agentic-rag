@@ -214,23 +214,3 @@ def test_index_asset_rejects_child_asset_key_mismatch_before_delete() -> None:
 
     assert client.events == []
 
-
-def test_ingest_documents_keeps_legacy_insert_behavior_with_created_at() -> None:
-    client = _FakeQdrantClient()
-    indexer = _indexer(client)
-
-    indexer.ingest_documents([_block()])
-
-    assert client.events == [
-        ("upsert", "test_chunks"),
-        ("upsert", "test_parents"),
-    ]
-    _, child_points = client.upserts[0]
-    _, parent_points = client.upserts[1]
-    assert len(child_points) == 1
-    assert len(parent_points) == 1
-    assert PayloadKeys.CREATED_AT.value in child_points[0].payload
-    assert PayloadKeys.CREATED_AT.value in parent_points[0].payload
-    assert child_points[0].payload[PayloadKeys.CREATED_AT.value] == (
-        parent_points[0].payload[PayloadKeys.CREATED_AT.value]
-    )

@@ -121,18 +121,6 @@ class QdrantIndexer(BaseIndexer):
         self._delete_asset_points(asset.asset_key)
         self._ingest_document_blocks(document_blocks, created_at=created_at)
 
-    def ingest_documents(self, document_blocks: list[ParentChunk]) -> None:
-        """Upsert parent + child points into Qdrant.
-
-        Each :class:`ParentChunk` produces:
-        * One payload-only point in the *parents* collection.
-        * Multiple child chunks in the *chunks* collection (embedded via fastembed).
-        """
-        self._ingest_document_blocks(
-            document_blocks,
-            created_at=self._created_at_timestamp(),
-        )
-
     def _ingest_document_blocks(
         self,
         document_blocks: list[ParentChunk],

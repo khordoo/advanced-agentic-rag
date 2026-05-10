@@ -60,7 +60,6 @@ class _FakeIndexer(BaseIndexer):
     def __init__(self, error: Exception | None = None) -> None:
         self.error = error
         self.indexed_assets: list[tuple[ClaimedSourceAsset, list[ParentChunk]]] = []
-        self.ingested_batches: list[list[ParentChunk]] = []
 
     def index_asset(
         self,
@@ -68,12 +67,8 @@ class _FakeIndexer(BaseIndexer):
         document_blocks: list[ParentChunk],
     ) -> None:
         self.indexed_assets.append((asset, document_blocks))
-        self.ingest_documents(document_blocks)
-
-    def ingest_documents(self, document_blocks: list[ParentChunk]) -> None:
         if self.error is not None:
             raise self.error
-        self.ingested_batches.append(document_blocks)
 
     def reset_collections(self) -> None:
         pass
@@ -235,7 +230,6 @@ def test_run_once_processes_indexes_and_marks_complete() -> None:
     assert worker.run_once() is True
 
     assert [asset.id for asset in processor.processed_assets] == [10]
-    assert indexer.ingested_batches == [[]]
     assert [(asset.id, chunks) for asset, chunks in indexer.indexed_assets] == [
         (10, [])
     ]
@@ -260,7 +254,6 @@ def test_lease_extension_failure_skips_indexing_and_completion() -> None:
 
     assert worker.run_once() is True
 
-    assert indexer.ingested_batches == []
     assert indexer.indexed_assets == []
     assert worker.completed_assets == []
     assert worker.failed_assets == []
@@ -280,7 +273,7 @@ def test_processor_failure_logs_retry_outcome(caplog: pytest.LogCaptureFixture) 
 
     assert worker.run_once() is True
 
-    assert indexer.ingested_batches == []
+    assert indexer.indexed_assets == []
     assert worker.extended_leases == []
     assert worker.completed_assets == []
     assert worker.failed_assets == [(30, "processor failed")]
@@ -302,7 +295,7 @@ def test_processor_failure_logs_permanent_failure_outcome(
 
     assert worker.run_once() is True
 
-    assert indexer.ingested_batches == []
+    assert indexer.indexed_assets == []
     assert worker.extended_leases == []
     assert worker.completed_assets == []
     assert worker.failed_assets == [(31, "processor failed")]
@@ -324,7 +317,7 @@ def test_processor_failure_logs_lost_ownership_outcome(
 
     assert worker.run_once() is True
 
-    assert indexer.ingested_batches == []
+    assert indexer.indexed_assets == []
     assert worker.extended_leases == []
     assert worker.completed_assets == []
     assert worker.failed_assets == [(32, "processor failed")]
@@ -338,6 +331,9 @@ def test_indexer_failure_marks_asset_failed() -> None:
     assert worker.run_once() is True
 
     assert worker.extended_leases == [(40, 17)]
+    assert [(asset.id, chunks) for asset, chunks in indexer.indexed_assets] == [
+        (40, [])
+    ]
     assert worker.completed_assets == []
     assert worker.failed_assets == [(40, "indexer failed")]
 
@@ -349,7 +345,6 @@ def test_completion_failure_after_indexing_logs_critical(caplog: pytest.LogCaptu
 
     assert worker.run_once() is True
 
-    assert indexer.ingested_batches == [[]]
     assert [(asset.id, chunks) for asset, chunks in indexer.indexed_assets] == [
         (50, [])
     ]
