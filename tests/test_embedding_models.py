@@ -6,8 +6,8 @@ from pydantic import ValidationError
 from rag_core.core.config import EmbeddingSettings
 from rag_core.embeddings import (
     BaseEmbeddingModel,
+    EmbeddingProvider,
     FastEmbedEmbeddingModel,
-    OpenAIEmbeddingModel,
     create_embedding_model,
 )
 
@@ -122,6 +122,14 @@ def test_create_embedding_model_returns_fastembed() -> None:
     assert model.dimension == 384
 
 
+def test_embedding_provider_enum() -> None:
+    assert EmbeddingProvider("fastembed") == EmbeddingProvider.FASTEMBED
+    assert EmbeddingProvider("openai") == EmbeddingProvider.OPENAI
+
+    with pytest.raises(ValueError):
+        EmbeddingProvider("invalid")
+
+
 def test_embedding_settings_reads_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("EMBEDDING_PROVIDER", "fastembed")
     monkeypatch.setenv("EMBEDDING_MODEL_NAME", "custom-model")
@@ -134,7 +142,7 @@ def test_embedding_settings_reads_env(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.dimension == 768
 
 
-def test_create_embedding_model_returns_openai_placeholder() -> None:
+def test_create_embedding_model_openai_placeholder_raises() -> None:
     settings = EmbeddingSettings(
         provider="openai",
         model_name="text-embedding-3-small",
@@ -142,12 +150,8 @@ def test_create_embedding_model_returns_openai_placeholder() -> None:
         _env_file=None,
     )
 
-    model = create_embedding_model(settings)
-
-    assert isinstance(model, OpenAIEmbeddingModel)
-    assert model.dimension == 1536
     with pytest.raises(NotImplementedError, match="OpenAI embeddings"):
-        model.embed_query("query")
+        create_embedding_model(settings)
 
 
 def test_embedding_settings_rejects_unknown_provider() -> None:

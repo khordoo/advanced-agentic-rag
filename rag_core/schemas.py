@@ -1,13 +1,15 @@
 """Pydantic models shared across the pipeline."""
 
 from __future__ import annotations
-from enum import Enum
-from typing import List, Optional, Any
-from langchain_core.documents import Document
-from pydantic import BaseModel, Field, ConfigDict
+
 from dataclasses import dataclass, field
-from qdrant_client import models
+from enum import Enum
+from typing import Any, List, Optional
+
+from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
+from pydantic import BaseModel, ConfigDict, Field
+from qdrant_client import models
 
 
 class QAPair(BaseModel):

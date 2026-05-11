@@ -15,6 +15,7 @@ is now covered by the SourceDiscoveryService and metadata extraction tests.
 
 from __future__ import annotations
 
+import logging
 from types import SimpleNamespace
 import warnings
 from pathlib import Path
@@ -25,6 +26,23 @@ from rag_core.core.config import IngestionSettings, load_config
 from rag_core.ingestion import pipeline as ingestion_pipeline
 from rag_core.ingestion.services.discovery import DiscoveryRunMetrics
 from rag_core.pipelines.ingestion import IngestionPipeline
+
+
+@pytest.fixture(autouse=True)
+def clear_settings_caches(monkeypatch: pytest.MonkeyPatch) -> None:
+    import rag_core.core.config
+
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "fastembed")
+    monkeypatch.setenv("INGESTION_INDEXER_BACKEND", "qdrant")
+    monkeypatch.setenv("QDRANT_EMBED_MODEL", "BAAI/bge-small-en-v1.5")
+    monkeypatch.setenv("QDRANT_SPARSE_MODEL", "prithivida/Splade_PP_en_v1")
+    rag_core.core.config.get_embedding_settings.cache_clear()
+    rag_core.core.config.get_ingestion_settings.cache_clear()
+    rag_core.core.config.get_qdrant_settings.cache_clear()
+    yield
+    rag_core.core.config.get_embedding_settings.cache_clear()
+    rag_core.core.config.get_ingestion_settings.cache_clear()
+    rag_core.core.config.get_qdrant_settings.cache_clear()
 
 
 def test_load_config_defaults_docs_dir_to_source_documents(tmp_path: Path, monkeypatch):
@@ -229,6 +247,7 @@ def test_run_ingestion_pipeline_preserves_zero_max_jobs_override(
 
 def test_run_ingestion_pipeline_resets_when_overwrite_enabled(
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     class _FakeIndexer:
         def __init__(self) -> None:
@@ -252,8 +271,56 @@ def test_run_ingestion_pipeline_resets_when_overwrite_enabled(
         staticmethod(lambda: worker),
     )
 
+    caplog.set_level(logging.INFO, logger=ingestion_pipeline.__name__)
     assert ingestion_pipeline.run_ingestion_pipeline(overwrite=True) == 1
     assert worker.indexer.reset_count == 1
+    assert "Existing vectors for this backend will be deleted" in caplog.text
+    assert "Overwrite successful" not in caplog.text
+
+
+def test_run_ingestion_pipeline_logs_postgres_mismatch_overwrite_rebuild(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    monkeypatch.setenv("INGESTION_INDEXER_BACKEND", "postgres")
+    monkeypatch.setenv("EMBEDDING_DIMENSION", "1536")
+
+    class _FakeIndexer:
+        def __init__(self) -> None:
+            self.reset_count = 0
+
+        def reset_collections(self) -> None:
+            self.reset_count += 1
+
+    class _FakeWorker:
+        def __init__(self) -> None:
+            self.indexer = _FakeIndexer()
+            self.settings = SimpleNamespace(default_max_jobs=None)
+
+        def run(self, max_jobs: int | None = None) -> int:
+            return 1
+
+    worker = _FakeWorker()
+    monkeypatch.setattr(
+        "rag_core.indexing.factory._fetch_existing_postgres_vector_dimensions",
+        lambda *, db=None: {384},
+    )
+    monkeypatch.setattr(
+        ingestion_pipeline.SourceIngestionWorkerService,
+        "default_production",
+        staticmethod(lambda: worker),
+    )
+
+    caplog.set_level(logging.INFO, logger=ingestion_pipeline.__name__)
+    assert ingestion_pipeline.run_ingestion_pipeline(overwrite=True) == 1
+
+    assert worker.indexer.reset_count == 1
+    assert (
+        "Dimension mismatch detected (DB: 384, Config: 1536). Proceeding with "
+        "index reset as requested."
+    ) in caplog.text
+    assert "Overwrite successful. Index rebuilt with dimension 1536." in caplog.text
+    assert "run future ingestion with overwrite=False" in caplog.text
 
 
 def test_run_end_to_end_pipeline_runs_discovery_then_ingestion(
@@ -330,10 +397,35 @@ def test_run_pipeline_delegates_to_end_to_end_pipeline(
     monkeypatch.setattr(
         ingestion_pipeline,
         "run_end_to_end_pipeline",
-        lambda: expected,
+        lambda *, overwrite: expected,
     )
 
     assert ingestion_pipeline.run_pipeline() is expected
+
+
+def test_run_pipeline_reads_runtime_overwrite_setting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("INGESTION_OVERWRITE", "true")
+    calls: list[bool] = []
+    expected = ingestion_pipeline.EndToEndIngestionResult(
+        discovery=DiscoveryRunMetrics(discovered_total=1),
+        processed_jobs=2,
+        succeeded=True,
+    )
+
+    def _run_end_to_end_pipeline(*, overwrite: bool):
+        calls.append(overwrite)
+        return expected
+
+    monkeypatch.setattr(
+        ingestion_pipeline,
+        "run_end_to_end_pipeline",
+        _run_end_to_end_pipeline,
+    )
+
+    assert ingestion_pipeline.run_pipeline() is expected
+    assert calls == [True]
 
 
 def test_legacy_ingestion_pipeline_run_delegates_to_canonical_pipeline(

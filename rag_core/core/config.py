@@ -6,15 +6,15 @@ import logging
 import os
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 import torch
-from pydantic import computed_field
-from typing import Literal
 from dotenv import dotenv_values, load_dotenv
-from pydantic import Field
+from pydantic import Field, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from pythonjsonlogger.json import JsonFormatter
+from rag_core.embeddings.types import EmbeddingProvider
 
 logger = logging.getLogger(__name__)
 
@@ -240,11 +240,20 @@ class RerankerSettings(BaseSettings):
 
 class QdrantSettings(BaseSettings):
     url: str = "http://localhost:6333"
-    embed_model: str = "BAAI/bge-small-en-v1.5"
-    sparse_model: str = "prithivida/Splade_PP_en_v1"
+    embed_model: str = Field(default="BAAI/bge-small-en-v1.5", min_length=1)
+    sparse_model: str = Field(default="prithivida/Splade_PP_en_v1", min_length=1)
     collection_namespace: str = "docs"
     chunk_collection_name: str = f"{collection_namespace}_chunks"
     parent_collection_name: str = f"{collection_namespace}_parents"
+
+    @field_validator("embed_model", "sparse_model")
+    @classmethod
+    def validate_model_name(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("Qdrant model names must not be empty.")
+        return stripped
+
     model_config = SettingsConfigDict(
         env_prefix="QDRANT_", env_file=".env", extra="ignore"
     )
@@ -253,7 +262,7 @@ class QdrantSettings(BaseSettings):
 class EmbeddingSettings(BaseSettings):
     """Shared dense embedding provider configuration."""
 
-    provider: Literal["fastembed", "openai"] = "fastembed"
+    provider: EmbeddingProvider = EmbeddingProvider.FASTEMBED
     model_name: str = "BAAI/bge-small-en-v1.5"
     dimension: int = Field(default=384, ge=1)
 
@@ -345,6 +354,20 @@ class IngestionSettings(BaseSettings):
             "queue is empty and process all available files."
         ),
     )
+    overwrite: bool = Field(
+        default=False,
+        description=(
+            "⚠️ DANGER: FULLY WIPES all existing data from the vector database "
+            "(Postgres tables or Qdrant collections) before ingestion begins. "
+            "This is a permanent, destructive action that deletes all existing "
+            "vectors, chunks, and metadata. Required for changing embedding models "
+            "or resolving dimension mismatches."
+            "Use ONLY as a temporary environment variable "
+            "injection (e.g., 'docker run -e INGESTION_OVERWRITE=true ...'). "
+            "DO NOT save this as 'true' in a permanent .env file or config commit, "
+            "as it will cause unrecoverable data loss on every subsequent run"
+        ),
+    )
     allowed_extensions_raw: str = "pdf,md"
     hash_algorithm: Literal["md5", "sha1", "sha256", "sha512"] = "sha256"
     indexer_backend: Literal["qdrant", "postgres"] = Field(
@@ -371,8 +394,6 @@ class IngestionSettings(BaseSettings):
             for ext in self.allowed_extensions_raw.split(",")
             if ext.strip()
         }
-
-
 
     model_config = SettingsConfigDict(
         env_prefix="INGESTION_",

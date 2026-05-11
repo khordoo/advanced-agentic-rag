@@ -11,6 +11,18 @@ from rag_core.indexing.base import BaseIndexer
 from rag_core.indexing.factory import IndexerBackend, create_indexer
 
 
+@pytest.fixture(autouse=True)
+def clear_settings_caches(monkeypatch):
+    import rag_core.core.config
+
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "fastembed")
+    rag_core.core.config.get_embedding_settings.cache_clear()
+    rag_core.core.config.get_ingestion_settings.cache_clear()
+    yield
+    rag_core.core.config.get_embedding_settings.cache_clear()
+    rag_core.core.config.get_ingestion_settings.cache_clear()
+
+
 class TestIndexerBackendEnum:
     """IndexerBackend enum covers expected values."""
 
@@ -36,8 +48,9 @@ class TestIndexerBackendEnum:
 class TestCreateIndexer:
     """Factory function returns correct indexer types."""
 
-    def test_qdrant_backend_returns_base_indexer(self):
+    def test_qdrant_backend_returns_base_indexer(self, monkeypatch):
         """When backend='qdrant', factory lazy-imports and returns QdrantIndexer."""
+        monkeypatch.setenv("EMBEDDING_PROVIDER", "fastembed")
         mock_instance = MagicMock(spec=BaseIndexer)
         with patch(
             "rag_core.indexing.qdrant_indexer.QdrantIndexer",
@@ -78,8 +91,9 @@ class TestCreateIndexer:
             result = create_indexer(backend=IndexerBackend.POSTGRES)
             assert result is mock_instance
 
-    def test_default_reads_from_settings(self):
+    def test_default_reads_from_settings(self, monkeypatch):
         """When backend=None, factory reads from IngestionSettings."""
+        monkeypatch.setenv("EMBEDDING_PROVIDER", "fastembed")
         mock_settings = MagicMock()
         mock_settings.indexer_backend = "qdrant"
 

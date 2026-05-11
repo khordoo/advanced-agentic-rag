@@ -30,6 +30,24 @@ uv run python -m rag_core.ingestion.pipeline
 uv run rag_core/cli.py
 ```
 
+## 🚨 Point of No Return: Changing Embedding Models
+
+> [!CAUTION]
+> **Embedding models are immutable for existing indices.**
+> 
+> Vectors are mathematically tied to the specific model that generated them. If you change your `EMBEDDING_MODEL_NAME` or `EMBEDDING_PROVIDER` in your settings:
+> 
+> - **Vector Mismatch**: If the new model has a different dimension, all existing database queries and insertions will fail.
+> - **Semantic Drift**: Even if the dimensions match, the new model cannot "understand" vectors created by the old model. Your search results will become random noise.
+> 
+> **Requirement**: Changing your embedding configuration requires a full re-ingestion. For a one-off rebuild, run the ingestion entrypoint with `INGESTION_OVERWRITE=true`:
+>
+> ```bash
+> INGESTION_OVERWRITE=true uv run python -m rag_core.ingestion.pipeline
+> ```
+>
+> This deletes existing vectors for the selected backend before rebuilding them. Do not keep `INGESTION_OVERWRITE=true` in committed `.env` files or long-lived deployment config; run future ingestion with overwrite disabled to avoid accidental data loss.
+
 ## Database Migrations
 
 Use `make` shortcuts for Alembic commands (config is wired to `db/alembic.ini`).
