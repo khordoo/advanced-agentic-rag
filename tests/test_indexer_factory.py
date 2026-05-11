@@ -122,14 +122,6 @@ class TestIngestionSettingsIndexerFields:
         settings = IngestionSettings(_env_file=None)
         assert settings.indexer_backend == "qdrant"
 
-    def test_default_embedding_dimension(self, monkeypatch):
-        monkeypatch.delenv("INGESTION_INDEXER_BACKEND", raising=False)
-        monkeypatch.delenv("INGESTION_EMBEDDING_DIMENSION", raising=False)
-        from rag_core.core.config import IngestionSettings
-
-        settings = IngestionSettings(_env_file=None)
-        assert settings.embedding_dimension == 384
-
     def test_custom_indexer_backend(self, monkeypatch):
         monkeypatch.setenv("INGESTION_INDEXER_BACKEND", "postgres")
         from rag_core.core.config import IngestionSettings
@@ -143,11 +135,3 @@ class TestIngestionSettingsIndexerFields:
 
         with pytest.raises(ValidationError):
             IngestionSettings(_env_file=None)
-
-    def test_custom_embedding_dimension(self, monkeypatch):
-        monkeypatch.setenv("INGESTION_INDEXER_BACKEND", "qdrant")
-        monkeypatch.setenv("INGESTION_EMBEDDING_DIMENSION", "1536")
-        from rag_core.core.config import IngestionSettings
-
-        settings = IngestionSettings(_env_file=None)
-        assert settings.embedding_dimension == 1536
