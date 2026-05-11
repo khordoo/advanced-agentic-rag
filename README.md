@@ -48,6 +48,10 @@ uv run rag_core/cli.py
 >
 > This deletes existing vectors for the selected backend before rebuilding them. Do not keep `INGESTION_OVERWRITE=true` in committed `.env` files or long-lived deployment config; run future ingestion with overwrite disabled to avoid accidental data loss.
 
+Provider names are intentionally strict. If you add a new embedding backend,
+update the enum and factory wiring described in
+[`docs/configuration/README.md`](docs/configuration/README.md#adding-an-embedding-provider).
+
 ## Database Migrations
 
 Use `make` shortcuts for Alembic commands (config is wired to `db/alembic.ini`).

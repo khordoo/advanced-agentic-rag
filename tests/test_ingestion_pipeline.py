@@ -24,6 +24,7 @@ import pytest
 
 from rag_core.core.config import IngestionSettings, load_config
 from rag_core.ingestion import pipeline as ingestion_pipeline
+from rag_core.ingestion import indexing_preflight
 from rag_core.ingestion.services.discovery import DiscoveryRunMetrics
 from rag_core.pipelines.ingestion import IngestionPipeline
 
@@ -271,7 +272,7 @@ def test_run_ingestion_pipeline_resets_when_overwrite_enabled(
         staticmethod(lambda: worker),
     )
 
-    caplog.set_level(logging.INFO, logger=ingestion_pipeline.__name__)
+    caplog.set_level(logging.INFO, logger=indexing_preflight.__name__)
     assert ingestion_pipeline.run_ingestion_pipeline(overwrite=True) == 1
     assert worker.indexer.reset_count == 1
     assert "Existing vectors for this backend will be deleted" in caplog.text
@@ -311,7 +312,7 @@ def test_run_ingestion_pipeline_logs_postgres_mismatch_overwrite_rebuild(
         staticmethod(lambda: worker),
     )
 
-    caplog.set_level(logging.INFO, logger=ingestion_pipeline.__name__)
+    caplog.set_level(logging.INFO, logger=indexing_preflight.__name__)
     assert ingestion_pipeline.run_ingestion_pipeline(overwrite=True) == 1
 
     assert worker.indexer.reset_count == 1
