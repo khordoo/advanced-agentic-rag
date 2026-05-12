@@ -14,10 +14,14 @@ from typing import Any
 from langchain_core.documents import Document
 from qdrant_client import QdrantClient, models
 
-from rag_core.core.config import RetrivalSettings, QdrantSettings, get_qdrant_settings
+from rag_core.core.config import (
+    RetrievalSettings,
+    QdrantSettings,
+    get_qdrant_settings,
+    get_retrieval_settings,
+)
 from rag_core.store.qdrant import QdrantConnectionManager
 from rag_core.retrival.base import BaseRetriever
-from rag_core.reranking import BaseReranker, LocalReranker
 from rag_core.schemas import (
     VectorDatabasePayloadKeys as PayloadKeys,
     PARENT_INDEX_SCHEMA,
@@ -39,14 +43,12 @@ class QdrantRetriever(BaseRetriever):
         self,
         client: QdrantClient | None = None,
         settings: QdrantSettings | None = None,
-        retrieval_settings: RetrivalSettings | None = None,
-        reranker: BaseReranker | None = None,
+        retrieval_settings: RetrievalSettings | None = None,
     ) -> None:
         super().__init__()
         self._client = client or QdrantConnectionManager.get_client()
         self._settings = settings or get_qdrant_settings()
-        self.retrieval_settings = retrieval_settings or RetrivalSettings()
-        self.reranker = reranker or LocalReranker()
+        self.retrieval_settings = retrieval_settings or get_retrieval_settings()
 
     def exact_lookup(
         self,
@@ -94,10 +96,12 @@ class QdrantRetriever(BaseRetriever):
         scopes: list[str] | None = None,
         filters: dict[str, Any] | None = None,
         retrival_top_k: int | None = None,
+        hybrid_alpha: float | None = None,
         rerank_top_k: int | None = None,
         rerank: bool = True,
     ) -> list[Document]:
         """Execute hybrid search (dense + sparse RRF) with parent document reconstruction."""
+        del hybrid_alpha, rerank_top_k, rerank
 
         actual_retrival_top_k = (
             retrival_top_k
@@ -133,6 +137,10 @@ class QdrantRetriever(BaseRetriever):
         )
 
         # Hybrid search: prefetch dense + sparse, fuse with RRF
+        fusion_query: Any = models.FusionQuery(fusion=models.Fusion.RRF)
+        if self.retrieval_settings.qdrant_rrf_k is not None:
+            fusion_query = {"rrf": {"k": self.retrieval_settings.qdrant_rrf_k}}
+
         response = self._client.query_points(
             collection_name=self._settings.chunk_collection_name,
             prefetch=[
@@ -149,17 +157,10 @@ class QdrantRetriever(BaseRetriever):
                     limit=fetch_limit,
                 ),
             ],
-            query=models.FusionQuery(fusion=models.Fusion.RRF),
+            query=fusion_query,
             limit=fetch_limit,
         )
         results = response.points
-        if rerank:
-            actual_rerank_top_k = (
-                rerank_top_k
-                if rerank_top_k is not None
-                else self.retrieval_settings.top_k
-            )
-            results = self._rerank(query, results, top_k=actual_rerank_top_k)
         # Extract unique parents and their maximum scores
         unique_parents = self._extract_unique_parents_and_filter(
             results=results,
@@ -190,38 +191,6 @@ class QdrantRetriever(BaseRetriever):
         logger.info(f"Retrieved {len(documents)} parent chunks.")
         documents.sort(key=lambda d: d.metadata["score"], reverse=True)
         return documents
-
-    def _rerank(
-        self, query: str, points: list[models.ScoredPoint], top_k: int
-    ) -> list[models.ScoredPoint]:
-        text_key = PayloadKeys.TEXT.value
-        docs = [
-            Document(
-                page_content=r.payload.get(text_key, ""),
-                metadata={
-                    "_chunk_id": r.id,
-                    **{k: v for k, v in r.payload.items() if k != text_key},
-                },
-            )
-            for r in points
-        ]
-        reranked_results = self.reranker.rerank(query, docs, top_k=top_k)
-
-        reranked_points = [
-            models.ScoredPoint(
-                id=r.metadata["_chunk_id"],
-                score=r.metadata["rerank_score"],
-                payload={
-                    k: v
-                    for k, v in r.metadata.items()
-                    if k not in ("_chunk_id", "rerank_score")
-                },
-                version=1,
-            )
-            for r in reranked_results
-        ]
-        logger.info(f"Reranked chunks: {len(docs)} -> {len(reranked_points)}.")
-        return reranked_points
 
     def _build_filters(
         self,

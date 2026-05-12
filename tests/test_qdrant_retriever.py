@@ -171,7 +171,11 @@ def _configured_retriever(client: _FakeQdrantClient) -> QdrantRetriever:
         parent_collection_name="parents",
         chunk_collection_name="chunks",
     )
-    retriever.retrieval_settings = SimpleNamespace(top_k=1, oversample_factor=1)
+    retriever.retrieval_settings = SimpleNamespace(
+        top_k=1,
+        oversample_factor=1,
+        qdrant_rrf_k=None,
+    )
     return retriever
 
 

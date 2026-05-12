@@ -15,6 +15,7 @@ from rag_core.genetation.tools import (
     FetchPageToolSchema,
     TableLookupToolSchema,
 )
+from rag_core.retrival.search_service import RAGSearchService
 from rag_core.schemas import VectorDatabasePayloadKeys as PayloadKeys
 
 
@@ -73,6 +74,13 @@ class _DummyRetriever:
                 metadata={PayloadKeys.ASSET_KEY.value: asset_key},
             )
         ]
+
+
+class _NoopReranker:
+    def rerank(self, query, documents, top_k=None):
+        for i, doc in enumerate(documents, start=1):
+            doc.metadata["rerank_score"] = 1.0 / i
+        return documents[:top_k] if top_k is not None else documents
 
 
 def test_initial_router_uses_intent_router_when_enabled():
@@ -211,7 +219,9 @@ def test_generation_tool_schemas_require_asset_key():
 
 def test_generation_lookup_tools_filter_by_asset_key():
     retriever = _DummyRetriever()
-    factory = AgentToolFactory(retriever=retriever)
+    factory = AgentToolFactory(
+        search_service=RAGSearchService(retriever=retriever, reranker=_NoopReranker())
+    )
 
     factory._page_lookup(asset_key="asset-42", page_number=3)
     factory._table_lookup(table_id="DATA_TABLE_001", asset_key="asset-42")
@@ -230,11 +240,23 @@ def test_generation_lookup_tools_filter_by_asset_key():
 
 def test_semantic_search_tool_passes_optional_asset_key():
     retriever = _DummyRetriever()
-    factory = AgentToolFactory(retriever=retriever)
+    factory = AgentToolFactory(
+        search_service=RAGSearchService(retriever=retriever, reranker=_NoopReranker())
+    )
 
     factory._semantic_search(query="revenue", asset_key="asset-42")
 
-    assert retriever.search_calls == [{"query": "revenue", "asset_key": "asset-42"}]
+    assert retriever.search_calls == [
+        {
+            "query": "revenue",
+            "asset_key": "asset-42",
+            "scopes": None,
+            "filters": None,
+            "retrival_top_k": None,
+            "hybrid_alpha": None,
+            "rerank": False,
+        }
+    ]
 
 
 def test_primary_rag_agent_increments_global_iteration_count():

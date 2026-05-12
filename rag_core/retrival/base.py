@@ -13,6 +13,7 @@ class BaseRetriever(ABC):
         scopes: list[str] | None = None,
         filters: dict | None = None,
         retrival_top_k: int | None = None,
+        hybrid_alpha: float | None = None,
         rerank_top_k: int | None = None,
         rerank: bool = True,
     ) -> List[Document]:

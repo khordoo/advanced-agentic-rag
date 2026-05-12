@@ -2,7 +2,7 @@ import json
 from langchain_core.documents import Document
 from pydantic import BaseModel, Field
 from rag_core.retrival.base import BaseRetriever
-from rag_core.retrival.qdrant_retriever import QdrantRetriever
+from rag_core.retrival.search_service import RAGSearchService
 from rag_core.schemas import VectorDatabasePayloadKeys as PayloadSchema
 from langchain_core.tools import StructuredTool
 
@@ -34,12 +34,17 @@ class AgentToolFactory:
     Factory class for creating tools for the  langgraph agent.
     """
 
-    def __init__(self, retriever: BaseRetriever | None = None) -> None:
-        self.retriever = retriever or QdrantRetriever()
+    def __init__(
+        self,
+        retriever: BaseRetriever | None = None,
+        search_service: RAGSearchService | None = None,
+    ) -> None:
+        self.search_service = search_service or RAGSearchService(retriever=retriever)
+        self.retriever = self.search_service.retriever
         self._tools: list[StructuredTool] | None = None
 
     def _semantic_search(self, query: str, asset_key: str | None = None) -> str:
-        docs = self.retriever.search(query=query, asset_key=asset_key)
+        docs = self.search_service.search(query=query, asset_key=asset_key, rerank=True)
         return self._format_docs(docs)
 
     def _page_lookup(self, asset_key: str, page_number: int) -> str:
@@ -64,9 +69,11 @@ class AgentToolFactory:
 
     @classmethod
     def create_tools(
-        cls, retriever: BaseRetriever | None = None
+        cls,
+        retriever: BaseRetriever | None = None,
+        search_service: RAGSearchService | None = None,
     ) -> list[StructuredTool]:
-        instance = cls(retriever or QdrantRetriever())
+        instance = cls(retriever=retriever, search_service=search_service)
         return instance._get_tools()
 
     def _get_tools(self) -> list[StructuredTool]:
