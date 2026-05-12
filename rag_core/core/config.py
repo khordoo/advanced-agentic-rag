@@ -134,7 +134,7 @@ class SecuritySettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="SECURITY_", env_file=".env", extra="ignore")
 
 
-class RetrivalSettings(BaseSettings):
+class RetrievalSettings(BaseSettings):
     """
     Configuration settings for the RAG retrieval pipeline.
 
@@ -150,6 +150,10 @@ class RetrivalSettings(BaseSettings):
     silently drop ALL documents and return empty results.
     """
 
+    backend: Literal["qdrant", "postgres"] = Field(
+        default="qdrant",
+        description="Retriever backend to use at runtime.",
+    )
     top_k: int = Field(
         default=10,
         ge=1,
@@ -195,7 +199,40 @@ class RetrivalSettings(BaseSettings):
             "Set to ~0.05 - 0.08 to filter out low-confidence tail results."
         ),
     )
+    postgres_rrf_k: int = Field(
+        default=2,
+        ge=1,
+        description="RRF constant used by Postgres weighted-RRF fusion.",
+    )
+    qdrant_rrf_k: int | None = Field(
+        default=None,
+        ge=1,
+        description=(
+            "Optional Qdrant RRF constant override. When omitted, native Qdrant defaults are used."
+        ),
+    )
     fetch_parent: bool = True
+
+    @field_validator("qdrant_rrf_k", mode="before")
+    @classmethod
+    def _normalize_optional_qdrant_rrf_k(cls, value: object) -> object:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"", "none", "null"}:
+                return None
+        return value
+
+    model_config = SettingsConfigDict(
+        env_prefix="RETRIVAL_",
+        env_file=".env",
+        extra="ignore",
+    )
+
+
+# Backward-compatibility alias for existing imports.
+RetrivalSettings = RetrievalSettings
 
 
 class RerankerSettings(BaseSettings):
@@ -443,3 +480,9 @@ def get_ingestion_settings() -> IngestionSettings:
 def get_generation_settings() -> GenerationSettings:
     logger.info("Reading .env file and caching Generation pipeline settings...")
     return GenerationSettings()
+
+
+@lru_cache()
+def get_retrieval_settings() -> RetrievalSettings:
+    logger.info("Reading .env file and caching Retrieval pipeline settings...")
+    return RetrievalSettings()

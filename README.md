@@ -9,6 +9,7 @@ Use this file as the landing page, then go to detailed guides in [`docs/`](docs/
 - [Documentation Index](docs/README.md)
 - [Getting Started](docs/getting-started/README.md)
 - [Configuration](docs/configuration/README.md)
+- [Retrieval RRF Semantics](docs/configuration/retrieval-rrf.md)
 - [Generation Model Settings](docs/configuration/generation-models.md)
 - [Ingestion Rules](docs/ingestion/README.md)
 - [Agents & Prompt Profiles](docs/agents/README.md)

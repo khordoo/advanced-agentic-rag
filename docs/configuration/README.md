@@ -19,6 +19,13 @@ Project runtime behavior is configured through `.env` (see `.env.example`).
 For reasoning/verifier/fast model setup and tuning, see:
 - [Generation Model Settings](generation-models.md)
 
+## Retrieval RRF Tuning
+
+For backend-specific hybrid retrieval semantics, RRF constants, and why
+Postgres defaults to `k=2`, see:
+- [Retrieval RRF Semantics](retrieval-rrf.md)
+  Note: optional integer env vars must be omitted/commented out when unused; empty values are invalid.
+
 ## Adding an Embedding Provider
 
 `EMBEDDING_PROVIDER` is intentionally validated against the built-in

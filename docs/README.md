@@ -11,5 +11,6 @@ Where to put what:
 
 - [Getting Started](getting-started/README.md)
 - [Configuration](configuration/README.md)
+- [Retrieval RRF Semantics](configuration/retrieval-rrf.md)
 - [Ingestion](ingestion/README.md)
 - [Agents](agents/README.md)
