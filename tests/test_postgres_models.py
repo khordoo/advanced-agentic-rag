@@ -227,8 +227,8 @@ def test_postgres_domain_postgres_column_optimizations() -> None:
         assert column.server_default is not None
         assert column.index is True
 
-    assert isinstance(DocumentChunk.__table__.c.vector.type, Vector)
-    assert DocumentChunk.__table__.c.vector.type.dim is None
+    assert isinstance(DocumentChunk.__table__.c.embedding.type, Vector)
+    assert DocumentChunk.__table__.c.embedding.type.dim is None
 
 
 def test_postgres_row_builders_use_asset_key() -> None:
@@ -262,7 +262,7 @@ def test_postgres_row_builders_use_asset_key() -> None:
         section=section,
         child=block.children[0],
         block=block,
-        vector=[0.1, 0.2],
+        embedding=[0.1, 0.2],
     )
 
     assert section.asset_key == "annual_report_a1b2c3d4.pdf"
@@ -288,7 +288,7 @@ def test_document_repository_sync_replaces_asset_index() -> None:
         asset_key="asset-77",
         page_numbers=[1],
         text="child text",
-        vector=[0.1, 0.2],
+        embedding=[0.1, 0.2],
         scopes=["public"],
         tags=["finance"],
         chunk_metadata={"parent_id": "stale-parent"},

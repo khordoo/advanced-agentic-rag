@@ -156,7 +156,7 @@ def _get_postgres_dimension_preflight_query():
     from rag_core.store.postgres.models.documents import DocumentChunk
 
     table_name = DocumentChunk.__tablename__
-    vector_column = DocumentChunk.__table__.c.vector.name
+    vector_column = DocumentChunk.__table__.c.embedding.name
     return text(
         f"""
         SELECT DISTINCT vector_dims({vector_column}) AS dimension

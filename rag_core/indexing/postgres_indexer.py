@@ -134,7 +134,7 @@ class PostgresIndexer(BaseIndexer):
                         section=section,
                         child=child,
                         block=block,
-                        vector=vec,
+                        embedding=vec,
                     )
                 )
 
@@ -223,7 +223,7 @@ class PostgresIndexer(BaseIndexer):
         section: DocumentSection,
         child: Any,
         block: ParentChunk,
-        vector: list[float],
+        embedding: list[float],
     ) -> DocumentChunk:
         """Build a DocumentChunk row from a child document."""
         meta = dict(child.metadata if hasattr(child, "metadata") else {})
@@ -235,7 +235,7 @@ class PostgresIndexer(BaseIndexer):
             "asset_key": meta.get("asset_key", block.metadata.asset_key),
             "page_numbers": meta.get("pages", block.metadata.pages),
             "text": child.page_content,
-            "vector": vector,
+            "embedding": embedding,
             "scopes": meta.get("scopes", block.metadata.scopes),
             "tags": meta.get("tags", block.metadata.tags),
             "chunk_metadata": {

@@ -172,8 +172,8 @@ def test_postgres_runtime_preflight_allows_empty_vector_table(
     assert result.existing_dimensions == ()
     assert result.overwrite_rebuild is False
     assert f"FROM {DocumentChunk.__tablename__}" in db.session.executed_sql
-    assert "vector_dims(vector)" in db.session.executed_sql
-    assert "WHERE vector IS NOT NULL" in db.session.executed_sql
+    assert "vector_dims(embedding)" in db.session.executed_sql
+    assert "WHERE embedding IS NOT NULL" in db.session.executed_sql
 
 
 def test_postgres_runtime_preflight_allows_matching_existing_dimension(

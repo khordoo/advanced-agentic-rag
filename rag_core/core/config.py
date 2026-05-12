@@ -12,8 +12,8 @@ import torch
 from dotenv import dotenv_values, load_dotenv
 from pydantic import Field, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
 from pythonjsonlogger.json import JsonFormatter
+
 from rag_core.embeddings.types import EmbeddingProvider
 
 logger = logging.getLogger(__name__)
@@ -115,9 +115,7 @@ def setup_logging():
     log_handler = logging.StreamHandler()
 
     # 4. Attach the JSON formatter using your exact preferred fields
-    formatter = JsonFormatter(
-        '%(asctime)s %(levelname)s %(name)s %(message)s'
-    )
+    formatter = JsonFormatter("%(asctime)s %(levelname)s %(name)s %(message)s")
     log_handler.setFormatter(formatter)
 
     # 5. Add the handler to the root logger
@@ -133,9 +131,7 @@ class SecuritySettings(BaseSettings):
     admin_role: str = "admin"
     enable_strict_mode: bool = True
 
-    model_config = SettingsConfigDict(
-        env_prefix="SECURITY_", env_file=".env", extra="ignore"
-    )
+    model_config = SettingsConfigDict(env_prefix="SECURITY_", env_file=".env", extra="ignore")
 
 
 class RetrivalSettings(BaseSettings):
@@ -221,9 +217,7 @@ class RerankerSettings(BaseSettings):
         description="Device to use for reranking",
         examples=["cuda", "cpu", "mps", "auto"],
     )
-    model_config = SettingsConfigDict(
-        env_prefix="RERANK_", env_file=".env", extra="ignore"
-    )
+    model_config = SettingsConfigDict(env_prefix="RERANK_", env_file=".env", extra="ignore")
 
     @computed_field
     @property
@@ -254,9 +248,7 @@ class QdrantSettings(BaseSettings):
             raise ValueError("Qdrant model names must not be empty.")
         return stripped
 
-    model_config = SettingsConfigDict(
-        env_prefix="QDRANT_", env_file=".env", extra="ignore"
-    )
+    model_config = SettingsConfigDict(env_prefix="QDRANT_", env_file=".env", extra="ignore")
 
 
 class EmbeddingSettings(BaseSettings):
@@ -266,9 +258,7 @@ class EmbeddingSettings(BaseSettings):
     model_name: str = "BAAI/bge-small-en-v1.5"
     dimension: int = Field(default=384, ge=1)
 
-    model_config = SettingsConfigDict(
-        env_prefix="EMBEDDING_", env_file=".env", extra="ignore"
-    )
+    model_config = SettingsConfigDict(env_prefix="EMBEDDING_", env_file=".env", extra="ignore")
 
 
 class PostgresSettings(BaseSettings):
@@ -277,27 +267,26 @@ class PostgresSettings(BaseSettings):
     host: str = "localhost"  # 'core-db' when running inside Docker
     port: int = 5432
     rag_db: str = "rag_core"
-    pool_pre_ping:bool=True
-    max_overflow:int=10
-    pool_size:int=5
-    pool_recycle:int=3600
-    pool_timeout:int=30
+    pool_pre_ping: bool = True
+    max_overflow: int = 10
+    pool_size: int = 5
+    pool_recycle: int = 3600
+    pool_timeout: int = 30
     statement_timeout_ms: int = 60000
 
     @property
-    def connect_args(self)->dict:
+    def connect_args(self) -> dict:
         """Dynamically construct connect_args for SQLAlchemy."""
         return {"options": f"-c statement_timeout={self.statement_timeout_ms}"}
 
     @property
-    def uri(self)->str:
+    def uri(self) -> str:
         """Build the connection string dynamically too!"""
         return f"postgresql+psycopg://{self.user}:{self.password}@{self.host}:{self.port}/{self.rag_db}"
+
     # Pydantic will ONLY look for variables starting with "POSTGRES_"
 
-    model_config = SettingsConfigDict(
-        env_prefix="POSTGRES_", env_file=".env", extra="ignore"
-    )
+    model_config = SettingsConfigDict(env_prefix="POSTGRES_", env_file=".env", extra="ignore")
 
 
 # --- PIPELINE SETTINGS ---
@@ -305,83 +294,79 @@ class PostgresSettings(BaseSettings):
 
 class IngestionSettings(BaseSettings):
     """Strictly for tuning how the pipeline processes data."""
+
+    # ==========================================
+    # 1. CORE ROUTING & DISCOVERY
+    # ==========================================
+    indexer_backend: Literal["qdrant", "postgres"] = Field(
+        default="qdrant",
+        description="Which vector store backend to use for indexing. Supported values: 'qdrant', 'postgres'.",
+    )
     base_source_uri: str = Field(
-            default="./data/source_documents",
-            description=(
-                "The root URI or local directory path where the scanner looks for "
-                "source documents to ingest. Supports local relative paths (e.g., 'docs', './data/docs), "
-                "absolute paths (e.g., 'file:///data/docs',), or cloud URIs (e.g., 's3://bucket/docs')."
-            )
-        )
+        default="./data/source_documents",
+        description="The root URI or local directory path where the scanner looks for source documents.",
+    )
+    allowed_extensions_raw: str = "pdf,md"
+
+    # ==========================================
+    # 2. PROCESSING & INDEXING LOGIC
+    # ==========================================
     chunk_size: int = 1000
     chunk_overlap: int = 200
+    fts_language: str = Field(
+        default="english",
+        description=(
+            "Postgres dictionary for Full-Text Search tokenization (e.g., 'english'). "
+            "Optimized for single-language indices. If mixed languages, use 'simple'."
+        ),
+    )
+    hash_algorithm: Literal["md5", "sha1", "sha256", "sha512"] = "sha256"
+
+    # ==========================================
+    # 3. WORKER & QUEUE TUNING (Advanced)
+    # ==========================================
+    default_max_jobs: int | None = Field(
+        default=None,
+        ge=0,
+        description="Default max jobs for one ingestion run. None means process all available files.",
+    )
     discovery_batch_size: int = Field(
         default=500,
         ge=1,
-        description=(
-            "Number of discovered assets to commit per discovery database "
-            "transaction."
-        ),
+        description="Number of discovered assets to commit per discovery database transaction.",
     )
     worker_max_attempts: int = Field(
         default=3,
         ge=1,
-        description=(
-            "The maximum number of times a worker will attempt to process a single asset "
-            "before it is permanently ignored (Poison Pill protection)."
-        )
+        description="Max times a worker will attempt an asset before permanently ignoring it.",
     )
     worker_lease_duration_seconds: int = Field(
-        default=300,  # 5 minutes
-        description=(
-            "How long a worker claims an asset before the lease expires and another "
-            "worker can retry it."
-        ),
+        default=300,
+        description="How long a worker claims an asset before the lease expires.",
     )
     worker_preflight_extension_seconds: int = Field(
         default=60,
         ge=1,
-        description=(
-            "How long a worker extends an asset lease before writing indexed "
-            "chunks to the vector store."
-        ),
+        description="How long a worker extends an asset lease before writing indexed chunks.",
     )
-    default_max_jobs: int | None = Field(
-        default=None,
-        ge=0,
-        description=(
-            "Default max jobs for one ingestion run. None means run until the "
-            "queue is empty and process all available files."
-        ),
-    )
+
+    # ==========================================
+    # 4. DANGER ZONE
+    # ==========================================
     overwrite: bool = Field(
         default=False,
         description=(
-            "⚠️ DANGER: FULLY WIPES all existing data from the vector database "
-            "(Postgres tables or Qdrant collections) before ingestion begins. "
-            "This is a permanent, destructive action that deletes all existing "
-            "vectors, chunks, and metadata. Required for changing embedding models "
-            "or resolving dimension mismatches."
-            "Use ONLY as a temporary environment variable "
+            "⚠️ DANGER: DESTRUCTIVE OVERRIDE. Fully wipes existing vectors and "
+            "metadata before ingestion. Use ONLY as a temporary environment variable "
             "injection (e.g., 'docker run -e INGESTION_OVERWRITE=true ...'). "
-            "DO NOT save this as 'true' in a permanent .env file or config commit, "
-            "as it will cause unrecoverable data loss on every subsequent run"
-        ),
-    )
-    allowed_extensions_raw: str = "pdf,md"
-    hash_algorithm: Literal["md5", "sha1", "sha256", "sha512"] = "sha256"
-    indexer_backend: Literal["qdrant", "postgres"] = Field(
-        default="qdrant",
-        description=(
-            "Which vector store backend to use for indexing. "
-            "Supported values: 'qdrant', 'postgres'."
+            "DO NOT save this as 'true' in a permanent .env file."
         ),
     )
 
     @property
     def allowed_extensions(self) -> set[str]:
         return {
-            f'.{ext.strip().lower().lstrip(".")}'
+            f".{ext.strip().lower().lstrip('.')}"
             for ext in self.allowed_extensions_raw.split(",")
             if ext.strip()
         }
@@ -427,9 +412,7 @@ class GenerationSettings(BaseSettings):
         le=50,
         description="Number of messages to lookback in message history for general assistant to maintain context.",
     )
-    model_config = SettingsConfigDict(
-        env_prefix="GENERATION_", env_file=".env", extra="ignore"
-    )
+    model_config = SettingsConfigDict(env_prefix="GENERATION_", env_file=".env", extra="ignore")
 
 
 @lru_cache
