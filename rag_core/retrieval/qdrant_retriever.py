@@ -21,7 +21,7 @@ from rag_core.core.config import (
     get_retrieval_settings,
 )
 from rag_core.store.qdrant import QdrantConnectionManager
-from rag_core.retrival.base import BaseRetriever
+from rag_core.retrieval.base import BaseRetriever
 from rag_core.schemas import (
     VectorDatabasePayloadKeys as PayloadKeys,
     PARENT_INDEX_SCHEMA,
@@ -95,7 +95,7 @@ class QdrantRetriever(BaseRetriever):
         asset_key: str | None = None,
         scopes: list[str] | None = None,
         filters: dict[str, Any] | None = None,
-        retrival_top_k: int | None = None,
+        retrieval_top_k: int | None = None,
         hybrid_alpha: float | None = None,
         rerank_top_k: int | None = None,
         rerank: bool = True,
@@ -103,9 +103,9 @@ class QdrantRetriever(BaseRetriever):
         """Execute hybrid search (dense + sparse RRF) with parent document reconstruction."""
         del hybrid_alpha, rerank_top_k, rerank
 
-        actual_retrival_top_k = (
-            retrival_top_k
-            if retrival_top_k is not None
+        actual_retrieval_top_k = (
+            retrieval_top_k
+            if retrieval_top_k is not None
             else self.retrieval_settings.top_k
         )
 
@@ -119,7 +119,7 @@ class QdrantRetriever(BaseRetriever):
             asset_key=asset_key,
             exact_filters=filters,
         )
-        fetch_limit = actual_retrival_top_k * self.retrieval_settings.oversample_factor
+        fetch_limit = actual_retrieval_top_k * self.retrieval_settings.oversample_factor
 
         # Embed query for both dense and sparse search
         dense_name, *_ = self._client.get_fastembed_vector_params()
@@ -164,7 +164,7 @@ class QdrantRetriever(BaseRetriever):
         # Extract unique parents and their maximum scores
         unique_parents = self._extract_unique_parents_and_filter(
             results=results,
-            limit=actual_retrival_top_k,
+            limit=actual_retrieval_top_k,
             # score_threshold=actual_threshold,
         )
         if not unique_parents:

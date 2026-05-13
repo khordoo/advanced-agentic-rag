@@ -225,14 +225,13 @@ class RetrievalSettings(BaseSettings):
         return value
 
     model_config = SettingsConfigDict(
-        env_prefix="RETRIVAL_",
+        env_prefix="RETRIEVAL_",
         env_file=".env",
         extra="ignore",
     )
 
 
-# Backward-compatibility alias for existing imports.
-RetrivalSettings = RetrievalSettings
+
 
 
 class RerankerSettings(BaseSettings):

@@ -12,7 +12,7 @@ class BaseRetriever(ABC):
         asset_key: str | None = None,
         scopes: list[str] | None = None,
         filters: dict | None = None,
-        retrival_top_k: int | None = None,
+        retrieval_top_k: int | None = None,
         hybrid_alpha: float | None = None,
         rerank_top_k: int | None = None,
         rerank: bool = True,

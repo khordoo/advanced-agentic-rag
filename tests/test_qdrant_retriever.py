@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 from qdrant_client import models
 
-from rag_core.retrival.qdrant_retriever import QdrantRetriever
+from rag_core.retrieval.qdrant_retriever import QdrantRetriever
 from rag_core.schemas import VectorDatabasePayloadKeys as PayloadKeys
 
 

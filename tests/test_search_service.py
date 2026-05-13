@@ -1,7 +1,7 @@
 from langchain_core.documents import Document
 
 from rag_core.core.config import RetrievalSettings, RerankerSettings
-from rag_core.retrival.search_service import RAGSearchService
+from rag_core.retrieval.search_service import RAGSearchService
 
 
 class _FakeRetriever:

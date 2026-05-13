@@ -19,18 +19,18 @@ This is expected and not a bug.
 
 Runtime controls (from `.env`):
 
-- `RETRIVAL_BACKEND=qdrant|postgres`
-- `RETRIVAL_HYBRID_ALPHA=0.0..1.0`
-- `RETRIVAL_POSTGRES_RRF_K` (app-level Postgres weighted-RRF constant)
-- `RETRIVAL_QDRANT_RRF_K` (optional explicit Qdrant native RRF constant)
+- `RETRIEVAL_BACKEND=qdrant|postgres`
+- `RETRIEVAL_HYBRID_ALPHA=0.0..1.0`
+- `RETRIEVAL_POSTGRES_RRF_K` (app-level Postgres weighted-RRF constant)
+- `RETRIEVAL_QDRANT_RRF_K` (optional explicit Qdrant native RRF constant)
 
 ### Optional Integer Env Note
 
-`RETRIVAL_QDRANT_RRF_K` is optional, but when provided it must be a valid integer.
+`RETRIEVAL_QDRANT_RRF_K` is optional, but when provided it must be a valid integer.
 
-- Valid: `RETRIVAL_QDRANT_RRF_K=60`
+- Valid: `RETRIEVAL_QDRANT_RRF_K=60`
 - Default behavior: comment it out / omit it
-- Invalid: `RETRIVAL_QDRANT_RRF_K=` (empty value; fails settings parsing)
+- Invalid: `RETRIEVAL_QDRANT_RRF_K=` (empty value; fails settings parsing)
 
 ### `hybrid_alpha`
 
@@ -41,7 +41,7 @@ Runtime controls (from `.env`):
 
 ## Why Postgres Defaults to `k=2`
 
-`RETRIVAL_POSTGRES_RRF_K=2` is intentional for RAG head precision.
+`RETRIEVAL_POSTGRES_RRF_K=2` is intentional for RAG head precision.
 
 With smaller `k`, rank-1 / rank-2 hits get much stronger boost than mid-tail consensus.
 For context construction in RAG, this usually improves precision of top context chunks.
@@ -51,13 +51,13 @@ Tradeoff:
 - smaller `k` (`2`): sharper top-hit bias, less smoothing
 - larger `k` (`30-60`): smoother consensus behavior, more robust to single-ranker noise
 
-If results look overly spiky, increase `RETRIVAL_POSTGRES_RRF_K`.
+If results look overly spiky, increase `RETRIEVAL_POSTGRES_RRF_K`.
 If exact high-confidence hits are buried, decrease it.
 
 ## Qdrant Default Behavior
 
 By default, Qdrant uses native RRF defaults unless you explicitly set:
 
-- `RETRIVAL_QDRANT_RRF_K`
+- `RETRIEVAL_QDRANT_RRF_K`
 
 This keeps existing Qdrant behavior stable and avoids surprise production changes.
