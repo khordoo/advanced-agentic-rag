@@ -44,7 +44,7 @@ class AgentToolFactory:
         self._tools: list[StructuredTool] | None = None
 
     def _semantic_search(self, query: str, asset_key: str | None = None) -> str:
-        docs = self.search_service.search(query=query, asset_key=asset_key, rerank=True)
+        docs = self.search_service.search(query=query, asset_key=asset_key)
         return self._format_docs(docs)
 
     def _page_lookup(self, asset_key: str, page_number: int) -> str:

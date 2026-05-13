@@ -55,7 +55,7 @@ class RAGPipeline:
         #     query,
         #     k=10,
         #     top_n=int(self.config.get('RERANK_TOP_N',3)))
-        context_docs = self.search_service.search(query, rerank=True)
+        context_docs = self.search_service.search(query)
         # print("---" * 50)
         # print(context_docs)
         # print("---" * 50)

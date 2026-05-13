@@ -3,8 +3,8 @@ from __future__ import annotations
 from langchain_core.documents import Document
 
 from rag_core.core.config import (
-    RetrievalSettings,
     RerankerSettings,
+    RetrievalSettings,
     get_retrieval_settings,
 )
 from rag_core.reranking import BaseReranker, LocalReranker
@@ -53,11 +53,12 @@ class RAGSearchService:
             doc.metadata["retrieval_rank"] = i
             doc.metadata["retrieval_score"] = doc.metadata.get("score")
             doc.metadata["retrieval_backend"] = backend_name
-
+        print("=================rerank status settings:", self._reranker_settings.enabled)
         should_rerank = self._reranker_settings.enabled if rerank is None else rerank
         if not should_rerank or not documents:
+            print("=============Rerank skipped===========")
             return documents
-
+        print("=============Rerank enabled===========")
         active_reranker = self.reranker or LocalReranker(settings=self._reranker_settings)
         top_k = rerank_top_k if rerank_top_k is not None else self._reranker_settings.top_k
         reranked = active_reranker.rerank(query, documents, top_k=top_k)
