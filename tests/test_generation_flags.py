@@ -510,3 +510,138 @@ def test_post_processing_matches_citations_by_exact_asset_key():
     assert payload["citations"][1]["asset_key"] == "Annual Report.pdf"
     assert payload["citations"][1]["asset_name"] == ""
     assert payload["citations"][1]["source_url"] == ""
+
+
+def test_post_processing_dedupes_same_asset_same_page_and_remaps_inline_refs():
+    model = _DummyModel()
+    nodes = GraphNodes(
+        reasoning_llm=model,
+        verifier_llm=model,
+        fast_llm=model,
+        tools=[_make_tool()],
+        settings=GenerationSettings(),
+    )
+
+    result = nodes.execute_post_processing(
+        {
+            "messages": [
+                AIMessage(
+                    content=(
+                        "Revenue rose [1][2], while margin changed [12]."
+                        "\n\n### Sources\n"
+                        "[1] asset-42 (Page 3)\n"
+                        "[2] asset-42 (Page 3)\n"
+                        "[12] asset-42 (Page 9)"
+                    )
+                )
+            ],
+            "source_docs": [
+                Document(
+                    page_content="doc",
+                    metadata={
+                        "asset_key": "asset-42",
+                        "asset_name": "Annual Report.pdf",
+                        "source": "/docs/Annual Report.pdf",
+                    },
+                )
+            ],
+            "token_budget": 0,
+            "intent_route": "domain_expert",
+        }
+    )
+
+    payload = json.loads(result["messages"][0].content)
+    assert payload["answer"] == "Revenue rose [1], while margin changed [2]."
+    assert len(payload["citations"]) == 2
+    assert payload["citations"][0]["document_index"] == 1
+    assert payload["citations"][0]["asset_key"] == "asset-42"
+    assert payload["citations"][0]["page_number"] == 3
+    assert payload["citations"][1]["document_index"] == 2
+    assert payload["citations"][1]["page_number"] == 9
+
+
+def test_post_processing_collapses_comma_separated_duplicate_inline_refs():
+    model = _DummyModel()
+    nodes = GraphNodes(
+        reasoning_llm=model,
+        verifier_llm=model,
+        fast_llm=model,
+        tools=[_make_tool()],
+        settings=GenerationSettings(),
+    )
+
+    result = nodes.execute_post_processing(
+        {
+            "messages": [
+                AIMessage(
+                    content=(
+                        "Revenue rose [1], [2]."
+                        "\n\n### Sources\n"
+                        "[1] asset-42 (Page 3)\n"
+                        "[2] asset-42 (Page 3)"
+                    )
+                )
+            ],
+            "source_docs": [
+                Document(
+                    page_content="doc",
+                    metadata={
+                        "asset_key": "asset-42",
+                        "asset_name": "Annual Report.pdf",
+                        "source": "/docs/Annual Report.pdf",
+                    },
+                )
+            ],
+            "token_budget": 0,
+            "intent_route": "domain_expert",
+        }
+    )
+
+    payload = json.loads(result["messages"][0].content)
+    assert payload["answer"] == "Revenue rose [1]."
+    assert len(payload["citations"]) == 1
+    assert payload["citations"][0]["document_index"] == 1
+
+
+def test_post_processing_keeps_distinct_pages_for_same_asset():
+    model = _DummyModel()
+    nodes = GraphNodes(
+        reasoning_llm=model,
+        verifier_llm=model,
+        fast_llm=model,
+        tools=[_make_tool()],
+        settings=GenerationSettings(),
+    )
+
+    result = nodes.execute_post_processing(
+        {
+            "messages": [
+                AIMessage(
+                    content=(
+                        "Two facts [1] and [2]."
+                        "\n\n### Sources\n"
+                        "[1] asset-42 (Page 3)\n"
+                        "[2] asset-42 (Page 4)"
+                    )
+                )
+            ],
+            "source_docs": [
+                Document(
+                    page_content="doc",
+                    metadata={
+                        "asset_key": "asset-42",
+                        "asset_name": "Annual Report.pdf",
+                        "source": "/docs/Annual Report.pdf",
+                    },
+                )
+            ],
+            "token_budget": 0,
+            "intent_route": "domain_expert",
+        }
+    )
+
+    payload = json.loads(result["messages"][0].content)
+    assert payload["answer"] == "Two facts [1] and [2]."
+    assert len(payload["citations"]) == 2
+    assert payload["citations"][0]["page_number"] == 3
+    assert payload["citations"][1]["page_number"] == 4

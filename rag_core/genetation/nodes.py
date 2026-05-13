@@ -1,40 +1,42 @@
 import json
 import logging
+import re
 from enum import StrEnum
-from pydantic import ValidationError
-from langgraph.prebuilt import ToolNode
-from langchain_core.tools import BaseTool
+
+from langchain_core.documents import Document
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import (
     AIMessage,
-    ToolMessage,
-    HumanMessage,
     BaseMessage,
+    HumanMessage,
+    ToolMessage,
 )
-from langchain_core.documents import Document
+from langchain_core.tools import BaseTool
+from langfuse import observe
+from langgraph.prebuilt import ToolNode
+from pydantic import ValidationError
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
+
+from rag_core.core.config import (
+    GenerationSettings,
+    get_generation_settings,
+    setup_logging,
+)
+from rag_core.core.telemetry import init_langfuse_client
+from rag_core.genetation.parsers import extract_text_from_message, parse_agent_response
 from rag_core.genetation.state import RagState
-from rag_core.prompts.packages.rag_verifier.schema import RagVerifierResponse
 from rag_core.prompts.loader import AgentPrompt
-from rag_core.prompts.specs.base import RagFinalResponseSchema
 from rag_core.prompts.packages.intent_router.schema import (
     IntentCategory,
     IntentRouterResponse,
 )
-from rag_core.genetation.parsers import parse_agent_response, extract_text_from_message
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_exponential,
-    retry_if_exception_type,
-)
-
-from langfuse import observe
-from rag_core.core.config import (
-    setup_logging,
-    get_generation_settings,
-    GenerationSettings,
-)
-from rag_core.core.telemetry import init_langfuse_client
+from rag_core.prompts.packages.rag_verifier.schema import RagVerifierResponse
+from rag_core.prompts.specs.base import RagFinalResponseSchema
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -92,9 +94,7 @@ class GraphNodes:
     def execute_general_assistant_agent(self, state: RagState) -> dict:
         logger.info("Executing General Assistant Agent node...")
         agent_prompt = AgentPrompt.from_package("general_assistant")
-        current_user_query = state["messages"][
-            -self.settings.general_assistant_lookback :
-        ]
+        current_user_query = state["messages"][-self.settings.general_assistant_lookback :]
         prompt = agent_prompt.chat_template.invoke({"question": current_user_query})
         response = self.fast_llm.invoke(prompt.to_messages())
         logger.info("Agent response received: %s", response)
@@ -229,9 +229,7 @@ class GraphNodes:
         @retry(
             stop=stop_after_attempt(3),
             wait=wait_exponential(multiplier=1, min=1, max=5),
-            retry=retry_if_exception_type(
-                (json.decoder.JSONDecodeError, ValidationError)
-            ),
+            retry=retry_if_exception_type((json.decoder.JSONDecodeError, ValidationError)),
             reraise=True,
         )
         def execute_agent(prompt):
@@ -280,16 +278,12 @@ class GraphNodes:
                 try:
                     doc_dicts = json.loads(msg.content)
                     for d in doc_dicts:
-                        doc = Document(
-                            page_content=d["page_content"], metadata=d["metadata"]
-                        )
+                        doc = Document(page_content=d["page_content"], metadata=d["metadata"])
                         raw_docs.append(doc)
 
                 except json.JSONDecodeError:
                     logger.error("Failed to parse tool output as JSON.")
-        logger.info(
-            "Tool Execution node completed. Extracted %d documents.", len(raw_docs)
-        )
+        logger.info("Tool Execution node completed. Extracted %d documents.", len(raw_docs))
         existing_docs = state.get("source_docs", [])
         current_tool_call_count = state.get("tool_call_count", 0)
         return {
@@ -317,6 +311,49 @@ class GraphNodes:
         """Find the source document matching a citation's exact asset_key."""
         return docs_lookup.get(citation_asset_key)
 
+    @staticmethod
+    def _dedupe_and_remap_citations(parsed_response: RagFinalResponseSchema) -> dict[int, int]:
+        """Deduplicate citations by (asset_key, page_number) and remap indexes."""
+        deduped = []
+        seen_by_key: dict[tuple[str, int], int] = {}
+        old_to_new: dict[int, int] = {}
+        next_index = 1
+
+        for citation in parsed_response.citations:
+            old_index = citation.document_index
+            key = (citation.asset_key, citation.page_number)
+            existing = seen_by_key.get(key)
+            if existing is None:
+                new_index = next_index
+                next_index += 1
+                seen_by_key[key] = new_index
+                citation.document_index = new_index
+                deduped.append(citation)
+            else:
+                new_index = existing
+            old_to_new[old_index] = new_index
+
+        parsed_response.citations = deduped
+        return old_to_new
+
+    @staticmethod
+    def _remap_inline_citation_indexes(answer: str, index_map: dict[int, int]) -> str:
+        """Rewrite exact [N] citations using safe regex replacement."""
+        if not index_map:
+            return answer
+
+        def _replace(match: re.Match[str]) -> str:
+            old_idx = int(match.group(1))
+            new_idx = index_map.get(old_idx)
+            if new_idx is None:
+                return match.group(0)
+            return f"[{new_idx}]"
+
+        remapped = re.sub(r"\[(\d+)\]", _replace, answer)
+        # Collapse adjacent duplicates like [1][1], [1] [1], or [1], [1].
+        remapped = re.sub(r"(\[(\d+)\])(?:[\s,]*\[\2\])+", r"\1", remapped)
+        return remapped
+
     @observe(name=NodeName.POST_PROCESSING, as_type="tool")
     def execute_post_processing(self, state: RagState) -> dict:
         logger.info("Executing Post-Processing node...")
@@ -336,15 +373,18 @@ class GraphNodes:
                 doc = self._find_source_doc(citation.asset_key, docs_lookup)
                 if doc:
                     citation.asset_name = (
-                        doc.metadata.get("asset_name")
-                        or doc.metadata.get("file_name")
-                        or ""
+                        doc.metadata.get("asset_name") or doc.metadata.get("file_name") or ""
                     )
                     citation.source_url = self._get_doc_source(doc)
 
-            logger.info(
-                "Post-Processing node completed. Parsed response: %s", parsed_response
+            citation_index_map = self._dedupe_and_remap_citations(parsed_response)
+            parsed_response.answer = self._remap_inline_citation_indexes(
+                parsed_response.answer,
+                citation_index_map,
             )
+
+            print(parsed_response.answer)
+            logger.info("Post-Processing node completed. Parsed response: %s", parsed_response)
             return {"messages": [AIMessage(content=parsed_response.model_dump_json())]}
         except Exception as e:
             logger.error("Post-processing failed, returning raw response: %s", e)
