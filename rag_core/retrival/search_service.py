@@ -56,9 +56,8 @@ class RAGSearchService:
         print("=================rerank status settings:", self._reranker_settings.enabled)
         should_rerank = self._reranker_settings.enabled if rerank is None else rerank
         if not should_rerank or not documents:
-            print("=============Rerank skipped===========")
             return documents
-        print("=============Rerank enabled===========")
+
         active_reranker = self.reranker or LocalReranker(settings=self._reranker_settings)
         top_k = rerank_top_k if rerank_top_k is not None else self._reranker_settings.top_k
         reranked = active_reranker.rerank(query, documents, top_k=top_k)
