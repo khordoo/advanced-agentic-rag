@@ -6,15 +6,19 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from rag_core.schemas import ParentChunk
+    from rag_core.schemas import ClaimedSourceAsset, ParentChunk
 
 
 class BaseIndexer(ABC):
     """Contract for indexer implementations (Qdrant, Pinecone, etc.)."""
 
     @abstractmethod
-    def ingest_documents(self, document_blocks: list[ParentChunk]) -> None:
-        """Persist parent + child chunks into the vector store."""
+    def index_asset(
+        self,
+        asset: ClaimedSourceAsset,
+        document_blocks: list[ParentChunk],
+    ) -> None:
+        """Index the latest processed content for a single claimed source asset."""
 
     @abstractmethod
     def reset_collections(self) -> None:

@@ -1,13 +1,15 @@
 """Pydantic models shared across the pipeline."""
 
 from __future__ import annotations
-from enum import Enum
-from typing import List, Optional, Any
-from langchain_core.documents import Document
-from pydantic import BaseModel, Field, ConfigDict
+
 from dataclasses import dataclass, field
-from qdrant_client import models
+from enum import Enum
+from typing import Any, List, Optional
+
+from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
+from pydantic import BaseModel, ConfigDict, Field
+from qdrant_client import models
 
 
 class QAPair(BaseModel):
@@ -126,6 +128,9 @@ class TableChunk(BaseModel):
     summary: TableSummary
 
 
+TableMetadata = dict[str, Any]
+
+
 class ExtractedTable(BaseModel):
     # 1. The Atomic Parts (Stored Separately)
     raw_markdown_table: str
@@ -147,6 +152,22 @@ class ExtractedTable(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+@dataclass(frozen=True)
+class ClaimedSourceAsset:
+    """An immutable snapshot of a claimed asset for processing."""
+
+    id: int
+    asset_key: str
+    asset_name: str
+    parent_name: str | None
+    source_system: str
+    source_uri: str
+    tags: list[str]
+    scopes: list[str]
+    asset_metadata: dict[str, Any]
+    lease_version: int = 0
+
+
 @dataclass
 class ParentChunk:
     """A parent chunk with its child documents ready for storage."""
@@ -155,6 +176,7 @@ class ParentChunk:
     enriched_text: str
     metadata: ParentMetadata
     children: list[Document] = field(default_factory=list)
+    asset_id: int | None = None
 
 
 class BaseChunkMetadata(BaseModel):
@@ -162,7 +184,8 @@ class BaseChunkMetadata(BaseModel):
     Base schema for document chunk metadata.
 
     Attributes:
-        file_name: The original name of the source file.
+        asset_key: The stable canonical identifier for the source asset.
+        asset_name: The human-readable display name of the source asset.
         source: The URI or path source of the document.
         pages: List of page numbers associated with this chunk [1,2] or [1].
         tags: Categorization labels used for logical grouping (e.g., ['finance', 'legal']).
@@ -171,7 +194,8 @@ class BaseChunkMetadata(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    file_name: str
+    asset_key: str
+    asset_name: str
     source: str
     pages: list[int]
     tags: list[str] = Field(default_factory=list)
@@ -189,7 +213,11 @@ class ChildMetadata(BaseChunkMetadata):
 
 
 class VectorDatabasePayloadKeys(str, Enum):
+    ASSET_KEY = "asset_key"
+    ASSET_NAME = "asset_name"
+    CREATED_AT = "created_at"
     SOURCE = "source"
+    # Legacy read-only key. New payloads must write asset_name instead.
     FILE_NAME = "file_name"
     PAGE = "pages"
     TABLE_ID = "table_id"
@@ -200,8 +228,10 @@ class VectorDatabasePayloadKeys(str, Enum):
 
 
 _BASE_INDEX_SCHEMA = {
+    VectorDatabasePayloadKeys.ASSET_KEY.value: models.PayloadSchemaType.KEYWORD,
+    VectorDatabasePayloadKeys.ASSET_NAME.value: models.PayloadSchemaType.KEYWORD,
+    VectorDatabasePayloadKeys.CREATED_AT.value: models.PayloadSchemaType.DATETIME,
     VectorDatabasePayloadKeys.SOURCE.value: models.PayloadSchemaType.KEYWORD,
-    VectorDatabasePayloadKeys.FILE_NAME.value: models.PayloadSchemaType.KEYWORD,
     VectorDatabasePayloadKeys.PAGE.value: models.PayloadSchemaType.INTEGER,
     VectorDatabasePayloadKeys.SCOPES.value: models.PayloadSchemaType.KEYWORD,
     VectorDatabasePayloadKeys.TAGS.value: models.PayloadSchemaType.KEYWORD,

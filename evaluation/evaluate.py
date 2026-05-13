@@ -1,13 +1,14 @@
 """RAGAS-based evaluation pipeline for the Advanced RAG system."""
 
 from __future__ import annotations
-import re
+
 import json
 import logging
+import re
 
 import pandas as pd
 from langchain_huggingface import HuggingFaceEmbeddings
-from ragas import evaluate, EvaluationDataset
+from ragas import EvaluationDataset, evaluate
 from ragas.embeddings import LangchainEmbeddingsWrapper
 from ragas.llms import LangchainLLMWrapper
 from ragas.metrics import (
@@ -68,18 +69,21 @@ def run_eval(
     config: dict,
     judge_provider: str = "aws",
 ):
-    """Run RAGAS metrics on the evaluation dataset."""
+    """Run RAGAS metrics on the evaluation dataset.
+    Ensure a good model like nova-pro is used for judge
+    """
     # model_name = "zai.glm-5"
     max_requests = int(config.get("LLM_MAX_PARALLEL_REQUEST", 4))
     ragas_config = RunConfig(timeout=60, max_retries=3, max_workers=max_requests)
 
-    llm_judge = AgentFactory.create(judge_provider, temperature=0, config=config)
+    model_name = "amazon.nova-pro-v1:0" if judge_provider == "aws" else None
+    llm_judge = AgentFactory.create(
+        judge_provider, temperature=0, model_name=model_name, config=config
+    )
     ragas_llm = LangchainLLMWrapper(llm_judge)
 
     hf_emb = HuggingFaceEmbeddings(
-        model_name=config.get(
-            "HF_EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"
-        )
+        model_name=config.get("HF_EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
     )
     ragas_emb = LangchainEmbeddingsWrapper(hf_emb)
 

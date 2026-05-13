@@ -1,16 +1,15 @@
 """Interactive CLI for communicating with the RAG agent graph."""
 
-import json
 import logging
-from langchain_core.messages import HumanMessage, AIMessage
+
+from langchain_core.messages import AIMessage, HumanMessage
 
 from rag_core.agents import AgentFactory
-from rag_core.core.config import setup_logging
+from rag_core.core.config import get_generation_settings, setup_logging
 from rag_core.core.telemetry import get_observability_callbacks
 from rag_core.genetation.graph import RagGraphFactory
 from rag_core.genetation.parsers import parse_agent_response
 from rag_core.prompts.loader import AgentPrompt
-from rag_core.core.config import get_generation_settings
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -26,11 +25,12 @@ def run_chat_loop():
     verifying_llm = AgentFactory.create(
         provider=settings.model_provider, model_name=settings.verifier_model
     )
-    fast_llm = AgentFactory.create(
-        provider=settings.model_provider, model_name=settings.fast_model
-    )
+    fast_llm = AgentFactory.create(provider=settings.model_provider, model_name=settings.fast_model)
     app = RagGraphFactory.build(
-        reasoning_llm=reasoning_llm, verifier_llm=verifying_llm, fast_llm=fast_llm , settings=settings
+        reasoning_llm=reasoning_llm,
+        verifier_llm=verifying_llm,
+        fast_llm=fast_llm,
+        settings=settings,
     )
 
     messages = []
@@ -52,7 +52,7 @@ def run_chat_loop():
 
         query = query.strip()
         command = query.lower()
-        if command in ["exit", "quit", "q"]:
+        if command in ["exit", "quit", "q", "/q", "/exit"]:
             break
         if not query:
             continue

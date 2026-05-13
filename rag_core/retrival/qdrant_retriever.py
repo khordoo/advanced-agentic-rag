@@ -14,10 +14,14 @@ from typing import Any
 from langchain_core.documents import Document
 from qdrant_client import QdrantClient, models
 
-from rag_core.core.config import RetrivalSettings, QdrantSettings, get_qdrant_settings
+from rag_core.core.config import (
+    RetrievalSettings,
+    QdrantSettings,
+    get_qdrant_settings,
+    get_retrieval_settings,
+)
 from rag_core.store.qdrant import QdrantConnectionManager
 from rag_core.retrival.base import BaseRetriever
-from rag_core.reranking import BaseReranker, LocalReranker
 from rag_core.schemas import (
     VectorDatabasePayloadKeys as PayloadKeys,
     PARENT_INDEX_SCHEMA,
@@ -39,24 +43,27 @@ class QdrantRetriever(BaseRetriever):
         self,
         client: QdrantClient | None = None,
         settings: QdrantSettings | None = None,
-        retrieval_settings: RetrivalSettings | None = None,
-        reranker: BaseReranker | None = None,
+        retrieval_settings: RetrievalSettings | None = None,
     ) -> None:
         super().__init__()
         self._client = client or QdrantConnectionManager.get_client()
         self._settings = settings or get_qdrant_settings()
-        self.retrieval_settings = retrieval_settings or RetrivalSettings()
-        self.reranker = reranker or LocalReranker()
+        self.retrieval_settings = retrieval_settings or get_retrieval_settings()
 
     def exact_lookup(
         self,
-        scopes: list[str] | None = None,
+        asset_key: str | None = None,
         filters: dict[str, Any] | None = None,
+        scopes: list[str] | None = None,
         limit: int | None = None,
     ) -> list[Document]:
         """Perform a deterministic metadata lookup."""
-        limit = limit if limit is None else self.retrieval_settings.top_k
-        qdrant_filter = self._build_filters(scopes, exact_filters=filters)
+        limit = limit if limit is not None else self.retrieval_settings.top_k
+        qdrant_filter = self._build_filters(
+            scopes,
+            asset_key=asset_key,
+            exact_filters=filters,
+        )
 
         points, _ = self._client.scroll(
             collection_name=self._settings.parent_collection_name,
@@ -73,6 +80,11 @@ class QdrantRetriever(BaseRetriever):
 
         # Only include metadata fields defined in the schema
         metadata = {k: v for k, v in payload.items() if k in PARENT_INDEX_SCHEMA}
+        if (
+            PayloadKeys.ASSET_NAME.value not in metadata
+            and PayloadKeys.FILE_NAME.value in payload
+        ):
+            metadata[PayloadKeys.ASSET_NAME.value] = payload[PayloadKeys.FILE_NAME.value]
         metadata["id"] = point.id
 
         return Document(page_content=text, metadata=metadata)
@@ -80,13 +92,16 @@ class QdrantRetriever(BaseRetriever):
     def search(
         self,
         query: str,
-        retrival_top_k: int | None = None,
-        rerank_top_k: int | None = None,
+        asset_key: str | None = None,
         scopes: list[str] | None = None,
         filters: dict[str, Any] | None = None,
+        retrival_top_k: int | None = None,
+        hybrid_alpha: float | None = None,
+        rerank_top_k: int | None = None,
         rerank: bool = True,
     ) -> list[Document]:
         """Execute hybrid search (dense + sparse RRF) with parent document reconstruction."""
+        del hybrid_alpha, rerank_top_k, rerank
 
         actual_retrival_top_k = (
             retrival_top_k
@@ -99,7 +114,11 @@ class QdrantRetriever(BaseRetriever):
         #     if rrf_score_threshold is not None
         #     else self.retrieval_settings.rrf_score_threshold
         # )
-        qdrant_filter = self._build_filters(scopes, exact_filters=filters)
+        qdrant_filter = self._build_filters(
+            scopes,
+            asset_key=asset_key,
+            exact_filters=filters,
+        )
         fetch_limit = actual_retrival_top_k * self.retrieval_settings.oversample_factor
 
         # Embed query for both dense and sparse search
@@ -118,6 +137,10 @@ class QdrantRetriever(BaseRetriever):
         )
 
         # Hybrid search: prefetch dense + sparse, fuse with RRF
+        fusion_query: Any = models.FusionQuery(fusion=models.Fusion.RRF)
+        if self.retrieval_settings.qdrant_rrf_k is not None:
+            fusion_query = {"rrf": {"k": self.retrieval_settings.qdrant_rrf_k}}
+
         response = self._client.query_points(
             collection_name=self._settings.chunk_collection_name,
             prefetch=[
@@ -134,17 +157,10 @@ class QdrantRetriever(BaseRetriever):
                     limit=fetch_limit,
                 ),
             ],
-            query=models.FusionQuery(fusion=models.Fusion.RRF),
+            query=fusion_query,
             limit=fetch_limit,
         )
         results = response.points
-        if rerank:
-            actual_rerank_top_k = (
-                rerank_top_k
-                if rerank_top_k is not None
-                else self.retrieval_settings.top_k
-            )
-            results = self._rerank(query, results, top_k=actual_rerank_top_k)
         # Extract unique parents and their maximum scores
         unique_parents = self._extract_unique_parents_and_filter(
             results=results,
@@ -176,42 +192,11 @@ class QdrantRetriever(BaseRetriever):
         documents.sort(key=lambda d: d.metadata["score"], reverse=True)
         return documents
 
-    def _rerank(
-        self, query: str, points: list[models.ScoredPoint], top_k: int
-    ) -> list[models.ScoredPoint]:
-        text_key = PayloadKeys.TEXT.value
-        docs = [
-            Document(
-                page_content=r.payload.get(text_key, ""),
-                metadata={
-                    "_chunk_id": r.id,
-                    **{k: v for k, v in r.payload.items() if k != text_key},
-                },
-            )
-            for r in points
-        ]
-        reranked_results = self.reranker.rerank(query, docs, top_k=top_k)
-
-        reranked_points = [
-            models.ScoredPoint(
-                id=r.metadata["_chunk_id"],
-                score=r.metadata["rerank_score"],
-                payload={
-                    k: v
-                    for k, v in r.metadata.items()
-                    if k not in ("_chunk_id", "rerank_score")
-                },
-                version=1,
-            )
-            for r in reranked_results
-        ]
-        logger.info(f"Reranked chunks: {len(docs)} -> {len(reranked_points)}.")
-        return reranked_points
-
     def _build_filters(
         self,
         scopes: list[str] | None,
-        exact_filters: dict[str, Any] | None,
+        asset_key: str | None = None,
+        exact_filters: dict[str, Any] | None = None,
     ) -> models.Filter:
         """Construct Qdrant Filter from scopes and exact metadata matches."""
 
@@ -225,8 +210,17 @@ class QdrantRetriever(BaseRetriever):
                 )
             )
 
+        if asset_key is not None:
+            must_conditions.append(
+                models.FieldCondition(
+                    key=PayloadKeys.ASSET_KEY.value,
+                    match=models.MatchValue(value=asset_key),
+                )
+            )
+
         if exact_filters:
             valid_keys = {k.value for k in PayloadKeys if k != PayloadKeys.TEXT}
+            valid_keys.discard(PayloadKeys.FILE_NAME.value)
             for key, val in exact_filters.items():
                 if key not in valid_keys:
                     raise KeyError(f"Invalid filter key: {key}. Allowed: {valid_keys}")

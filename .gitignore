@@ -21,15 +21,15 @@ artifacts/
 /artifacts/models/
 # Explicitly ignore model artifacts (already covered by artifacts/, kept for clarity)
 data/*
-!data/source_docs/
-data/source_docs/*
-!data/source_docs/README.md
-!data/source_docs/finance/
-data/source_docs/finance/*
-!data/source_docs/finance/.gitkeep
-!data/source_docs/legal/
-data/source_docs/legal/*
-!data/source_docs/legal/.gitkeep
+!data/source_documents/
+data/source_documents/*
+!data/source_documents/README.md
+!data/source_documents/finance/
+data/source_documents/finance/*
+!data/source_documents/finance/.gitkeep
+!data/source_documents/legal/
+data/source_documents/legal/*
+!data/source_documents/legal/.gitkeep
 scratch/
 *.pkl
 

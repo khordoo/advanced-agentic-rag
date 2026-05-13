@@ -1,7 +1,6 @@
 from typing import NotRequired
 from typing import TypedDict, Annotated
 from langgraph.graph import add_messages
-from pydantic import BaseModel
 
 from langchain_core.documents import Document
 from langchain_core.messages import BaseMessage

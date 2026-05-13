@@ -6,13 +6,15 @@ import logging
 import os
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 import torch
-from pydantic import computed_field
-from typing import Literal
 from dotenv import dotenv_values, load_dotenv
-from pydantic import BaseModel, Field
+from pydantic import Field, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pythonjsonlogger.json import JsonFormatter
+
+from rag_core.embeddings.types import EmbeddingProvider
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +25,7 @@ _REQUIRED_KEYS: list[str] = []
 _DEFAULTS: dict[str, str] = {
     "CHROMA_COLLECTION_NAME": "docs",
     "CHROMA_PERSIST_DIRECTORY": "artifacts/chroma_db",
-    "DOCS_DIR": "data/source_docs",
+    "DOCS_DIR": "data/source_documents",
     "PROCCESED_DOCS_DIR": "data/processed",
     "DOCUMENT_STORE_PERSIST_PATH": "artifacts/document_store/document_store.pkl",
     "SYNTHETIC_QA_PERSIST_PATH": "data/synthetic/eval_question_answers.json",
@@ -97,15 +99,27 @@ def load_config(env_path: str | Path | None = None) -> dict[str, str]:
 
 
 def setup_logging():
-    """Independent logging setup that reads directly from the environment."""
+    """Independent logging setup that reads directly from the environment and outputs JSON."""
     load_dotenv()
     level_name = os.environ.get("LOG_LEVEL", "INFO").upper()
     level = getattr(logging, level_name, logging.INFO)
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-        force=True,
-    )
+
+    # 1. Grab the root logger and set your dynamic level
+    logger = logging.getLogger()
+    logger.setLevel(level)
+
+    # 2. Clear any default handlers to prevent duplicate logs
+    logger.handlers.clear()
+
+    # 3. Create a console handler
+    log_handler = logging.StreamHandler()
+
+    # 4. Attach the JSON formatter using your exact preferred fields
+    formatter = JsonFormatter("%(asctime)s %(levelname)s %(name)s %(message)s")
+    log_handler.setFormatter(formatter)
+
+    # 5. Add the handler to the root logger
+    logger.addHandler(log_handler)
 
 
 class SecuritySettings(BaseSettings):
@@ -117,12 +131,10 @@ class SecuritySettings(BaseSettings):
     admin_role: str = "admin"
     enable_strict_mode: bool = True
 
-    model_config = SettingsConfigDict(
-        env_prefix="SECURITY_", env_file=".env", extra="ignore"
-    )
+    model_config = SettingsConfigDict(env_prefix="SECURITY_", env_file=".env", extra="ignore")
 
 
-class RetrivalSettings(BaseSettings):
+class RetrievalSettings(BaseSettings):
     """
     Configuration settings for the RAG retrieval pipeline.
 
@@ -138,6 +150,10 @@ class RetrivalSettings(BaseSettings):
     silently drop ALL documents and return empty results.
     """
 
+    backend: Literal["qdrant", "postgres"] = Field(
+        default="qdrant",
+        description="Retriever backend to use at runtime.",
+    )
     top_k: int = Field(
         default=10,
         ge=1,
@@ -183,7 +199,40 @@ class RetrivalSettings(BaseSettings):
             "Set to ~0.05 - 0.08 to filter out low-confidence tail results."
         ),
     )
+    postgres_rrf_k: int = Field(
+        default=2,
+        ge=1,
+        description="RRF constant used by Postgres weighted-RRF fusion.",
+    )
+    qdrant_rrf_k: int | None = Field(
+        default=None,
+        ge=1,
+        description=(
+            "Optional Qdrant RRF constant override. When omitted, native Qdrant defaults are used."
+        ),
+    )
     fetch_parent: bool = True
+
+    @field_validator("qdrant_rrf_k", mode="before")
+    @classmethod
+    def _normalize_optional_qdrant_rrf_k(cls, value: object) -> object:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"", "none", "null"}:
+                return None
+        return value
+
+    model_config = SettingsConfigDict(
+        env_prefix="RETRIVAL_",
+        env_file=".env",
+        extra="ignore",
+    )
+
+
+# Backward-compatibility alias for existing imports.
+RetrivalSettings = RetrievalSettings
 
 
 class RerankerSettings(BaseSettings):
@@ -193,6 +242,7 @@ class RerankerSettings(BaseSettings):
     """
 
     provider: str = "huggingface"
+    enabled: bool = True
     model_name: str = "BAAI/bge-reranker-v2-m3"  # "cross-encoder/ms-marco-MiniLM-L-6-v2"  # "BAAI/bge-reranker-v2-m3"
     top_k: int = Field(
         default=3,
@@ -205,9 +255,7 @@ class RerankerSettings(BaseSettings):
         description="Device to use for reranking",
         examples=["cuda", "cpu", "mps", "auto"],
     )
-    model_config = SettingsConfigDict(
-        env_prefix="RERANK_", env_file=".env", extra="ignore"
-    )
+    model_config = SettingsConfigDict(env_prefix="RERANK_", env_file=".env", extra="ignore")
 
     @computed_field
     @property
@@ -224,14 +272,31 @@ class RerankerSettings(BaseSettings):
 
 class QdrantSettings(BaseSettings):
     url: str = "http://localhost:6333"
-    embed_model: str = "BAAI/bge-small-en-v1.5"
-    sparse_model: str = "prithivida/Splade_PP_en_v1"
+    embed_model: str = Field(default="BAAI/bge-small-en-v1.5", min_length=1)
+    sparse_model: str = Field(default="prithivida/Splade_PP_en_v1", min_length=1)
     collection_namespace: str = "docs"
     chunk_collection_name: str = f"{collection_namespace}_chunks"
     parent_collection_name: str = f"{collection_namespace}_parents"
-    model_config = SettingsConfigDict(
-        env_prefix="QDRANT_", env_file=".env", extra="ignore"
-    )
+
+    @field_validator("embed_model", "sparse_model")
+    @classmethod
+    def validate_model_name(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("Qdrant model names must not be empty.")
+        return stripped
+
+    model_config = SettingsConfigDict(env_prefix="QDRANT_", env_file=".env", extra="ignore")
+
+
+class EmbeddingSettings(BaseSettings):
+    """Shared dense embedding provider configuration."""
+
+    provider: EmbeddingProvider = EmbeddingProvider.FASTEMBED
+    model_name: str = "BAAI/bge-small-en-v1.5"
+    dimension: int = Field(default=384, ge=1)
+
+    model_config = SettingsConfigDict(env_prefix="EMBEDDING_", env_file=".env", extra="ignore")
 
 
 class PostgresSettings(BaseSettings):
@@ -240,11 +305,26 @@ class PostgresSettings(BaseSettings):
     host: str = "localhost"  # 'core-db' when running inside Docker
     port: int = 5432
     rag_db: str = "rag_core"
+    pool_pre_ping: bool = True
+    max_overflow: int = 10
+    pool_size: int = 5
+    pool_recycle: int = 3600
+    pool_timeout: int = 30
+    statement_timeout_ms: int = 60000
+
+    @property
+    def connect_args(self) -> dict:
+        """Dynamically construct connect_args for SQLAlchemy."""
+        return {"options": f"-c statement_timeout={self.statement_timeout_ms}"}
+
+    @property
+    def uri(self) -> str:
+        """Build the connection string dynamically too!"""
+        return f"postgresql+psycopg://{self.user}:{self.password}@{self.host}:{self.port}/{self.rag_db}"
 
     # Pydantic will ONLY look for variables starting with "POSTGRES_"
-    model_config = SettingsConfigDict(
-        env_prefix="POSTGRES_", env_file=".env", extra="ignore"
-    )
+
+    model_config = SettingsConfigDict(env_prefix="POSTGRES_", env_file=".env", extra="ignore")
 
 
 # --- PIPELINE SETTINGS ---
@@ -253,14 +333,86 @@ class PostgresSettings(BaseSettings):
 class IngestionSettings(BaseSettings):
     """Strictly for tuning how the pipeline processes data."""
 
+    # ==========================================
+    # 1. CORE ROUTING & DISCOVERY
+    # ==========================================
+    indexer_backend: Literal["qdrant", "postgres"] = Field(
+        default="qdrant",
+        description="Which vector store backend to use for indexing. Supported values: 'qdrant', 'postgres'.",
+    )
+    base_source_uri: str = Field(
+        default="./data/source_documents",
+        description="The root URI or local directory path where the scanner looks for source documents.",
+    )
+    allowed_extensions_raw: str = "pdf,md"
+
+    # ==========================================
+    # 2. PROCESSING & INDEXING LOGIC
+    # ==========================================
     chunk_size: int = 1000
     chunk_overlap: int = 200
-    max_retries: int = 3
-    ALLOWED_EXTENSIONS: set = {".pdf", ".md"}
-    # You can add things like 'enable_ocr' or 'target_folder' here
+    fts_language: str = Field(
+        default="english",
+        description=(
+            "Postgres dictionary for Full-Text Search tokenization (e.g., 'english'). "
+            "Optimized for single-language indices. If mixed languages, use 'simple'."
+        ),
+    )
+    hash_algorithm: Literal["md5", "sha1", "sha256", "sha512"] = "sha256"
+
+    # ==========================================
+    # 3. WORKER & QUEUE TUNING (Advanced)
+    # ==========================================
+    default_max_jobs: int | None = Field(
+        default=None,
+        ge=0,
+        description="Default max jobs for one ingestion run. None means process all available files.",
+    )
+    discovery_batch_size: int = Field(
+        default=500,
+        ge=1,
+        description="Number of discovered assets to commit per discovery database transaction.",
+    )
+    worker_max_attempts: int = Field(
+        default=3,
+        ge=1,
+        description="Max times a worker will attempt an asset before permanently ignoring it.",
+    )
+    worker_lease_duration_seconds: int = Field(
+        default=300,
+        description="How long a worker claims an asset before the lease expires.",
+    )
+    worker_preflight_extension_seconds: int = Field(
+        default=60,
+        ge=1,
+        description="How long a worker extends an asset lease before writing indexed chunks.",
+    )
+
+    # ==========================================
+    # 4. DANGER ZONE
+    # ==========================================
+    overwrite: bool = Field(
+        default=False,
+        description=(
+            "⚠️ DANGER: DESTRUCTIVE OVERRIDE. Fully wipes existing vectors and "
+            "metadata before ingestion. Use ONLY as a temporary environment variable "
+            "injection (e.g., 'docker run -e INGESTION_OVERWRITE=true ...'). "
+            "DO NOT save this as 'true' in a permanent .env file."
+        ),
+    )
+
+    @property
+    def allowed_extensions(self) -> set[str]:
+        return {
+            f".{ext.strip().lower().lstrip('.')}"
+            for ext in self.allowed_extensions_raw.split(",")
+            if ext.strip()
+        }
 
     model_config = SettingsConfigDict(
-        env_prefix="INGESTION_", env_file=".env", extra="ignore"
+        env_prefix="INGESTION_",
+        env_file=".env",
+        extra="ignore",
     )
 
 
@@ -298,15 +450,19 @@ class GenerationSettings(BaseSettings):
         le=50,
         description="Number of messages to lookback in message history for general assistant to maintain context.",
     )
-    model_config = SettingsConfigDict(
-        env_prefix="GENERATION_", env_file=".env", extra="ignore"
-    )
+    model_config = SettingsConfigDict(env_prefix="GENERATION_", env_file=".env", extra="ignore")
 
 
 @lru_cache
 def get_qdrant_settings() -> QdrantSettings:
     logger.info("Reading .env file and caching Qdrant settings...")
     return QdrantSettings()
+
+
+@lru_cache
+def get_embedding_settings() -> EmbeddingSettings:
+    logger.info("Reading .env file and caching embedding settings...")
+    return EmbeddingSettings()
 
 
 @lru_cache
@@ -325,3 +481,9 @@ def get_ingestion_settings() -> IngestionSettings:
 def get_generation_settings() -> GenerationSettings:
     logger.info("Reading .env file and caching Generation pipeline settings...")
     return GenerationSettings()
+
+
+@lru_cache()
+def get_retrieval_settings() -> RetrievalSettings:
+    logger.info("Reading .env file and caching Retrieval pipeline settings...")
+    return RetrievalSettings()

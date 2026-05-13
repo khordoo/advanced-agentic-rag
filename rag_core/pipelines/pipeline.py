@@ -5,13 +5,13 @@ from __future__ import annotations
 import logging
 
 from rag_core.agents import AgentFactory
-from rag_core.retrival.qdrant_retriever import QdrantRetriever
+from rag_core.retrival import BaseRetriever, RAGSearchService
 from rag_core.prompts import AgentPrompt
 
 
 logger = logging.getLogger(__name__)
 
-
+#TODO: rename this to generation
 class RAGPipeline:
     """Orchestrates retrieval and generation.
 
@@ -30,13 +30,14 @@ class RAGPipeline:
         self,
         config: dict,
         provider: str = "aws",
-        retriever: QdrantRetriever | None = None,
+        retriever: BaseRetriever | None = None,
+        search_service: RAGSearchService | None = None,
         prompt_name: str = "primary_rag_agent",
         # reranker: BaseReranker | None = None,
     ) -> None:
         self.config = config
         self.llm = AgentFactory.get_judge_model(provider, config=config)
-        self.retriever = retriever or QdrantRetriever()
+        self.search_service = search_service or RAGSearchService(retriever=retriever)
         self.prompt_template = AgentPrompt.from_package(prompt_name).chat_template
         # self.reranker = reranker or LocalReranker()
         logger.info("RAG pipeline initialised (provider=%s)", provider)
@@ -54,7 +55,7 @@ class RAGPipeline:
         #     query,
         #     k=10,
         #     top_n=int(self.config.get('RERANK_TOP_N',3)))
-        context_docs = self.retriever.search(query, rerank=True)
+        context_docs = self.search_service.search(query)
         # print("---" * 50)
         # print(context_docs)
         # print("---" * 50)
@@ -94,7 +95,7 @@ if __name__ == "__main__":
     # "ground_truth": "The Health Care segment experienced a 2% favorable Mix impact on its net sales growth."
     # quer = "find something about Net Sales Change Drivers?"
 
-    pipeline = RAGPipeline(cfg, retriever=QdrantRetriever(), provider="aws")
+    pipeline = RAGPipeline(cfg, provider="aws")
     result = pipeline.run(query)
 
     print("\n--- Response ---")

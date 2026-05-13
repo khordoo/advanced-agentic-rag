@@ -1,6 +1,6 @@
 """Smoke tests for the chunker module."""
 
-from rag_core.chunker import chunk_markdown
+from rag_core.chunker import chunk_markdown, summerize_and_chunk_table
 
 
 def test_chunk_markdown_returns_parents():
@@ -28,7 +28,7 @@ def test_chunk_markdown_creates_children():
 
 
 # ---------------------------------------------------------------------------
-# file_id propagation tests
+# asset_key propagation tests
 # ---------------------------------------------------------------------------
 
 
@@ -40,34 +40,82 @@ _SIMPLE_MD = (
 )
 
 
-def test_file_id_propagated_to_parent_metadata():
-    """When file_id is provided, parent metadata.file_name should equal it."""
-    custom_id = "q3_earnings_report_472.pdf"
-    chunks = chunk_markdown(_SIMPLE_MD, source_path="report.pdf", file_id=custom_id)
+def test_asset_key_propagated_to_parent_metadata():
+    """When file_id is provided, parent metadata.asset_key should equal it."""
+    asset_key = "q3_earnings_report_472.pdf"
+    chunks = chunk_markdown(
+        _SIMPLE_MD,
+        source_path="report.pdf",
+        file_id=asset_key,
+        asset_name="Q3 Earnings Report.pdf",
+    )
     assert len(chunks) >= 1
     for chunk in chunks:
-        assert chunk.metadata.file_name == custom_id
+        assert chunk.metadata.asset_key == asset_key
+        assert chunk.metadata.asset_name == "Q3 Earnings Report.pdf"
+        assert "file_name" not in chunk.metadata.model_dump()
 
 
-def test_file_id_propagated_to_child_metadata():
+def test_asset_key_propagated_to_child_metadata():
     """When file_id is provided, child metadata should carry it."""
-    custom_id = "q4_earnings_report_831.pdf"
-    chunks = chunk_markdown(_SIMPLE_MD, source_path="report.pdf", file_id=custom_id)
+    asset_key = "q4_earnings_report_831.pdf"
+    chunks = chunk_markdown(
+        _SIMPLE_MD,
+        source_path="report.pdf",
+        file_id=asset_key,
+        asset_name="Q4 Earnings Report.pdf",
+    )
     for chunk in chunks:
         for child in chunk.children:
-            assert child.metadata["file_name"] == custom_id
+            assert child.metadata["asset_key"] == asset_key
+            assert child.metadata["asset_name"] == "Q4 Earnings Report.pdf"
+            assert "file_name" not in child.metadata
 
 
-def test_file_id_none_falls_back_to_basename():
-    """When file_id is None, file_name should be the basename of source_path."""
+def test_asset_key_none_falls_back_to_basename():
+    """When file_id is None, asset_key and asset_name use the basename."""
     chunks = chunk_markdown(_SIMPLE_MD, source_path="/some/path/report.pdf")
     for chunk in chunks:
-        assert chunk.metadata.file_name == "report.pdf"
+        assert chunk.metadata.asset_key == "report.pdf"
+        assert chunk.metadata.asset_name == "report.pdf"
 
 
-def test_file_id_appears_in_enriched_text():
-    """The [Doc: ...] header in enriched text should contain the file_id."""
-    custom_id = "earnings_annual_report_123.pdf"
-    chunks = chunk_markdown(_SIMPLE_MD, source_path="report.pdf", file_id=custom_id)
+def test_asset_key_appears_in_enriched_text():
+    """The LLM-facing header should contain the asset_key, not the display name."""
+    chunks = chunk_markdown(
+        _SIMPLE_MD,
+        source_path="/some/path/report.pdf",
+        file_id="earnings_annual_report_123.pdf",
+    )
     for chunk in chunks:
-        assert custom_id in chunk.enriched_text
+        assert "[Asset: earnings_annual_report_123.pdf]" in chunk.enriched_text
+        assert "[Doc: report.pdf]" not in chunk.enriched_text
+
+
+def test_table_chunks_carry_asset_key_and_asset_name():
+    table_chunks = summerize_and_chunk_table(
+        [
+            {
+                "asset_key": "annual_report_a1b2c3d4.pdf",
+                "asset_name": "Annual Report.pdf",
+                "source_path": "/docs/Annual Report.pdf",
+                "page_no": 3,
+                "markdown": "| A | B |\n|---|---|\n| 1 | 2 |",
+            }
+        ],
+        model=None,
+        summerize_enabled=False,
+    )
+
+    assert len(table_chunks) == 1
+    chunk = table_chunks[0]
+    assert chunk.metadata.asset_key == "annual_report_a1b2c3d4.pdf"
+    assert chunk.metadata.asset_name == "Annual Report.pdf"
+    assert "file_name" not in chunk.metadata.model_dump()
+    assert "[Asset: annual_report_a1b2c3d4.pdf]" in chunk.enriched_text
+    assert "[Doc: Annual Report.pdf]" not in chunk.enriched_text
+    assert chunk.children[0].metadata["asset_key"] == "annual_report_a1b2c3d4.pdf"
+    assert chunk.children[0].metadata["asset_name"] == "Annual Report.pdf"
+    assert "file_name" not in chunk.children[0].metadata
+    assert "[Asset: annual_report_a1b2c3d4.pdf]" in chunk.children[0].page_content
+    assert "[Doc: Annual Report.pdf]" not in chunk.children[0].page_content

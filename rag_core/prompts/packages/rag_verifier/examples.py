@@ -12,7 +12,7 @@ class RagVerifierExample(BaseModel):
 EXAMPLES = [
     RagVerifierExample(
         documents="""
-[Doc: report.pdf] [Section: Data Table] [Location: Page 5]
+[Asset: report_a1b2c3d4.pdf] [Section: Data Table] [Location: Page 5]
 
 | ($ millions) | 2024  | 2023  | Change vs. 2023 |
 |--------------|-------|-------|-----------------|
@@ -26,7 +26,7 @@ EXAMPLES = [
     ),
     RagVerifierExample(
         documents="""
-[Doc: report.pdf] [Section: Data Table] [Location: Page 5]
+[Asset: report_a1b2c3d4.pdf] [Section: Data Table] [Location: Page 5]
 
 | ($ millions) | 2024  | 2023  | Change vs. 2023 |
 |--------------|-------|-------|-----------------|
@@ -40,7 +40,7 @@ EXAMPLES = [
     ),
     RagVerifierExample(
         documents="""
-[Doc: report.pdf] [Section: Data Table] [Location: Page 5]
+[Asset: report_a1b2c3d4.pdf] [Section: Data Table] [Location: Page 5]
 
 | Segment | Price | Foreign Exchange | Mix | Net Sales Growth |
 |---------|-------|------------------|-----|------------------|
@@ -54,7 +54,7 @@ EXAMPLES = [
     ),
     RagVerifierExample(
         documents="""
-[Doc: report.pdf] [Section: Data Table] [Location: Page 5]
+[Asset: report_a1b2c3d4.pdf] [Section: Data Table] [Location: Page 5]
 
 | Segment | Price | Foreign Exchange | Mix | Net Sales Growth |
 |---------|-------|------------------|-----|------------------|
@@ -68,7 +68,7 @@ EXAMPLES = [
     ),
     RagVerifierExample(
         documents="""
-[Doc: report.pdf] [Section: Summary] [Location: Page 2]
+[Asset: report_a1b2c3d4.pdf] [Section: Summary] [Location: Page 2]
 
 Net earnings increased 2% to $15.0 billion.
 """,
@@ -80,7 +80,7 @@ Net earnings increased 2% to $15.0 billion.
     ),
     RagVerifierExample(
         documents="""
-[Doc: report.pdf] [Section: Summary] [Location: Page 2]
+[Asset: report_a1b2c3d4.pdf] [Section: Summary] [Location: Page 2]
 
 Net earnings increased 2% to $15.0 billion.
 """,
@@ -92,7 +92,7 @@ Net earnings increased 2% to $15.0 billion.
     ),
     RagVerifierExample(
         documents="""
-    [Doc: report.pdf] [Section: Data Table] [Location: Page 5]
+    [Asset: report_a1b2c3d4.pdf] [Section: Data Table] [Location: Page 5]
 
     | Segment | Foreign Exchange |
     |---------|------------------|
@@ -106,7 +106,7 @@ Net earnings increased 2% to $15.0 billion.
     ),
     RagVerifierExample(
         documents="""
-    [Doc: report.pdf] [Section: Summary] [Location: Page 3]
+    [Asset: report_a1b2c3d4.pdf] [Section: Summary] [Location: Page 3]
 
     Grooming net sales increased high single digits versus the prior year.
     """,
@@ -118,7 +118,7 @@ Net earnings increased 2% to $15.0 billion.
     ),
     RagVerifierExample(
         documents="""
-    [Doc: report.pdf] [Section: Segment Results] [Location: Page 5]
+    [Asset: report_a1b2c3d4.pdf] [Section: Segment Results] [Location: Page 5]
 
     | Segment  | Foreign Exchange | Price | Net Sales Growth |
     |----------|------------------|-------|------------------|
@@ -140,7 +140,7 @@ Net earnings increased 2% to $15.0 billion.
     ),
     RagVerifierExample(
         documents="""
-    [Doc: report.pdf] [Section: Segment Results] [Location: Page 5]
+    [Asset: report_a1b2c3d4.pdf] [Section: Segment Results] [Location: Page 5]
 
     | Segment  | Foreign Exchange | Price | Net Sales Growth |
     |----------|------------------|-------|------------------|

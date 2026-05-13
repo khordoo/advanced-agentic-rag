@@ -13,7 +13,7 @@ uv sync --extra dev
 
 ```bash
 # Ingestion pipeline
-uv run rag_core/pipelines/ingestion.py
+uv run python -m rag_core.ingestion.pipeline
 
 # Interactive CLI
 uv run rag_core/cli.py
