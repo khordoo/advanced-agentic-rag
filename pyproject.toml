@@ -26,15 +26,16 @@ dependencies = [
     "python-dotenv>=1.2.2",
     "python-json-logger>=4.1.0",
     "pyyaml>=6.0.3",
+    "qdrant-client>=1.15.1",
     "ragas>=0.4.3",
     "sentence-transformers>=5.3.0",
     "sqlalchemy>=2.0.48",
     "tenacity>=9.1.4",
+    "langchain-qdrant>=0.2.0",
     "uvicorn>=0.34",
 ]
 
 [project.optional-dependencies]
-qdrant = ["langchain-qdrant>=0.2.0"]
 dev = ["pytest>=8.0", "pytest-asyncio>=0.25"]
 demo = ["streamlit>=1.40"]
 serve = ["fastapi>=0.115", "uvicorn>=0.34"]

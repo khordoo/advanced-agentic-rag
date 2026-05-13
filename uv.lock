@@ -50,6 +50,7 @@ dependencies = [
     { name = "langchain-huggingface" },
     { name = "langchain-ollama" },
     { name = "langchain-openai" },
+    { name = "langchain-qdrant" },
     { name = "langchain-text-splitters" },
     { name = "langfuse" },
     { name = "langgraph" },
@@ -60,6 +61,7 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "python-json-logger" },
     { name = "pyyaml" },
+    { name = "qdrant-client" },
     { name = "ragas" },
     { name = "sentence-transformers" },
     { name = "sqlalchemy" },
@@ -74,9 +76,6 @@ demo = [
 dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
-]
-qdrant = [
-    { name = "langchain-qdrant" },
 ]
 serve = [
     { name = "fastapi" },
@@ -106,7 +105,7 @@ requires-dist = [
     { name = "langchain-huggingface", specifier = ">=1.2.1" },
     { name = "langchain-ollama", specifier = ">=1.0.1" },
     { name = "langchain-openai", specifier = ">=1.1.12" },
-    { name = "langchain-qdrant", marker = "extra == 'qdrant'", specifier = ">=0.2.0" },
+    { name = "langchain-qdrant", specifier = ">=0.2.0" },
     { name = "langchain-text-splitters", specifier = ">=1.1.1" },
     { name = "langfuse", specifier = ">=4.2.0" },
     { name = "langgraph", specifier = ">=1.1.4" },
@@ -119,6 +118,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "python-json-logger", specifier = ">=4.1.0" },
     { name = "pyyaml", specifier = ">=6.0.3" },
+    { name = "qdrant-client", specifier = ">=1.15.1" },
     { name = "ragas", specifier = ">=0.4.3" },
     { name = "sentence-transformers", specifier = ">=5.3.0" },
     { name = "sqlalchemy", specifier = ">=2.0.48" },
@@ -127,7 +127,7 @@ requires-dist = [
     { name = "uvicorn", specifier = ">=0.34" },
     { name = "uvicorn", marker = "extra == 'serve'", specifier = ">=0.34" },
 ]
-provides-extras = ["qdrant", "dev", "demo", "serve", "ui"]
+provides-extras = ["dev", "demo", "serve", "ui"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "ruff", specifier = ">=0.15.10" }]
