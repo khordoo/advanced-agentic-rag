@@ -36,7 +36,7 @@ class RAGSearchService:
         retrival_top_k: int | None = None,
         hybrid_alpha: float | None = None,
         rerank_top_k: int | None = None,
-        rerank: bool = True,
+        rerank: bool | None = None,
     ) -> list[Document]:
         documents = self.retriever.search(
             query=query,
@@ -54,7 +54,8 @@ class RAGSearchService:
             doc.metadata["retrieval_score"] = doc.metadata.get("score")
             doc.metadata["retrieval_backend"] = backend_name
 
-        if not rerank or not documents:
+        should_rerank = self._reranker_settings.enabled if rerank is None else rerank
+        if not should_rerank or not documents:
             return documents
 
         active_reranker = self.reranker or LocalReranker(settings=self._reranker_settings)

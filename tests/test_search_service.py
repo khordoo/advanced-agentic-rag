@@ -55,3 +55,49 @@ def test_search_service_preserves_retrieval_score_after_rerank() -> None:
     assert docs[0].metadata["retrieval_score"] == 0.4
     assert docs[0].metadata["rerank_rank"] == 1
     assert docs[0].metadata["score"] == docs[0].metadata["rerank_score"]
+
+
+def test_search_service_uses_reranker_setting_when_rerank_omitted() -> None:
+    retriever = _FakeRetriever()
+    service = RAGSearchService(
+        retriever=retriever,
+        retrieval_settings=RetrievalSettings(backend="qdrant", _env_file=None),
+        reranker=_FakeReranker(),
+        reranker_settings=RerankerSettings(enabled=False, top_k=2, _env_file=None),
+    )
+
+    docs = service.search("q")
+
+    assert docs[0].metadata["retrieval_score"] == 0.6
+    assert "rerank_rank" not in docs[0].metadata
+    assert "rerank_score" not in docs[0].metadata
+
+
+def test_search_service_explicit_rerank_true_overrides_disabled_setting() -> None:
+    retriever = _FakeRetriever()
+    service = RAGSearchService(
+        retriever=retriever,
+        retrieval_settings=RetrievalSettings(backend="qdrant", _env_file=None),
+        reranker=_FakeReranker(),
+        reranker_settings=RerankerSettings(enabled=False, top_k=2, _env_file=None),
+    )
+
+    docs = service.search("q", rerank=True)
+
+    assert docs[0].metadata["rerank_rank"] == 1
+    assert docs[0].metadata["score"] == docs[0].metadata["rerank_score"]
+
+
+def test_search_service_explicit_rerank_false_overrides_enabled_setting() -> None:
+    retriever = _FakeRetriever()
+    service = RAGSearchService(
+        retriever=retriever,
+        retrieval_settings=RetrievalSettings(backend="qdrant", _env_file=None),
+        reranker=_FakeReranker(),
+        reranker_settings=RerankerSettings(enabled=True, top_k=2, _env_file=None),
+    )
+
+    docs = service.search("q", rerank=False)
+
+    assert docs[0].metadata["retrieval_score"] == 0.6
+    assert "rerank_rank" not in docs[0].metadata
