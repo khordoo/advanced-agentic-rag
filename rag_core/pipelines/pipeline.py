@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 
 from rag_core.agents import AgentFactory
-from rag_core.retrival import BaseRetriever, RAGSearchService
+from rag_core.retrieval import BaseRetriever, RAGSearchService
 from rag_core.prompts import AgentPrompt
 
 

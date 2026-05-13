@@ -6,7 +6,7 @@ from langchain_core.documents import Document
 
 from rag_core.core.config import RetrievalSettings, get_retrieval_settings
 from rag_core.embeddings import BaseEmbeddingModel, create_embedding_model
-from rag_core.retrival.base import BaseRetriever
+from rag_core.retrieval.base import BaseRetriever
 from rag_core.schemas import VectorDatabasePayloadKeys as PayloadKeys
 from rag_core.store.postgres.repositories.documents import DocumentRepository
 from rag_core.store.postgres.session import Database, get_database
@@ -29,13 +29,13 @@ class PostgresRetriever(BaseRetriever):
         asset_key: str | None = None,
         scopes: list[str] | None = None,
         filters: dict[str, Any] | None = None,
-        retrival_top_k: int | None = None,
+        retrieval_top_k: int | None = None,
         hybrid_alpha: float | None = None,
         rerank_top_k: int | None = None,
         rerank: bool = True,
     ) -> list[Document]:
         del rerank_top_k, rerank
-        top_k = retrival_top_k or self.retrieval_settings.top_k
+        top_k = retrieval_top_k or self.retrieval_settings.top_k
         fetch_limit = top_k * self.retrieval_settings.oversample_factor
         alpha = (
             hybrid_alpha

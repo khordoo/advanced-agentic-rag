@@ -15,7 +15,7 @@ from rag_core.genetation.tools import (
     FetchPageToolSchema,
     TableLookupToolSchema,
 )
-from rag_core.retrival.search_service import RAGSearchService
+from rag_core.retrieval.search_service import RAGSearchService
 from rag_core.schemas import VectorDatabasePayloadKeys as PayloadKeys
 
 
@@ -252,7 +252,7 @@ def test_semantic_search_tool_passes_optional_asset_key():
             "asset_key": "asset-42",
             "scopes": None,
             "filters": None,
-            "retrival_top_k": None,
+            "retrieval_top_k": None,
             "hybrid_alpha": None,
             "rerank": False,
         }

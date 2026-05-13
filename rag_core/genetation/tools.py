@@ -1,8 +1,8 @@
 import json
 from langchain_core.documents import Document
 from pydantic import BaseModel, Field
-from rag_core.retrival.base import BaseRetriever
-from rag_core.retrival.search_service import RAGSearchService
+from rag_core.retrieval.base import BaseRetriever
+from rag_core.retrieval.search_service import RAGSearchService
 from rag_core.schemas import VectorDatabasePayloadKeys as PayloadSchema
 from langchain_core.tools import StructuredTool
 

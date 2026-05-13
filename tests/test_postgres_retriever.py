@@ -1,4 +1,4 @@
-from rag_core.retrival.postgres_retriever import PostgresRetriever
+from rag_core.retrieval.postgres_retriever import PostgresRetriever
 
 
 def test_weighted_rrf_missing_branch_scores_default_to_zero() -> None:

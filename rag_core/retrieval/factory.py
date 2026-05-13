@@ -3,9 +3,9 @@ from __future__ import annotations
 import logging
 
 from rag_core.core.config import RetrievalSettings, get_retrieval_settings
-from rag_core.retrival.base import BaseRetriever
-from rag_core.retrival.postgres_retriever import PostgresRetriever
-from rag_core.retrival.qdrant_retriever import QdrantRetriever
+from rag_core.retrieval.base import BaseRetriever
+from rag_core.retrieval.postgres_retriever import PostgresRetriever
+from rag_core.retrieval.qdrant_retriever import QdrantRetriever
 
 logger = logging.getLogger(__name__)
 
