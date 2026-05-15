@@ -22,7 +22,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 app.include_router(openai_router, prefix="/v1")
-app.include_router(health_router, prefix="/health")
+app.include_router(health_router, prefix="/ping", tags=["System"])
 
 
 @app.get("/")

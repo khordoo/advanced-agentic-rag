@@ -6,6 +6,8 @@ from app.api.dependencies import get_rag_service
 from app.schemas.openai import (
     ChatCompletionRequest,
     ChatCompletionResponse,
+    ModelCard,
+    ModelList,
 )
 from app.services.rag_service import RagService
 
@@ -20,3 +22,15 @@ async def rag(
     if not chat.messages:
         raise HTTPException(status_code=400, detail="Messages array cannot be empty")
     return await service.generate_chat_completion(chat)
+
+
+@openai_router.get("/models", response_model=ModelList)
+async def list_models():
+    """
+    Required by Open WebUI and other OpenAI clients to populate the model dropdown.
+    """
+    return ModelList(
+        data=[
+            ModelCard(id="advanced-rag-agent"),
+        ]
+    )

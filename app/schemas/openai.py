@@ -69,3 +69,15 @@ class ChatCompletionResponse(BaseModel):
     choices: list[ChatChoice] = Field(
         description="A list of chat completion choices. Can be more than one if n > 1."
     )
+
+
+class ModelCard(BaseModel):
+    id: str
+    object: str = "model"
+    created: int = Field(default_factory=lambda: int(time.time()))
+    owned_by: str = "rag_api"
+
+
+class ModelList(BaseModel):
+    object: str = "list"
+    data: list[ModelCard]
