@@ -9,8 +9,7 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 
 from rag_core.agents import AgentFactory
 from rag_core.core.config import setup_logging
@@ -29,21 +28,20 @@ _sessions: dict[str, list] = {}
 # ── Shared singletons (populated in lifespan) ───────────────────────────
 _app_graph = None
 _agent_prompt = None
+_system_instructions = ""
 _langfuse_callbacks = []
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Build the LangGraph app & prompt once at startup."""
-    global _app_graph, _agent_prompt, _langfuse_callbacks
+    global _app_graph, _agent_prompt, _system_instructions, _langfuse_callbacks
 
     logger.info("🚀  Initializing RAG Web Server...")
     _agent_prompt = AgentPrompt.from_package("primary_rag_agent")
-    reasoning_llm = AgentFactory.create(
-        provider="aws", model_name="amazon.nova-pro-v1:0"
-    )
-    fast_llm = AgentFactory.create(provider="aws", model_name="amazon.nova-micro-v1:0")
-    _app_graph = RagGraphFactory.build(reasoning_llm=reasoning_llm, fast_llm=fast_llm)
+    _system_instructions = _agent_prompt.get_system_instructions()
+
+    _app_graph = RagGraphFactory.build_default()
     _langfuse_callbacks = get_observability_callbacks()
     logger.info("✅  RAG graph ready.")
 
@@ -95,8 +93,8 @@ async def chat(request: Request):
 
         try:
             logger.info("Invoking LangGraph for session=%s", session_id)
-            res = _app_graph.invoke(
-                {"messages": messages},
+            res = await _app_graph.ainvoke(
+                {"messages": messages, "system_instructions": _system_instructions},
                 config={
                     "callbacks": _langfuse_callbacks,
                     "metadata": {"env": "local", "app": "web-ui"},
