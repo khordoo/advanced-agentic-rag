@@ -40,8 +40,6 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
-    { name = "docling" },
-    { name = "fastapi" },
     { name = "fastembed" },
     { name = "grandalf" },
     { name = "langchain-aws" },
@@ -55,38 +53,36 @@ dependencies = [
     { name = "langfuse" },
     { name = "langgraph" },
     { name = "more-itertools" },
-    { name = "pandas" },
     { name = "pgvector" },
     { name = "psycopg", extra = ["binary"] },
     { name = "python-dotenv" },
     { name = "python-json-logger" },
     { name = "pyyaml" },
     { name = "qdrant-client" },
-    { name = "ragas" },
     { name = "sentence-transformers" },
     { name = "sqlalchemy" },
     { name = "tenacity" },
-    { name = "uvicorn" },
 ]
 
 [package.optional-dependencies]
-demo = [
-    { name = "streamlit" },
-]
-dev = [
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-]
-serve = [
+api = [
     { name = "fastapi" },
     { name = "uvicorn" },
 ]
+ingestion = [
+    { name = "docling" },
+    { name = "pandas" },
+]
 ui = [
     { name = "chainlit" },
+    { name = "streamlit" },
 ]
 
 [package.dev-dependencies]
 dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "ragas" },
     { name = "ruff" },
 ]
 
@@ -94,9 +90,8 @@ dev = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.18.4" },
     { name = "chainlit", marker = "extra == 'ui'", specifier = ">=2.5" },
-    { name = "docling", specifier = ">=2.82.0" },
-    { name = "fastapi", specifier = ">=0.115" },
-    { name = "fastapi", marker = "extra == 'serve'", specifier = ">=0.115" },
+    { name = "docling", marker = "extra == 'ingestion'", specifier = ">=2.82.0" },
+    { name = "fastapi", marker = "extra == 'api'", specifier = ">=0.115" },
     { name = "fastembed", specifier = ">=0.8.0" },
     { name = "grandalf", specifier = ">=0.8" },
     { name = "langchain-aws", specifier = ">=1.4.2" },
@@ -110,27 +105,28 @@ requires-dist = [
     { name = "langfuse", specifier = ">=4.2.0" },
     { name = "langgraph", specifier = ">=1.1.4" },
     { name = "more-itertools", specifier = ">=11.0.1" },
-    { name = "pandas", specifier = ">=2.3.3" },
+    { name = "pandas", marker = "extra == 'ingestion'", specifier = ">=2.3.3" },
     { name = "pgvector", specifier = ">=0.4.2" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.3" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.25" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "python-json-logger", specifier = ">=4.1.0" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "qdrant-client", specifier = ">=1.15.1" },
-    { name = "ragas", specifier = ">=0.4.3" },
     { name = "sentence-transformers", specifier = ">=5.3.0" },
     { name = "sqlalchemy", specifier = ">=2.0.48" },
-    { name = "streamlit", marker = "extra == 'demo'", specifier = ">=1.40" },
+    { name = "streamlit", marker = "extra == 'ui'", specifier = ">=1.40" },
     { name = "tenacity", specifier = ">=9.1.4" },
-    { name = "uvicorn", specifier = ">=0.34" },
-    { name = "uvicorn", marker = "extra == 'serve'", specifier = ">=0.34" },
+    { name = "uvicorn", marker = "extra == 'api'", specifier = ">=0.34" },
 ]
-provides-extras = ["dev", "demo", "serve", "ui"]
+provides-extras = ["api", "ingestion", "ui"]
 
 [package.metadata.requires-dev]
-dev = [{ name = "ruff", specifier = ">=0.15.10" }]
+dev = [
+    { name = "pytest", specifier = ">=8.0" },
+    { name = "pytest-asyncio", specifier = ">=0.25" },
+    { name = "ragas", specifier = ">=0.4.3" },
+    { name = "ruff", specifier = ">=0.15.10" },
+]
 
 [[package]]
 name = "aiofiles"

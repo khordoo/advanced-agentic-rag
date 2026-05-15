@@ -9,7 +9,7 @@ from typing import Any, ClassVar
 
 import yaml
 from langchain_core.output_parsers import PydanticOutputParser
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
 from pydantic import BaseModel, ConfigDict, PrivateAttr
 
 from rag_core.prompts.profile_config import resolve_prompt_profile_context
@@ -136,8 +136,7 @@ class AgentPrompt(BaseModel):
             )
         if "{schema}" in rendered_template and "schema" not in partials_to_inject:
             raise RuntimeError(
-                f"Prompt package '{self.package_id}' references '{{schema}}' "
-                "but has no schema.py"
+                f"Prompt package '{self.package_id}' references '{{schema}}' but has no schema.py"
             )
 
         if partials_to_inject:
@@ -153,8 +152,21 @@ class AgentPrompt(BaseModel):
         for i, example in enumerate(examples, start=1):
             payload = example.model_dump() if isinstance(example, BaseModel) else example
             chunks.append(
-                f"--- EXAMPLE {i} ---\n"
-                + json.dumps(payload, ensure_ascii=True, indent=2)
+                f"--- EXAMPLE {i} ---\n" + json.dumps(payload, ensure_ascii=True, indent=2)
             )
 
         return "\n\n".join(chunks)
+
+    def get_system_instructions(self) -> str:
+        """Returns the fully hydrated system prompt, injecting schemas and examples."""
+        if not self.system_template:
+            return ""
+
+        # 1. Steal the pre-computed partials (schema, examples, profile) from the cached template
+        partials = self.chat_template.partial_variables
+
+        # 2. Use LangChain's native template to format the string safely
+        # (This handles escaping curly braces better than Python's standard .format())
+        system_prompt = PromptTemplate.from_template(self.system_template)
+
+        return system_prompt.format(**partials)
