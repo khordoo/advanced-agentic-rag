@@ -15,8 +15,7 @@ class ChatPresenter:
         if citations:
             final_text += "\n\n---\n**Sources:**\n"
             for idx, cite in enumerate(citations):
-                # TODO: asset_name is empty for soem asset investiage. temporarily we use asset key in its place
-                doc_name = cite.get("asset_key") or cite.get("asset_key", "Unknown Document")
+                doc_name = cite.get("asset_name") or cite.get("asset_key") or "Unknown Document"
                 page = cite.get("page_number", "?")
                 source_url = cite.get("source_url", "")
                 if source_url:
