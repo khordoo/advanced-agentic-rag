@@ -23,3 +23,4 @@ uv run rag_core/cli.py
 
 - Continue with [Configuration](../configuration/README.md).
 - Learn ingestion rules in [Ingestion](../ingestion/README.md).
+- Use the API guide in [OpenAI-Compatible API](openai-api.md).

@@ -1,5 +1,6 @@
 import time
 import uuid
+from enum import StrEnum
 from typing import Literal, Optional
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
@@ -69,6 +70,11 @@ class ChatCompletionResponse(BaseModel):
     choices: list[ChatChoice] = Field(
         description="A list of chat completion choices. Can be more than one if n > 1."
     )
+
+
+class ResponseFormat(StrEnum):
+    MARKDOWN = "markdown"
+    JSON = "json"
 
 
 class ModelCard(BaseModel):

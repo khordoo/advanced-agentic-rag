@@ -10,6 +10,7 @@ Where to put what:
 ## Sections
 
 - [Getting Started](getting-started/README.md)
+- [OpenAI-Compatible API](getting-started/openai-api.md)
 - [Configuration](configuration/README.md)
 - [Retrieval RRF Semantics](configuration/retrieval-rrf.md)
 - [Ingestion](ingestion/README.md)
