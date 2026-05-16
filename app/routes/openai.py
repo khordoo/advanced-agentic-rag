@@ -36,12 +36,12 @@ async def rag(
 
     raw_agent_output = await service.generate_chat_completion(chat)
     if x_response_format == ResponseFormat.JSON:
-        content = ChatPresenter.to_json_string(raw_agent_output)
+        content = ChatPresenter.to_json_string(raw_agent_output.agent_output)
     else:
-        content = ChatPresenter.to_markdown(raw_agent_output)
+        content = ChatPresenter.to_markdown(raw_agent_output.agent_output)
 
     return ChatCompletionResponse(
-        model=chat.model,
+        model=raw_agent_output.resolved_model_id,
         choices=[ChatChoice(message=ChatMessage(role="assistant", content=content))],
     )
 

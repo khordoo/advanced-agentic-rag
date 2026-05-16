@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings
 
 class AppConfig(BaseSettings):
     # Public model identifier exposed by /v1/models and expected by /v1/chat/completions
-    model_id: str = "advanced-rag-agent3"
+    model_id: str = "advanced-rag-agent"
     api_port: int = 8000
     webui_port: int = 3000
 

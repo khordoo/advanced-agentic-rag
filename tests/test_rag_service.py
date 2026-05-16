@@ -18,13 +18,15 @@ class _StubGraph:
 
 
 def test_rag_service_returns_canonical_agent_payload():
-    service = RagService(graph=_StubGraph(), system_instructions="system")
+    service = RagService(graph=_StubGraph(), system_instructions="system", model_id="resolved-id")
     request = ChatCompletionRequest(
-        model="advanced-rag-agent",
+        model="stale-client-id",
         messages=[ChatMessage(role="user", content="question?")],
     )
 
     output = asyncio.run(service.generate_chat_completion(request))
 
-    assert output["answer"] == "Canonical answer"
-    assert output["citations"][0]["asset_key"] == "doc-7"
+    assert output.requested_model_id == "stale-client-id"
+    assert output.resolved_model_id == "resolved-id"
+    assert output.agent_output["answer"] == "Canonical answer"
+    assert output.agent_output["citations"][0]["asset_key"] == "doc-7"

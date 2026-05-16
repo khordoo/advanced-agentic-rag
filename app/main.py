@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.config import get_settings
 from app.routes.health import health_router
 from app.routes.openai import openai_router
 from app.services.rag_service import RagService
@@ -11,11 +12,16 @@ from rag_core.prompts.loader import AgentPrompt
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    settings = get_settings()
     graph = RagGraphFactory.build_default()
 
     agent_prompt = AgentPrompt.from_package("primary_rag_agent")
     static_instructions = agent_prompt.get_system_instructions()
-    app.state.rag_service = RagService(graph=graph, system_instructions=static_instructions)
+    app.state.rag_service = RagService(
+        graph=graph,
+        system_instructions=static_instructions,
+        model_id=settings.model_id,
+    )
     yield
 
 
