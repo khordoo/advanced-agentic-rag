@@ -4,6 +4,7 @@ from typing import Any
 from langgraph.graph.state import CompiledStateGraph
 from pydantic import BaseModel
 
+from app.core.exceptions import UpstreamModelError
 from app.schemas.openai import ChatCompletionRequest
 
 
@@ -38,13 +39,31 @@ class RagService:
             drop_system_messages=self.drop_frontend_prompts
         )
 
-        res = await self.graph.ainvoke(
-            {"messages": langchain_msgs, "system_instructions": self.system_instructions}
-        )
+        try:
+            res = await self.graph.ainvoke(
+                {"messages": langchain_msgs, "system_instructions": self.system_instructions}
+            )
+            messages = res.get("messages")
+            if not isinstance(messages, list) or not messages:
+                raise UpstreamModelError("Upstream model output is missing messages.")
 
-        agent_output_str = res["messages"][-1].content
+            final_message = messages[-1]
+            content = getattr(final_message, "content", None)
+            if not isinstance(content, str) or not content.strip():
+                raise UpstreamModelError("Upstream model output content is empty or invalid.")
+
+            parsed_output = json.loads(content)
+            if not isinstance(parsed_output, dict):
+                raise UpstreamModelError("Upstream model output must be a JSON object.")
+        except UpstreamModelError:
+            raise
+        except (json.JSONDecodeError, KeyError, TypeError, AttributeError) as exc:
+            raise UpstreamModelError("Upstream model returned malformed JSON output.") from exc
+        except Exception as exc:
+            raise UpstreamModelError("Upstream model invocation failed.") from exc
+
         return GenerationResult(
             requested_model_id=chat_req.model,
             resolved_model_id=self.model_id,
-            agent_output=json.loads(agent_output_str),
+            agent_output=parsed_output,
         )

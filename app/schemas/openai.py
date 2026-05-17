@@ -87,3 +87,14 @@ class ModelCard(BaseModel):
 class ModelList(BaseModel):
     object: str = "list"
     data: list[ModelCard]
+
+
+class OpenAIError(BaseModel):
+    message: str
+    type: str
+    param: str | None = None
+    code: str | None = None
+
+
+class OpenAIErrorEnvelope(BaseModel):
+    error: OpenAIError
