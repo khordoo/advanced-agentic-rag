@@ -35,9 +35,16 @@ services:
       # You just point the UI to your RAG API as if it were OpenAI!
       - OPENAI_API_BASE_URL=http://rag_api:8000/v1
       - OPENAI_API_KEY=dummy_key
-    depends_on:
-      rag_api:
-        condition: service_healthy
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - >
+          curl --silent --fail http://localhost:8080/health | grep -q '"status":true' &&
+          curl --silent --fail http://localhost:8080/api/models | grep -q '"id"' || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 45s
     volumes:
       - open-webui-data:/app/backend/data
 
