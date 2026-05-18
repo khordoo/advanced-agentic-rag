@@ -3,6 +3,8 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.api
+      args:
+        UV_SYNC_EXTRAS: ${RAG_API_UV_SYNC_EXTRAS:---extra api}
     container_name: api
     ports:
       - "${RAG_API_PORT:-8000}:8000"
@@ -26,6 +28,52 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s # Gives Uvicorn time to boot and load your models
+
+  prefect-server:
+    image: prefecthq/prefect:3-python3.11
+    container_name: prefect-server
+    restart: always
+    ports:
+      - "${PREFECT_UI_PORT:-4200}:4200"
+    environment:
+      PREFECT_API_DATABASE_CONNECTION_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@core-db:5432/${PERFECT_DB}
+      PREFECT_API_URL: http://localhost:4200/api
+    command: prefect server start --host 0.0.0.0 --port 4200
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:4200/api/health')",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    depends_on:
+      core-db: { condition: service_healthy }
+
+  ingestion-worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker
+      args:
+        UV_SYNC_EXTRAS: ${INGESTION_WORKER_UV_SYNC_EXTRAS:---extra ingestion}
+    container_name: ingestion-worker
+    restart: always
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: core-db
+      PREFECT_API_URL: http://prefect-server:4200/api
+      PREFECT_INGESTION_WORK_POOL: ${PREFECT_INGESTION_WORK_POOL:-ingestion-pool}
+      PREFECT_WORKER_LIMIT: ${PREFECT_WORKER_LIMIT:-2}
+    depends_on:
+      core-db: { condition: service_healthy }
+      qdrant: { condition: service_started }
+      prefect-server: { condition: service_healthy }
+
   web_ui:
     image: ghcr.io/open-webui/open-webui:main # Or your custom UI build
     container_name: web

@@ -9,7 +9,8 @@ WORKDIR /app
 # Hatchling requires the README to validate package metadata during the sync.
 COPY pyproject.toml uv.lock README.md ./
 
-RUN uv sync --frozen --no-dev --extra api --no-install-project
+ARG UV_SYNC_EXTRAS="--extra api"
+RUN uv sync --frozen --no-dev --no-install-project ${UV_SYNC_EXTRAS}
 
 
 COPY rag_core/ rag_core/

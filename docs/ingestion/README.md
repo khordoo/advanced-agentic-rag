@@ -10,6 +10,36 @@ Use the canonical ingestion module for end-to-end ingestion:
 uv run python -m rag_core.ingestion.pipeline
 ```
 
+For orchestration runtime (Prefect), use:
+
+```bash
+uv run --extra ingestion python -m orchestration.ingestion.flows end_to_end
+```
+
+If you ingest PDFs via Docling, install optional processing deps:
+
+```bash
+uv sync --extra ingestion --extra doc-processing
+```
+
+Register a deployment so the flow appears as a clickable run target in Prefect UI:
+
+```bash
+uv run --extra ingestion python -m orchestration.ingestion.flows end_to_end \
+  --register-deployment --deployment-name local-ingestion-runner --work-pool ingestion-pool
+```
+
+After registration, open `http://localhost:4200`, navigate to Deployments, and use Quick Run.
+
+To register both the safe ingestion deployment and the destructive admin reset deployment:
+
+```bash
+uv run --extra ingestion python -m orchestration.ingestion.flows end_to_end \
+  --register-all-deployments --deployment-name local-ingestion-runner --work-pool ingestion-pool
+```
+
+The `*-factory-reset` deployment requires `confirm_destructive_wipe=true` and wipes vectors plus ingestion registry state.
+
 Discovery queues source files in Postgres. The ingestion worker then claims
 queued assets, processes them, and exits when no claimable work remains.
 

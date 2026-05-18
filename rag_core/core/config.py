@@ -8,7 +8,6 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-import torch
 from dotenv import dotenv_values, load_dotenv
 from pydantic import Field, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -17,6 +16,11 @@ from pythonjsonlogger.json import JsonFormatter
 from rag_core.embeddings.types import EmbeddingProvider
 
 logger = logging.getLogger(__name__)
+
+try:
+    import torch
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    torch = None
 
 # Keys that MUST exist in the environment / .env
 _REQUIRED_KEYS: list[str] = []
@@ -257,6 +261,8 @@ class RerankerSettings(BaseSettings):
     @property
     def resolve_device(self) -> Literal["cuda", "cpu", "mps"]:
         if self.device == "auto":
+            if torch is None:
+                return "cpu"
             if torch.cuda.is_available():
                 return "cuda"
             elif torch.backends.mps.is_available():
