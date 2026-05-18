@@ -11,6 +11,8 @@ from app.services.rag_service import GenerationResult
 
 
 class _StubRagService:
+    model_id = "advanced-rag-agent-canonical"
+
     async def generate_chat_completion(self, chat_req: ChatCompletionRequest):
         return GenerationResult(
             requested_model_id=chat_req.model,
@@ -24,17 +26,25 @@ class _StubRagService:
         )
 
 
+class _SlowStubRagService(_StubRagService):
+    async def generate_chat_completion(self, chat_req: ChatCompletionRequest):
+        await asyncio.sleep(2.2)
+        return await super().generate_chat_completion(chat_req)
+
+
 class _FailingService:
+    model_id = "advanced-rag-agent-canonical"
+
     async def generate_chat_completion(self, chat_req: ChatCompletionRequest):
         raise RuntimeError("boom")
 
-
 class _UpstreamErrorService:
+    model_id = "advanced-rag-agent-canonical"
+
     async def generate_chat_completion(self, chat_req: ChatCompletionRequest):
         from app.core.exceptions import UpstreamModelError
 
         raise UpstreamModelError("Malformed upstream output")
-
 
 def _make_request(**kwargs) -> ChatCompletionRequest:
     payload = {
@@ -100,16 +110,27 @@ def test_api_returns_openai_error_for_stream_true():
     assert "text/event-stream" in res.headers["content-type"]
 
     data_lines = [line for line in res.text.splitlines() if line.startswith("data: ")]
-    assert len(data_lines) == 4
+    assert len(data_lines) >= 4
     assert data_lines[-1] == "data: [DONE]"
 
     first = json.loads(data_lines[0].replace("data: ", ""))
     second = json.loads(data_lines[1].replace("data: ", ""))
-    final = json.loads(data_lines[2].replace("data: ", ""))
+    final = json.loads(data_lines[-2].replace("data: ", ""))
+    payloads = [json.loads(line.replace("data: ", "")) for line in data_lines if line != "data: [DONE]"]
+    contents = [
+        p["choices"][0]["delta"].get("content", "")
+        for p in payloads
+        if isinstance(p, dict) and "choices" in p
+    ]
+    full_stream = "".join(contents)
 
     assert first["object"] == "chat.completion.chunk"
     assert first["choices"][0]["delta"]["role"] == "assistant"
     assert second["choices"][0]["delta"]["content"]
+    assert "<think>" in second["choices"][0]["delta"]["content"]
+    assert "Analyzing request" in second["choices"][0]["delta"]["content"]
+    assert full_stream.count("<think>") == 1
+    assert full_stream.count("</think>") == 1
     assert final["choices"][0]["finish_reason"] == "stop"
 
 
@@ -176,5 +197,59 @@ def test_api_stream_honors_json_response_format():
     data_lines = [line for line in res.text.splitlines() if line.startswith("data: ")]
     second = json.loads(data_lines[1].replace("data: ", ""))
     streamed_content = second["choices"][0]["delta"]["content"]
+    assert "Analyzing request" not in streamed_content
+    assert "<think>" not in streamed_content
     parsed = json.loads(streamed_content)
     assert parsed["answer"] == "Hello from agent"
+
+
+def test_api_stream_emits_sse_error_for_upstream_failures():
+    client = TestClient(app)
+    app.state.rag_service = _UpstreamErrorService()
+
+    res = client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "advanced-rag-agent",
+            "messages": [{"role": "user", "content": "Hello"}],
+            "stream": True,
+        },
+    )
+
+    assert res.status_code == 200
+    data_lines = [line for line in res.text.splitlines() if line.startswith("data: ")]
+    assert data_lines[-1] == "data: [DONE]"
+    payloads = [json.loads(line.replace("data: ", "")) for line in data_lines if line != "data: [DONE]"]
+    contents = [
+        p["choices"][0]["delta"].get("content", "")
+        for p in payloads
+        if isinstance(p, dict) and "choices" in p
+    ]
+    assert any("System Error" in chunk for chunk in contents)
+
+
+def test_api_stream_emits_delayed_markdown_status_for_long_running_calls():
+    client = TestClient(app)
+    app.state.rag_service = _SlowStubRagService()
+
+    res = client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "advanced-rag-agent",
+            "messages": [{"role": "user", "content": "Hello"}],
+            "stream": True,
+        },
+    )
+
+    assert res.status_code == 200
+    data_lines = [line for line in res.text.splitlines() if line.startswith("data: ")]
+    payloads = [json.loads(line.replace("data: ", "")) for line in data_lines if line != "data: [DONE]"]
+    contents = [
+        p["choices"][0]["delta"].get("content", "")
+        for p in payloads
+        if isinstance(p, dict) and "choices" in p
+    ]
+    full_stream = "".join(contents)
+    assert full_stream.count("<think>") == 1
+    assert full_stream.count("</think>") == 1
+    assert any("Retrieving and verifying supporting documents" in chunk for chunk in contents)

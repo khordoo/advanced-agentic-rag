@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from rag_core.core.config import GenerationSettings
 from rag_core.genetation.graph import RagGraphFactory
 from rag_core.genetation.nodes import GraphNodes, NodeName
+from rag_core.prompts.packages.intent_router.schema import IntentCategory
 from rag_core.genetation.tools import (
     AgentToolFactory,
     FetchPageToolSchema,
@@ -259,6 +260,58 @@ def test_semantic_search_tool_passes_optional_asset_key():
     ]
 
 
+def test_intent_router_handles_bedrock_list_content():
+    fast_model = _DummyModel(
+        response_content=[
+            {
+                "text": json.dumps(
+                    {"reasoning": "needs retrieval", "intent": IntentCategory.DOMAIN_EXPERT.value}
+                )
+            }
+        ]
+    )
+    nodes = GraphNodes(
+        reasoning_llm=_DummyModel(),
+        verifier_llm=_DummyModel(),
+        fast_llm=fast_model,
+        tools=[_make_tool()],
+        settings=GenerationSettings(enable_intent_routing=True),
+    )
+
+    result = nodes.execute_intent_router_agent(
+        {
+            "messages": [HumanMessage(content="What was revenue last quarter?")],
+            "source_docs": [],
+            "token_budget": 0,
+            "intent_route": "",
+        }
+    )
+
+    assert result["intent_route"] == IntentCategory.DOMAIN_EXPERT.value
+
+
+def test_intent_router_falls_back_on_malformed_content():
+    fast_model = _DummyModel(response_content=[{"text": "not-json"}])
+    nodes = GraphNodes(
+        reasoning_llm=_DummyModel(),
+        verifier_llm=_DummyModel(),
+        fast_llm=fast_model,
+        tools=[_make_tool()],
+        settings=GenerationSettings(enable_intent_routing=True),
+    )
+
+    result = nodes.execute_intent_router_agent(
+        {
+            "messages": [HumanMessage(content="Hello?")],
+            "source_docs": [],
+            "token_budget": 0,
+            "intent_route": "",
+        }
+    )
+
+    assert result["intent_route"] == IntentCategory.GENERAL_ASSISTANT.value
+
+
 def test_primary_rag_agent_increments_global_iteration_count():
     model = _DummyModel(response_content="answer")
     nodes = GraphNodes(
@@ -272,6 +325,7 @@ def test_primary_rag_agent_increments_global_iteration_count():
     result = nodes.execute_primary_rag_agent(
         {
             "messages": [HumanMessage(content="q")],
+            "system_instructions": "Be helpful.",
             "source_docs": [],
             "token_budget": 0,
             "intent_route": "domain_expert",

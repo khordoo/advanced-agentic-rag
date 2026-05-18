@@ -237,7 +237,8 @@ class GraphNodes:
         )
         def execute_agent(prompt):
             response = self.fast_llm.invoke(prompt.to_messages())
-            intent_json = json.loads(response.content)
+            normalized_content = extract_text_from_message(response.content)
+            intent_json = json.loads(normalized_content)
             parsed = IntentRouterResponse.model_validate(intent_json)
             logger.debug("Intent router response: %s", parsed.model_dump_json())
             logger.info("Classified intent: %s", parsed.intent)
