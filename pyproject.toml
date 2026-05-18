@@ -4,41 +4,46 @@ version = "0.1.0"
 description = "Advanced RAG pipeline with hierarchical chunking, hybrid search (BM25 + vector), cross-encoder reranking, and RAGAS evaluation"
 readme = "README.md"
 requires-python = ">=3.11"
+# production runtime for the RAG engine:
 dependencies = [
     "alembic>=1.18.4",
-    "docling>=2.82.0",
-    "fastapi>=0.115",
-    "fastembed>=0.8.0",
     "grandalf>=0.8",
+    "fastembed>=0.8.0",
     "langchain-aws>=1.4.2",
     "langchain-chroma>=1.1.0",
     "langchain-core>=1.2.22",
     "langchain-huggingface>=1.2.1",
     "langchain-ollama>=1.0.1",
     "langchain-openai>=1.1.12",
+    "langchain-qdrant>=0.2.0",
     "langchain-text-splitters>=1.1.1",
     "langfuse>=4.2.0",
     "langgraph>=1.1.4",
     "more-itertools>=11.0.1",
-    "pandas>=2.3.3",
     "pgvector>=0.4.2",
     "psycopg[binary]>=3.3.3",
     "python-dotenv>=1.2.2",
     "python-json-logger>=4.1.0",
     "pyyaml>=6.0.3",
-    "ragas>=0.4.3",
+    "qdrant-client>=1.15.1",
     "sentence-transformers>=5.3.0",
     "sqlalchemy>=2.0.48",
     "tenacity>=9.1.4",
-    "uvicorn>=0.34",
+
 ]
 
 [project.optional-dependencies]
-qdrant = ["langchain-qdrant>=0.2.0"]
-dev = ["pytest>=8.0", "pytest-asyncio>=0.25"]
-demo = ["streamlit>=1.40"]
-serve = ["fastapi>=0.115", "uvicorn>=0.34"]
-ui = ["chainlit>=2.5"]
+# For the FastAPI Web Server
+api = ["fastapi>=0.115", "uvicorn>=0.34"]
+
+# Ingestion Data Processing/Chunking worker:
+ingestion = [
+    "docling>=2.82.0",
+    "pandas>=2.3.3",
+]
+
+# Static UI frontends:
+ui = ["streamlit>=1.40", "chainlit>=2.5"]
 
 [build-system]
 requires = ["hatchling"]
@@ -51,7 +56,11 @@ packages = ["rag_core"]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 
+# Use uv's dependency groups for all dev/eval tools
 [dependency-groups]
 dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.25",
     "ruff>=0.15.10",
+    "ragas>=0.4.3",
 ]

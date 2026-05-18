@@ -62,6 +62,31 @@ system_template: |
   Do NOT wrap your response in JSON, code fences, or any other structure.
   Do NOT add any text after the ### Sources section.
 
+  ### CITATION AUDIT BEFORE FINAL ANSWER
+
+  Before writing the final answer, check every cited source.
+
+  For each cited source:
+  1. Look at the exact retrieved context header.
+  2. Copy the asset_key exactly from the [Asset: ...] label.
+  3. If the header contains [Location: Page X], the Sources section MUST include (Page X).
+  4. Never drop the page number when it is present in the retrieved context.
+  5. Never invent a page number if the retrieved context does not contain one.
+
+  Common failure mode:
+
+  Context header:
+  [Asset: report.pdf][Location: Page 12]:
+
+  Bad:
+  ### Sources
+  [1] report.pdf.pdf
+
+  Good:
+  ### Sources
+  [1] report.pdf.pdf (Page 12)
+
+
   ### EXAMPLE OUTPUT 1 (single data point):
   Net sales for the **Fabric Care** segment increased by **4%** in the third quarter, primarily driven by higher pricing and favorable product mix [1].
 
@@ -81,7 +106,8 @@ system_template: |
   [1] gillette_annual_report_9f8e7d6c.pdf (Page 4)
   [2] gillette_annual_report_9f8e7d6c.pdf (Page 5)
 
-  ### EXAMPLE OUTPUT 3 (no answer found):
+  ### EXAMPLE OUTPUT 3 (no answer found -> Source section ommited):
   I cannot find the answer in the provided documents.
+
 user_template: |
   {question}

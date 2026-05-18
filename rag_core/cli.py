@@ -4,8 +4,7 @@ import logging
 
 from langchain_core.messages import AIMessage, HumanMessage
 
-from rag_core.agents import AgentFactory
-from rag_core.core.config import get_generation_settings, setup_logging
+from rag_core.core.config import setup_logging
 from rag_core.core.telemetry import get_observability_callbacks
 from rag_core.genetation.graph import RagGraphFactory
 from rag_core.genetation.parsers import parse_agent_response
@@ -17,22 +16,10 @@ logger = logging.getLogger(__name__)
 
 def run_chat_loop():
     logger.info("Initializing Agent Prompt & LLM...")
-    settings = get_generation_settings()
-    agent_prompt = AgentPrompt.from_package("primary_rag_agent")
-    reasoning_llm = AgentFactory.create(
-        provider=settings.model_provider, model_name=settings.reasoning_model
-    )
-    verifying_llm = AgentFactory.create(
-        provider=settings.model_provider, model_name=settings.verifier_model
-    )
-    fast_llm = AgentFactory.create(provider=settings.model_provider, model_name=settings.fast_model)
-    app = RagGraphFactory.build(
-        reasoning_llm=reasoning_llm,
-        verifier_llm=verifying_llm,
-        fast_llm=fast_llm,
-        settings=settings,
-    )
+    app = RagGraphFactory.build_default()
 
+    agent_prompt = AgentPrompt.from_package("primary_rag_agent")
+    static_instructions = agent_prompt.get_system_instructions()
     messages = []
     dim = "\033[2m"
     reset = "\033[0m"
@@ -61,16 +48,11 @@ def run_chat_loop():
             print("\nStarted a new session.")
             continue
 
-        if not messages:
-            prompt = agent_prompt.chat_template.invoke({"question": query})
-            logger.debug("Initial Prompt generated:\n%s", prompt)
-            messages = prompt.to_messages()
-        else:
-            messages.append(HumanMessage(content=query))
+        messages.append(HumanMessage(content=query))
 
         logger.info("Invoking LangGraph execution...")
         res = app.invoke(
-            {"messages": messages},
+            {"messages": messages, "system_instructions": static_instructions},
             config={
                 "callbacks": langfuse_callbacks,
                 "metadata": {"env": "local", "app": "cli-langgraph-test"},

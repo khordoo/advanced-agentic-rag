@@ -12,16 +12,16 @@ ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
 $(eval $(ARGS):;@:)
 
 up:
-	docker compose --env-file $(ENV_FILE) -f $(COMPOSE_FILE) up -d
+	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) up -d
 
 down:
-	docker compose --env-file $(ENV_FILE) -f $(COMPOSE_FILE) down
+	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) down
 
 reset:
-	docker compose --env-file $(ENV_FILE) -f $(COMPOSE_FILE) down --volumes
-	docker compose --env-file $(ENV_FILE) -f $(COMPOSE_FILE) up --build -d
+	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) down --volumes
+	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) up --build -d
 logs:
-	docker compose -f $(COMPOSE_FILE) logs -f --tail=100 $(ARG)
+	docker compose --project-directory . -f $(COMPOSE_FILE) logs -f --tail=100 $(ARG)
 
 stat:
 	docker stats
@@ -44,3 +44,9 @@ migrate-status:
 	$(ALEMBIC) history --verbose
 
 migrate-statusd: migrate-status
+
+ingest: migrate-up
+	@echo "Ensuring all local dependencies are synced..."
+	uv sync --all-extras
+	@echo "Starting Ingestion Pipeline..."
+	uv run python -m rag_core.ingestion.pipeline

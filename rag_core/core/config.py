@@ -231,9 +231,6 @@ class RetrievalSettings(BaseSettings):
     )
 
 
-
-
-
 class RerankerSettings(BaseSettings):
     """Configuration settings for the Reranker.
     We set top_k=10 since childs chunks will have duplicate parent chunks
@@ -448,6 +445,15 @@ class GenerationSettings(BaseSettings):
         ge=1,
         le=50,
         description="Number of messages to lookback in message history for general assistant to maintain context.",
+    )
+    # SECURITY: Always default to True to protect the agent in production
+    drop_frontend_system_prompts: bool = Field(
+        default=True,
+        description=(
+            "SECURITY: Always default to True in production to protect the agent from "
+            "prompt injection jailbreaks via the frontend. Set to False locally to "
+            "allow rapid prototyping of new system personas via the UI."
+        ),
     )
     model_config = SettingsConfigDict(env_prefix="GENERATION_", env_file=".env", extra="ignore")
 

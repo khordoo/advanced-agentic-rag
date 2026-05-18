@@ -1,14 +1,13 @@
-from typing import NotRequired
-from typing import TypedDict, Annotated
-from langgraph.graph import add_messages
+from typing import Annotated, NotRequired, TypedDict
 
 from langchain_core.documents import Document
 from langchain_core.messages import BaseMessage
+from langgraph.graph import add_messages
+
 from rag_core.prompts.packages.rag_verifier.schema import RagVerifierResponse
 
 
 class RagState(TypedDict):
-    # query:str
     messages: Annotated[list[BaseMessage], add_messages]
     source_docs: list[Document]
     token_budget: int
@@ -17,3 +16,4 @@ class RagState(TypedDict):
     intent_route: str
     verifier_response: NotRequired[RagVerifierResponse]
     self_correction_attempts: NotRequired[int]
+    system_instructions: str

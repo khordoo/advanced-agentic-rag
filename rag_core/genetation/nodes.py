@@ -9,6 +9,7 @@ from langchain_core.messages import (
     AIMessage,
     BaseMessage,
     HumanMessage,
+    SystemMessage,
     ToolMessage,
 )
 from langchain_core.tools import BaseTool
@@ -106,7 +107,9 @@ class GraphNodes:
         logger.info("Executing Primary RAG Agent node...")
         source_docs = state.get("source_docs", [])
         logger.debug("Source docs count: %d", len(source_docs))
-        response = self.reasoning_llm.invoke(state["messages"])
+        sys_msg = SystemMessage(content=state["system_instructions"])
+        temp_messages = [sys_msg] + state["messages"]
+        response = self.reasoning_llm.invoke(temp_messages)
         iteration_count = state.get("iteration_count", 0)
         logger.info("Agent response received. Iteration: %d", iteration_count + 1)
         return {
@@ -234,7 +237,8 @@ class GraphNodes:
         )
         def execute_agent(prompt):
             response = self.fast_llm.invoke(prompt.to_messages())
-            intent_json = json.loads(response.content)
+            normalized_content = extract_text_from_message(response.content)
+            intent_json = json.loads(normalized_content)
             parsed = IntentRouterResponse.model_validate(intent_json)
             logger.debug("Intent router response: %s", parsed.model_dump_json())
             logger.info("Classified intent: %s", parsed.intent)
