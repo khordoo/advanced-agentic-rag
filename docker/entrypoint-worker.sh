@@ -16,10 +16,10 @@ POOL_NAME="${PREFECT_INGESTION_WORK_POOL:-ingestion-pool}"
 WORKER_LIMIT="${PREFECT_WORKER_LIMIT:-2}"
 
 echo "🚀 Running pre-flight orchestration setup …"
-uv run python -m orchestration.initialize
+.venv/bin/python -m orchestration.initialize
 
 echo "🐝 Starting Prefect worker (pool=${POOL_NAME}, limit=${WORKER_LIMIT}) …"
-exec uv run prefect worker start \
+exec .venv/bin/prefect worker start \
     --pool "${POOL_NAME}" \
     --type process \
     --limit "${WORKER_LIMIT}"

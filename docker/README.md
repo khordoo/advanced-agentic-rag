@@ -10,7 +10,7 @@ docker compose --project-directory . -f docker/docker-compose.yaml up -d
 docker compose --project-directory . -f docker/docker-compose.yaml ps
 ```
 
-Default builds keep API and worker dependencies lightweight. To include heavy PDF/Rerank runtime in the worker image:
+Default worker builds include PDF Docling processing. To also include local reranking runtime in the worker image:
 
 ```bash
 INGESTION_WORKER_UV_SYNC_EXTRAS="--extra ingestion --extra doc-processing --extra rerank" \

@@ -27,7 +27,8 @@ cp .env.example .env
 # Start local infrastructure and services
 docker compose --project-directory . -f docker/docker-compose.yaml up -d
 
-# If you need PDF docling parsing + local reranking in the worker image:
+# Default worker image includes PDF Docling processing.
+# If you also need local reranking in the worker image:
 # INGESTION_WORKER_UV_SYNC_EXTRAS="--extra ingestion --extra doc-processing --extra rerank" \
 # docker compose --project-directory . -f docker/docker-compose.yaml up -d --build
 

@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+import pytest
 from pytest import LogCaptureFixture, MonkeyPatch
 
 from rag_core.core.config import IngestionSettings
@@ -486,3 +487,56 @@ def test_reconcile_source_assets_marks_absent_assets_for_current_run(
     }
     assert progress_updates == [{"step": IngestionRunStep.RECONCILING}]
     assert fake_db.session.begin_count == 1
+
+
+def test_execute_scan_loop_raises_when_no_assets_discovered_by_default() -> None:
+    class _EmptyScanner:
+        def discover_assets(self, base_uri: str):
+            del base_uri
+            return iter(())
+
+    service = SourceDiscoveryService(
+        settings=IngestionSettings(
+            base_source_uri="/app/data/source_documents",
+            discovery_batch_size=10,
+            allow_empty_discovery=False,
+            _env_file=None,
+        ),
+        scanner=_EmptyScanner(),  # type: ignore[arg-type]
+        source_provider=_FakeProvider(),  # type: ignore[arg-type]
+        db=_FakeDb(),  # type: ignore[arg-type]
+    )
+    service.run_id = 101
+    service._update_progress = lambda **kwargs: None  # type: ignore[method-assign]
+
+    with pytest.raises(RuntimeError, match="No eligible source assets discovered"):
+        service._execute_scan_loop()
+
+
+def test_execute_scan_loop_allows_empty_discovery_when_configured(
+    caplog: LogCaptureFixture,
+) -> None:
+    class _EmptyScanner:
+        def discover_assets(self, base_uri: str):
+            del base_uri
+            return iter(())
+
+    service = SourceDiscoveryService(
+        settings=IngestionSettings(
+            base_source_uri="/app/data/source_documents",
+            discovery_batch_size=10,
+            allow_empty_discovery=True,
+            _env_file=None,
+        ),
+        scanner=_EmptyScanner(),  # type: ignore[arg-type]
+        source_provider=_FakeProvider(),  # type: ignore[arg-type]
+        db=_FakeDb(),  # type: ignore[arg-type]
+    )
+    service.run_id = 102
+    service._update_progress = lambda **kwargs: None  # type: ignore[method-assign]
+
+    with caplog.at_level(logging.WARNING, logger="rag_core.ingestion.services.discovery"):
+        metrics = service._execute_scan_loop()
+
+    assert metrics.discovered_total == 0
+    assert "INGESTION_ALLOW_EMPTY_DISCOVERY=true" in caplog.text

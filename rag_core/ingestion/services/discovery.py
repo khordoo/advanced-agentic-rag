@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Iterator
 import logging
+import os
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -109,6 +110,13 @@ class SourceDiscoveryService:
         """The core work loop. Raises exceptions if something catastrophic happens."""
         self._update_progress(step=IngestionRunStep.SCANNING)
         metrics = DiscoveryRunMetrics()
+        logger.info(
+            "Starting discovery scan run_id=%s base_source_uri=%s allowed_extensions=%s cwd=%s",
+            self.run_id,
+            self.settings.base_source_uri,
+            sorted(self.settings.allowed_extensions),
+            os.getcwd(),
+        )
 
         with self.db.get_session() as session:
             asset_repo = SourceAssetRepository(session)
@@ -129,6 +137,24 @@ class SourceDiscoveryService:
                             metrics=metrics,
                             session=session,
                         )
+
+        if metrics.discovered_total == 0:
+            msg = (
+                "No eligible source assets discovered. "
+                f"base_source_uri={self.settings.base_source_uri!r}, "
+                f"allowed_extensions={sorted(self.settings.allowed_extensions)!r}."
+            )
+            if self.settings.allow_empty_discovery:
+                logger.warning(
+                    "%s Continuing because INGESTION_ALLOW_EMPTY_DISCOVERY=true.",
+                    msg,
+                )
+            else:
+                logger.error(
+                    "%s Failing run. Set INGESTION_ALLOW_EMPTY_DISCOVERY=true to bypass.",
+                    msg,
+                )
+                raise RuntimeError(msg)
 
         logger.info("Scan loop completed run_id=%s metrics=%s", self.run_id, metrics.model_dump())
         return metrics

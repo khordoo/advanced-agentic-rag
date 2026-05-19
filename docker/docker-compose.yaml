@@ -59,7 +59,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.worker
       args:
-        UV_SYNC_EXTRAS: ${INGESTION_WORKER_UV_SYNC_EXTRAS:---extra ingestion}
+        UV_SYNC_EXTRAS: ${INGESTION_WORKER_UV_SYNC_EXTRAS:---extra ingestion --extra doc-processing}
     container_name: ingestion-worker
     restart: always
     env_file:
@@ -69,6 +69,8 @@ services:
       PREFECT_API_URL: http://prefect-server:4200/api
       PREFECT_INGESTION_WORK_POOL: ${PREFECT_INGESTION_WORK_POOL:-ingestion-pool}
       PREFECT_WORKER_LIMIT: ${PREFECT_WORKER_LIMIT:-2}
+    volumes:
+      - ./data/source_documents:/app/data/source_documents:ro
     depends_on:
       core-db: { condition: service_healthy }
       qdrant: { condition: service_started }

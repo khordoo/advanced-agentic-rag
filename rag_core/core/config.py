@@ -103,27 +103,25 @@ def load_config(env_path: str | Path | None = None) -> dict[str, str]:
 
 
 def setup_logging():
-    """Independent logging setup that reads directly from the environment and outputs JSON."""
+    """Configure application logging without clobbering Prefect handlers."""
     load_dotenv()
     level_name = os.environ.get("LOG_LEVEL", "INFO").upper()
     level = getattr(logging, level_name, logging.INFO)
 
-    # 1. Grab the root logger and set your dynamic level
-    logger = logging.getLogger()
-    logger.setLevel(level)
+    root_logger = logging.getLogger()
+    root_logger.setLevel(level)
 
-    # 2. Clear any default handlers to prevent duplicate logs
-    logger.handlers.clear()
+    for handler in root_logger.handlers:
+        if getattr(handler, "_rag_json_stdout_handler", False):
+            handler.setLevel(level)
+            return
 
-    # 3. Create a console handler
     log_handler = logging.StreamHandler()
-
-    # 4. Attach the JSON formatter using your exact preferred fields
+    log_handler.setLevel(level)
     formatter = JsonFormatter("%(asctime)s %(levelname)s %(name)s %(message)s")
     log_handler.setFormatter(formatter)
-
-    # 5. Add the handler to the root logger
-    logger.addHandler(log_handler)
+    setattr(log_handler, "_rag_json_stdout_handler", True)
+    root_logger.addHandler(log_handler)
 
 
 class SecuritySettings(BaseSettings):
@@ -374,6 +372,13 @@ class IngestionSettings(BaseSettings):
         default=500,
         ge=1,
         description="Number of discovered assets to commit per discovery database transaction.",
+    )
+    allow_empty_discovery: bool = Field(
+        default=False,
+        description=(
+            "When false, discovery fails if no eligible source assets are found. "
+            "Set true only for workflows that intentionally run with an empty source."
+        ),
     )
     worker_max_attempts: int = Field(
         default=3,

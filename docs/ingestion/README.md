@@ -43,6 +43,14 @@ The `*-factory-reset` deployment requires `confirm_destructive_wipe=true` and wi
 Discovery queues source files in Postgres. The ingestion worker then claims
 queued assets, processes them, and exits when no claimable work remains.
 
+By default, discovery fails when zero eligible files are found. This protects
+against misconfigured source paths (for example, missing Docker mounts). If you
+need empty-source runs intentionally, set:
+
+```bash
+INGESTION_ALLOW_EMPTY_DISCOVERY=true
+```
+
 ## Worker Job Limits
 
 By default, `max_jobs` is `None`. That means the worker runs until the queue is
@@ -63,6 +71,17 @@ runs leak memory, investigate the processor or indexer lifecycle directly.
 
 Multiple workers can process the same queue concurrently because each worker
 claims assets through database leases.
+
+## Troubleshooting Logs
+
+- Prefect UI run/task logs remain available in the dashboard.
+- Worker application logs are also mirrored to container stdout:
+
+```bash
+docker logs ingestion-worker -f
+```
+
+- Per-asset failures are persisted in `source_assets.error_message` with stage and path context.
 
 ## Metadata Extension Hooks
 

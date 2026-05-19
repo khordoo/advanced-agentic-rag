@@ -8,7 +8,24 @@ WORKDIR /app
 
 COPY pyproject.toml uv.lock README.md ./
 
-ARG UV_SYNC_EXTRAS="--extra ingestion"
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        libxcb1 \
+        libgl1 \
+        libsm6 \
+        libice6 \
+        libx11-6 \
+        libxext6 \
+        libxrender1 \
+        libxfixes3 \
+        libxi6 \
+        libxrandr2 \
+        libglib2.0-0 \
+        libnss3 \
+        libfontconfig1 \
+    && rm -rf /var/lib/apt/lists/*
+
+ARG UV_SYNC_EXTRAS="--extra ingestion --extra doc-processing"
 RUN uv sync --frozen --no-dev --no-install-project ${UV_SYNC_EXTRAS}
 
 COPY rag_core/ rag_core/

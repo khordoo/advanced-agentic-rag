@@ -13,6 +13,7 @@ from prefect.exceptions import MissingContextError
 from prefect import get_run_logger
 from prefect import task
 
+from rag_core.core.config import setup_logging
 from rag_core.ingestion.pipeline import run_discovery_pipeline
 from rag_core.ingestion.pipeline import run_end_to_end_pipeline
 from rag_core.ingestion.pipeline import run_ingestion_pipeline
@@ -23,6 +24,7 @@ from rag_core.store.postgres.session import get_database
 @task(name="discovery-task", retries=1, retry_delay_seconds=5)
 def discovery_task() -> dict[str, int] | None:
     """Run discovery and return serializable metrics."""
+    setup_logging()
     logger = _get_logger()
     logger.info("Starting discovery task")
     metrics = run_discovery_pipeline()
@@ -36,6 +38,7 @@ def discovery_task() -> dict[str, int] | None:
 @task(name="ingestion-task", retries=1, retry_delay_seconds=5)
 def ingestion_task(*, max_jobs: int | None = None) -> int:
     """Run worker ingestion loop and return processed job count."""
+    setup_logging()
     logger = _get_logger()
     logger.info("Starting ingestion task")
     try:
@@ -52,6 +55,7 @@ def end_to_end_ingestion_task(
     max_jobs: int | None = None,
 ) -> dict[str, object]:
     """Run discovery then ingestion and return a serializable result payload."""
+    setup_logging()
     logger = _get_logger()
     logger.info("Starting end-to-end ingestion task")
     try:
