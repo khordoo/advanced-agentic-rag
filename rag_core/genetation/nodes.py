@@ -99,7 +99,8 @@ class GraphNodes:
         prompt = agent_prompt.chat_template.invoke({"question": current_user_query})
         response = self.fast_llm.invoke(prompt.to_messages())
         logger.info("Agent response received: %s", response)
-        formatted = RagFinalResponseSchema(answer=response.content, citations=[])
+        response_text = extract_text_from_message(response.content)
+        formatted = RagFinalResponseSchema(answer=response_text, citations=[])
         return {"messages": [AIMessage(content=formatted.model_dump_json())]}
 
     @observe(name=NodeName.PRIMARY_RAG_AGENT, as_type="agent")
