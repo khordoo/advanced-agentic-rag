@@ -35,9 +35,6 @@ docker compose --project-directory . -f docker/docker-compose.yaml up -d
 # Open Prefect dashboard
 # http://localhost:4200
 
-# Run end-to-end ingestion flow
-uv run --extra ingestion python -m orchestration.ingestion.flows end_to_end
-
 # Register a clickable deployment in Prefect UI (one-time or after flow changes)
 uv run --extra ingestion python -m orchestration.ingestion.flows end_to_end \
   --register-deployment --deployment-name local-ingestion-runner --work-pool ingestion-pool
@@ -111,8 +108,9 @@ default drain-the-queue behavior.
 
 Use Deployments in Prefect UI for one-click ingestion runs:
 1. Start stack (`docker compose --project-directory . -f docker/docker-compose.yaml up -d`).
-2. Register deployments via the command above (`make register-ingestion-deployments`).
-3. Open `http://localhost:4200`, go to Deployments, then click Quick Run on the safe ingestion deployment.
+2. Open `http://localhost:4200`, go to **Deployments**.
+3. Start ingestion from `local-ingestion-runner` via **Quick Run** (or create a **Schedule** from that deployment page).
+4. If `local-ingestion-runner` is missing, register deployments with `make register-ingestion-deployments`, then refresh the Deployments page.
 
 For destructive reset operations, run the separate `*-factory-reset` deployment and set `confirm_destructive_wipe=true`.
 

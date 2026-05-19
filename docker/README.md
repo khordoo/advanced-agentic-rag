@@ -56,7 +56,20 @@ is always safe and never produces duplicate resources.
 
 ## Run Ingestion Flow
 
-Trigger from the Prefect UI (recommended) or from host:
+Trigger ingestion from Prefect UI (recommended):
+
+1. Open `http://localhost:4200`
+2. Go to **Deployments**
+3. Open `local-ingestion-runner`
+4. Click **Quick Run** for immediate ingestion, or create a **Schedule** from the same deployment
+
+If `local-ingestion-runner` is not visible in Deployments:
+
+```bash
+make register-ingestion-deployments
+```
+
+Host-side manual trigger (optional):
 
 ```bash
 uv run --extra ingestion python -m orchestration.ingestion.flows end_to_end
