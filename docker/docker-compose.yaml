@@ -5,6 +5,8 @@ services:
       dockerfile: docker/Dockerfile.api
       args:
         UV_SYNC_EXTRAS: ${RAG_API_UV_SYNC_EXTRAS:---extra api}
+        API_ENABLE_CPU_RERANK: ${RAG_API_ENABLE_CPU_RERANK:-true}
+        TORCH_CPU_INDEX_URL: ${RAG_API_TORCH_CPU_INDEX_URL:-https://download.pytorch.org/whl/cpu}
     container_name: api
     ports:
       - "${RAG_API_PORT:-8000}:8000"
