@@ -14,6 +14,7 @@ services:
       - .env
     environment:
       - POSTGRES_HOST=core-db
+      - QDRANT_URL=http://qdrant:6333
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}
@@ -33,6 +34,8 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s # Gives Uvicorn time to boot and load your models
+    depends_on:
+      qdrant: { condition: service_started }
 
   prefect-server:
     image: prefecthq/prefect:3-python3.11
@@ -71,6 +74,7 @@ services:
       - .env
     environment:
       POSTGRES_HOST: core-db
+      QDRANT_URL: http://qdrant:6333
       PREFECT_API_URL: http://prefect-server:4200/api
       PREFECT_INGESTION_WORK_POOL: ${PREFECT_INGESTION_WORK_POOL:-ingestion-pool}
       PREFECT_WORKER_LIMIT: ${PREFECT_WORKER_LIMIT:-2}

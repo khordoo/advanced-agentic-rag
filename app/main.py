@@ -12,6 +12,7 @@ from app.routes.health import health_router
 from app.routes.openai import openai_router
 from app.schemas.openai import OpenAIError, OpenAIErrorEnvelope
 from app.services.rag_service import RagService
+from rag_core.core.readiness import ApplicationReadinessChecker, SetupRequiredError
 from rag_core.core.telemetry import init_observability
 from rag_core.genetation.graph import RagGraphFactory
 from rag_core.prompts.loader import AgentPrompt
@@ -31,6 +32,7 @@ async def lifespan(app: FastAPI):
         graph=graph,
         system_instructions=static_instructions,
         model_id=settings.model_id,
+        readiness_checker=ApplicationReadinessChecker(),
     )
     yield
 
@@ -51,6 +53,21 @@ async def openai_exception_handler(request: Request, exc: OpenAIException):
     )
     headers = {"x-request-id": request_id}
     return JSONResponse(status_code=exc.status_code, content=body.model_dump(), headers=headers)
+
+
+@app.exception_handler(SetupRequiredError)
+async def setup_required_exception_handler(request: Request, exc: SetupRequiredError):
+    request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
+    body = OpenAIErrorEnvelope(
+        error=OpenAIError(
+            message=exc.message,
+            type="setup_required_error",
+            param=None,
+            code=exc.reason,
+        )
+    )
+    headers = {"x-request-id": request_id}
+    return JSONResponse(status_code=409, content=body.model_dump(), headers=headers)
 
 
 @app.exception_handler(RequestValidationError)

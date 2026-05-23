@@ -8,6 +8,8 @@ from app.main import app
 from app.routes.openai import rag
 from app.schemas.openai import ChatCompletionRequest, ChatMessage
 from app.services.rag_service import GenerationResult
+from rag_core.genetation.nodes import NodeName
+from rag_core.core.readiness import SetupRequiredError
 
 
 class _StubRagService:
@@ -24,6 +26,36 @@ class _StubRagService:
                 ],
             },
         )
+
+    def create_event_stream(self, chat_req: ChatCompletionRequest):
+        async def _events():
+            yield {"event": "on_chain_start", "name": NodeName.TOOLS}
+            yield {
+                "event": "on_chain_end",
+                "name": NodeName.FALLBACK_HANDLER,
+                "data": {
+                    "output": {
+                        "messages": [
+                            {
+                                "content": json.dumps(
+                                    {
+                                        "answer": "Hello from agent",
+                                        "citations": [
+                                            {
+                                                "asset_key": "doc-1",
+                                                "page_number": 3,
+                                                "source_url": "/tmp/doc.pdf",
+                                            }
+                                        ],
+                                    }
+                                )
+                            }
+                        ]
+                    }
+                },
+            }
+
+        return _events()
 
 
 class _SlowStubRagService(_StubRagService):
@@ -45,6 +77,30 @@ class _UpstreamErrorService:
         from app.core.exceptions import UpstreamModelError
 
         raise UpstreamModelError("Malformed upstream output")
+
+    def create_event_stream(self, chat_req: ChatCompletionRequest):
+        async def _events():
+            raise RuntimeError("boom")
+            yield {}
+
+        return _events()
+
+
+class _SetupRequiredService:
+    model_id = "advanced-rag-agent-canonical"
+
+    async def generate_chat_completion(self, chat_req: ChatCompletionRequest):
+        raise SetupRequiredError(
+            reason="knowledge_base_empty",
+            message="No documents have been ingested yet. Run `make ingest`.",
+        )
+
+    def create_event_stream(self, chat_req: ChatCompletionRequest):
+        raise SetupRequiredError(
+            reason="knowledge_base_empty",
+            message="No documents have been ingested yet. Run `make ingest`.",
+        )
+
 
 def _make_request(**kwargs) -> ChatCompletionRequest:
     payload = {
@@ -128,7 +184,7 @@ def test_api_returns_openai_error_for_stream_true():
     assert first["choices"][0]["delta"]["role"] == "assistant"
     assert second["choices"][0]["delta"]["content"]
     assert "<think>" in second["choices"][0]["delta"]["content"]
-    assert "Analyzing request" in second["choices"][0]["delta"]["content"]
+    assert any("Searching knowledge base" in chunk for chunk in contents)
     assert full_stream.count("<think>") == 1
     assert full_stream.count("</think>") == 1
     assert final["choices"][0]["finish_reason"] == "stop"
@@ -179,6 +235,40 @@ def test_api_returns_openai_error_for_upstream_model_failures():
     assert body["error"]["code"] == "upstream_model_error"
 
 
+def test_api_returns_setup_required_for_non_streaming_chat():
+    client = TestClient(app)
+    app.state.rag_service = _SetupRequiredService()
+
+    res = client.post(
+        "/v1/chat/completions",
+        json={"model": "advanced-rag-agent", "messages": [{"role": "user", "content": "Hello"}]},
+    )
+
+    assert res.status_code == 409
+    body = res.json()
+    assert body["error"]["type"] == "setup_required_error"
+    assert body["error"]["code"] == "knowledge_base_empty"
+    assert "make ingest" in body["error"]["message"]
+
+
+def test_api_returns_setup_required_before_streaming_starts():
+    client = TestClient(app)
+    app.state.rag_service = _SetupRequiredService()
+
+    res = client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "advanced-rag-agent",
+            "messages": [{"role": "user", "content": "Hello"}],
+            "stream": True,
+        },
+    )
+
+    assert res.status_code == 409
+    assert "text/event-stream" not in res.headers.get("content-type", "")
+    assert res.json()["error"]["code"] == "knowledge_base_empty"
+
+
 def test_api_stream_honors_json_response_format():
     client = TestClient(app)
     app.state.rag_service = _StubRagService()
@@ -195,11 +285,14 @@ def test_api_stream_honors_json_response_format():
 
     assert res.status_code == 200
     data_lines = [line for line in res.text.splitlines() if line.startswith("data: ")]
-    second = json.loads(data_lines[1].replace("data: ", ""))
-    streamed_content = second["choices"][0]["delta"]["content"]
-    assert "Analyzing request" not in streamed_content
-    assert "<think>" not in streamed_content
-    parsed = json.loads(streamed_content)
+    payloads = [json.loads(line.replace("data: ", "")) for line in data_lines if line != "data: [DONE]"]
+    contents = [
+        p["choices"][0]["delta"].get("content", "")
+        for p in payloads
+        if isinstance(p, dict) and "choices" in p
+    ]
+    json_chunks = [chunk for chunk in contents if chunk.startswith("{")]
+    parsed = json.loads(json_chunks[-1])
     assert parsed["answer"] == "Hello from agent"
 
 
@@ -252,4 +345,4 @@ def test_api_stream_emits_delayed_markdown_status_for_long_running_calls():
     full_stream = "".join(contents)
     assert full_stream.count("<think>") == 1
     assert full_stream.count("</think>") == 1
-    assert any("Retrieving and verifying supporting documents" in chunk for chunk in contents)
+    assert any("Searching knowledge base" in chunk for chunk in contents)

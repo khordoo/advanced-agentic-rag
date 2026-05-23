@@ -3,6 +3,7 @@ import pytest
 from app.core.exceptions import UpstreamModelError
 from app.schemas.openai import ChatCompletionRequest, ChatMessage
 from app.services.rag_service import RagService, _IncrementalAnswerJSONParser
+from rag_core.core.readiness import SetupRequiredError
 
 
 class _Message:
@@ -36,6 +37,14 @@ class _GraphStreamOk:
 class _GraphStreamBadJson:
     async def astream_events(self, payload, version):
         yield {"event": "on_chat_model_stream", "data": {"chunk": _Message('{"answer":"x"')}}
+
+
+class _SetupRequiredChecker:
+    def ensure_ready(self) -> None:
+        raise SetupRequiredError(
+            reason="schema_not_migrated",
+            message="The database schema is not ready. Run `make ingest`.",
+        )
 
 
 @pytest.mark.asyncio
@@ -97,3 +106,19 @@ async def test_stream_chat_completion_emits_graceful_error_on_malformed_json_aft
     async for piece in service.stream_chat_completion(req, response_format="markdown"):
         chunks.append(piece)
     assert any("System Error" in chunk for chunk in chunks)
+
+
+@pytest.mark.asyncio
+async def test_generate_chat_completion_checks_readiness_before_graph_invocation():
+    service = RagService(
+        _GraphOk(),
+        "sys",
+        "model",
+        readiness_checker=_SetupRequiredChecker(),
+    )
+    req = ChatCompletionRequest(model="m", messages=[ChatMessage(role="user", content="hi")])
+
+    with pytest.raises(SetupRequiredError) as exc_info:
+        await service.generate_chat_completion(req)
+
+    assert exc_info.value.reason == "schema_not_migrated"
