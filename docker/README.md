@@ -10,12 +10,8 @@ docker compose --project-directory . -f docker/docker-compose.yaml up -d
 docker compose --project-directory . -f docker/docker-compose.yaml ps
 ```
 
-Default worker builds include PDF Docling processing. To also include local reranking runtime in the worker image:
-
-```bash
-INGESTION_WORKER_UV_SYNC_EXTRAS="--extra ingestion --extra doc-processing --extra rerank" \
-docker compose --project-directory . -f docker/docker-compose.yaml up -d --build
-```
+Default worker builds include ingestion, PDF Docling processing, and the dense
+FastEmbed model cache. The reranker is only needed by the API image.
 
 ## Services
 

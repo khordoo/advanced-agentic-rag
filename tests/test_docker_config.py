@@ -15,6 +15,8 @@ def test_docker_services_pass_through_docker_first_urls() -> None:
     api_env = services["rag_api"]["environment"]
     worker_env = services["ingestion-worker"]["environment"]
     web_env = services["web_ui"]["environment"]
+    api_build_args = services["rag_api"]["build"]["args"]
+    worker_build_args = services["ingestion-worker"]["build"]["args"]
 
     assert "POSTGRES_HOST=${POSTGRES_HOST:-core-db}" in api_env
     assert "QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}" in api_env
@@ -30,6 +32,20 @@ def test_docker_services_pass_through_docker_first_urls() -> None:
     assert "OPENAI_API_BASE_URL=${OPENAI_API_BASE_URL:-http://rag_api:8000/v1}" in web_env
     assert "OPENAI_API_KEY=${OPENAI_API_KEY:-dummy_key}" in web_env
     assert services["rag_api"]["depends_on"]["qdrant"]["condition"] == "service_started"
+    assert api_build_args["EMBEDDING_MODEL_NAME"] == "${EMBEDDING_MODEL_NAME:-BAAI/bge-small-en-v1.5}"
+    assert (
+        api_build_args["QDRANT_SPARSE_MODEL"]
+        == "${QDRANT_SPARSE_MODEL:-Qdrant/bm42-all-minilm-l6-v2-attentions}"
+    )
+    assert api_build_args["RERANK_MODEL_NAME"] == "${RERANK_MODEL_NAME:-BAAI/bge-reranker-v2-m3}"
+    assert api_build_args["HF_TOKEN"] == "${HF_TOKEN:-}"
+    assert worker_build_args["EMBEDDING_MODEL_NAME"] == "${EMBEDDING_MODEL_NAME:-BAAI/bge-small-en-v1.5}"
+    assert (
+        worker_build_args["QDRANT_SPARSE_MODEL"]
+        == "${QDRANT_SPARSE_MODEL:-Qdrant/bm42-all-minilm-l6-v2-attentions}"
+    )
+    assert worker_build_args["HF_TOKEN"] == "${HF_TOKEN:-}"
+    assert "RERANK_MODEL_NAME" not in worker_build_args
 
 
 def test_env_example_defaults_are_docker_compose_first() -> None:
@@ -46,7 +62,10 @@ def test_env_example_defaults_are_docker_compose_first() -> None:
     assert "Docker compose overrides QDRANT_URL" not in env_example
     assert "INGESTION_INDEXER_BACKEND=qdrant" in env_example
     assert "RETRIEVAL_BACKEND=qdrant" in env_example
+    assert "QDRANT_SPARSE_MODEL=Qdrant/bm42-all-minilm-l6-v2-attentions" in env_example
     assert "fresh ingestion after switching backends" in env_example
+    assert 'HF_TOKEN=""' in env_example
+    assert "INGESTION_WORKER_UV_SYNC_EXTRAS=--extra ingestion --extra doc-processing --extra rerank" not in env_example
 
 
 def test_makefile_host_targets_translate_docker_service_names() -> None:

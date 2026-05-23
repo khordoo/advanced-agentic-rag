@@ -10,20 +10,26 @@ from rag_core.embeddings.base import BaseEmbeddingModel
 logger = logging.getLogger(__name__)
 
 
-def _get_fastembed_model(model_name: str) -> Any:
+def _get_fastembed_model(model_name: str, cache_dir: str | None = None) -> Any:
     """Lazy-load a fastembed TextEmbedding model."""
     from fastembed import TextEmbedding  # type: ignore[import-untyped]
 
-    return TextEmbedding(model_name=model_name)
+    return TextEmbedding(model_name=model_name, cache_dir=cache_dir)
 
 
 class FastEmbedEmbeddingModel(BaseEmbeddingModel):
     """Embedding adapter for fastembed.TextEmbedding."""
 
-    def __init__(self, model_name: str, dimension: int) -> None:
+    def __init__(
+        self,
+        model_name: str,
+        dimension: int,
+        cache_dir: str | None = None,
+    ) -> None:
         if dimension < 1:
             raise ValueError("Embedding dimension must be greater than zero.")
         self.model_name = model_name
+        self.cache_dir = cache_dir
         self._dimension = dimension
         self._model = None
 
@@ -35,7 +41,10 @@ class FastEmbedEmbeddingModel(BaseEmbeddingModel):
     def model(self) -> Any:
         if self._model is None:
             logger.info("Loading fastembed model '%s' ...", self.model_name)
-            self._model = _get_fastembed_model(self.model_name)
+            self._model = _get_fastembed_model(
+                self.model_name,
+                cache_dir=self.cache_dir,
+            )
         return self._model
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:

@@ -7,6 +7,10 @@ services:
         UV_SYNC_EXTRAS: ${RAG_API_UV_SYNC_EXTRAS:---extra api}
         API_ENABLE_CPU_RERANK: ${RAG_API_ENABLE_CPU_RERANK:-true}
         TORCH_CPU_INDEX_URL: ${RAG_API_TORCH_CPU_INDEX_URL:-https://download.pytorch.org/whl/cpu}
+        EMBEDDING_MODEL_NAME: ${EMBEDDING_MODEL_NAME:-BAAI/bge-small-en-v1.5}
+        QDRANT_SPARSE_MODEL: ${QDRANT_SPARSE_MODEL:-Qdrant/bm42-all-minilm-l6-v2-attentions}
+        RERANK_MODEL_NAME: ${RERANK_MODEL_NAME:-BAAI/bge-reranker-v2-m3}
+        HF_TOKEN: ${HF_TOKEN:-}
     container_name: api
     ports:
       - "${RAG_API_PORT:-8000}:8000"
@@ -70,6 +74,9 @@ services:
       dockerfile: docker/Dockerfile.worker
       args:
         UV_SYNC_EXTRAS: ${INGESTION_WORKER_UV_SYNC_EXTRAS:---extra ingestion --extra doc-processing}
+        EMBEDDING_MODEL_NAME: ${EMBEDDING_MODEL_NAME:-BAAI/bge-small-en-v1.5}
+        QDRANT_SPARSE_MODEL: ${QDRANT_SPARSE_MODEL:-Qdrant/bm42-all-minilm-l6-v2-attentions}
+        HF_TOKEN: ${HF_TOKEN:-}
     container_name: ingestion-worker
     restart: always
     env_file:

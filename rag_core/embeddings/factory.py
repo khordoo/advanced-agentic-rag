@@ -20,6 +20,7 @@ def create_embedding_model(
         return FastEmbedEmbeddingModel(
             model_name=active_settings.model_name,
             dimension=active_settings.dimension,
+            cache_dir=active_settings.fastembed_cache_dir,
         )
 
     if provider == EmbeddingProvider.OPENAI:

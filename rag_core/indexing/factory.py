@@ -59,11 +59,12 @@ def _validate_backend_embedding_compatibility(
     ):
         raise ValueError(
             "Qdrant currently requires QdrantClient FastEmbed dense+sparse models "
-            "configured via QDRANT_EMBED_MODEL and QDRANT_SPARSE_MODEL. "
+            "configured via EMBEDDING_MODEL_NAME and QDRANT_SPARSE_MODEL. "
             f"Received EMBEDDING_PROVIDER={provider.value!r}. "
             "Fix: set EMBEDDING_PROVIDER=fastembed, then verify "
-            "QDRANT_EMBED_MODEL=BAAI/bge-small-en-v1.5 and "
-            "QDRANT_SPARSE_MODEL=prithivida/Splade_PP_en_v1 are configured."
+            "EMBEDDING_MODEL_NAME=BAAI/bge-small-en-v1.5 and "
+            "QDRANT_SPARSE_MODEL=Qdrant/bm42-all-minilm-l6-v2-attentions "
+            "are configured."
         )
 
     return resolved_backend
