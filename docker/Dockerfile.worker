@@ -1,0 +1,39 @@
+FROM python:3.11-slim
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+COPY pyproject.toml uv.lock README.md ./
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        libxcb1 \
+        libgl1 \
+        libsm6 \
+        libice6 \
+        libx11-6 \
+        libxext6 \
+        libxrender1 \
+        libxfixes3 \
+        libxi6 \
+        libxrandr2 \
+        libglib2.0-0 \
+        libnss3 \
+        libfontconfig1 \
+    && rm -rf /var/lib/apt/lists/*
+
+ARG UV_SYNC_EXTRAS="--extra ingestion --extra doc-processing"
+RUN uv sync --frozen --no-dev --no-install-project ${UV_SYNC_EXTRAS}
+
+COPY rag_core/ rag_core/
+COPY orchestration/ orchestration/
+COPY db/ db/
+
+# Portable entrypoint: pre-flight init → exec worker
+COPY docker/entrypoint-worker.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]

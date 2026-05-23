@@ -1,4 +1,4 @@
-.PHONY: up down reset logs stat migrate-up migrate-down migrate-new migrate-status migrate-statusd
+.PHONY: up down reset logs stat migrate-up migrate-down migrate-new migrate-status migrate-statusd register-ingestion-deployment register-ingestion-deployments run-ingestion-flow
 
 ENV_FILE:= .env
 COMPOSE_FILE:=docker/docker-compose.yaml
@@ -50,3 +50,22 @@ ingest: migrate-up
 	uv sync --all-extras
 	@echo "Starting Ingestion Pipeline..."
 	uv run python -m rag_core.ingestion.pipeline
+
+register-ingestion-deployment:
+	uv run --extra ingestion python -m orchestration.ingestion.flows end_to_end \
+		--register-deployment \
+		--deployment-name $${DEPLOYMENT_NAME:-local-ingestion-runner} \
+		--work-pool $${WORK_POOL:-ingestion-pool}
+
+register-ingestion-deployments:
+	uv run --extra ingestion python -m orchestration.ingestion.flows end_to_end \
+		--register-all-deployments \
+		--deployment-name $${DEPLOYMENT_NAME:-local-ingestion-runner} \
+		--work-pool $${WORK_POOL:-ingestion-pool}
+
+run-ingestion-flow:
+	@if [ -n "$(MAX_JOBS)" ]; then \
+		uv run --extra ingestion python -m orchestration.ingestion.flows end_to_end --max-jobs $(MAX_JOBS); \
+	else \
+		uv run --extra ingestion python -m orchestration.ingestion.flows end_to_end; \
+	fi

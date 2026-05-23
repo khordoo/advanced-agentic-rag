@@ -1,23 +1,9 @@
-"""Tests for canonical ingestion pipeline orchestration and the legacy shim.
-
-The original IngestionPipeline has been deprecated in favour of
-rag_core.ingestion.pipeline. These tests verify:
-
-1. The shim still instantiates without error (backward compat).
-2. The deprecation warning is raised on construction.
-3. The canonical discovery, ingestion, and e2e entrypoints compose correctly.
-4. The config loading defaults still work.
-
-Tests for internal methods (_iter_files, _get_tags_for_file, etc.) have been
-removed because those methods no longer exist on the shim.  Equivalent logic
-is now covered by the SourceDiscoveryService and metadata extraction tests.
-"""
+"""Tests for canonical ingestion pipeline orchestration."""
 
 from __future__ import annotations
 
 import logging
 from types import SimpleNamespace
-import warnings
 from pathlib import Path
 
 import pytest
@@ -26,7 +12,6 @@ from rag_core.core.config import IngestionSettings, load_config
 from rag_core.ingestion import pipeline as ingestion_pipeline
 from rag_core.ingestion import indexing_preflight
 from rag_core.ingestion.services.discovery import DiscoveryRunMetrics
-from rag_core.pipelines.ingestion import IngestionPipeline
 
 
 @pytest.fixture(autouse=True)
@@ -72,50 +57,6 @@ def test_ingestion_settings_default_max_jobs_reads_env_override(
     settings = IngestionSettings(_env_file=None)
 
     assert settings.default_max_jobs == 100
-
-
-def test_ingestion_pipeline_emits_deprecation_warning():
-    """Constructing the legacy pipeline must warn about deprecation."""
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
-        _ = IngestionPipeline(config={}, overwrite=False)
-        deprecation_warnings = [
-            x for x in w if issubclass(x.category, DeprecationWarning)
-        ]
-        assert len(deprecation_warnings) >= 1
-        assert "deprecated" in str(deprecation_warnings[0].message).lower()
-
-
-def test_ingestion_pipeline_shim_has_run_method():
-    """The shim exposes a .run() method for backward compat."""
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", DeprecationWarning)
-        pipeline = IngestionPipeline(config={}, overwrite=False)
-    assert hasattr(pipeline, "run")
-    assert callable(pipeline.run)
-
-
-def test_legacy_ingestion_pipeline_defaults_to_no_overwrite(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    calls: list[bool] = []
-
-    def _run_ingestion_pipeline(*, overwrite: bool) -> int:
-        calls.append(overwrite)
-        return 12
-
-    monkeypatch.setattr(
-        ingestion_pipeline,
-        "run_ingestion_pipeline",
-        _run_ingestion_pipeline,
-    )
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", DeprecationWarning)
-        pipeline = IngestionPipeline(config={})
-
-    assert pipeline.run() == 12
-    assert calls == [False]
 
 
 def test_run_discovery_pipeline_delegates_to_discovery_service(
@@ -428,55 +369,3 @@ def test_run_pipeline_reads_runtime_overwrite_setting(
     assert ingestion_pipeline.run_pipeline() is expected
     assert calls == [True]
 
-
-def test_legacy_ingestion_pipeline_run_delegates_to_canonical_pipeline(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    calls: list[bool] = []
-
-    def _run_ingestion_pipeline(*, overwrite: bool) -> int:
-        calls.append(overwrite)
-        return 12
-
-    monkeypatch.setattr(
-        ingestion_pipeline,
-        "run_ingestion_pipeline",
-        _run_ingestion_pipeline,
-    )
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", DeprecationWarning)
-        pipeline = IngestionPipeline(config={}, overwrite=True)
-
-    assert pipeline.run() == 12
-    assert calls == [True]
-
-
-@pytest.mark.skip(
-    reason=(
-        "Legacy IngestionPipeline._iter_files removed during deprecation. "
-        "File iteration is now handled by SourceDiscoveryService + FileScanner."
-    )
-)
-def test_iter_files_accepts_pdf_and_md_with_ignore_lists():
-    pass
-
-
-@pytest.mark.skip(
-    reason=(
-        "Legacy IngestionPipeline._get_tags_for_file removed during deprecation. "
-        "Tag extraction is now handled by rag_core.ingestion.metadata."
-    )
-)
-def test_folder_name_is_used_as_tag():
-    pass
-
-
-@pytest.mark.skip(
-    reason=(
-        "Legacy IngestionPipeline.run() now delegates to rag_core.ingestion.pipeline. "
-        "E2E ingestion tests should target the canonical pipeline entrypoint."
-    )
-)
-def test_run_skips_ignored_files_and_processes_pdf_and_md():
-    pass

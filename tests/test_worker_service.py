@@ -278,7 +278,10 @@ def test_processor_failure_logs_retry_outcome(caplog: pytest.LogCaptureFixture) 
     assert indexer.indexed_assets == []
     assert worker.extended_leases == []
     assert worker.completed_assets == []
-    assert worker.failed_assets == [(30, "processor failed")]
+    assert len(worker.failed_assets) == 1
+    assert worker.failed_assets[0][0] == 30
+    assert "type=RuntimeError" in worker.failed_assets[0][1]
+    assert "detail=processor failed" in worker.failed_assets[0][1]
     assert "returning asset to queue" in caplog.text
 
 
@@ -300,7 +303,9 @@ def test_processor_failure_logs_permanent_failure_outcome(
     assert indexer.indexed_assets == []
     assert worker.extended_leases == []
     assert worker.completed_assets == []
-    assert worker.failed_assets == [(31, "processor failed")]
+    assert len(worker.failed_assets) == 1
+    assert worker.failed_assets[0][0] == 31
+    assert "detail=processor failed" in worker.failed_assets[0][1]
     assert "exhausted retries" in caplog.text
 
 
@@ -322,7 +327,9 @@ def test_processor_failure_logs_lost_ownership_outcome(
     assert indexer.indexed_assets == []
     assert worker.extended_leases == []
     assert worker.completed_assets == []
-    assert worker.failed_assets == [(32, "processor failed")]
+    assert len(worker.failed_assets) == 1
+    assert worker.failed_assets[0][0] == 32
+    assert "detail=processor failed" in worker.failed_assets[0][1]
     assert "worker no longer owns lease" in caplog.text
 
 
@@ -337,7 +344,9 @@ def test_indexer_failure_marks_asset_failed() -> None:
         (40, [])
     ]
     assert worker.completed_assets == []
-    assert worker.failed_assets == [(40, "indexer failed")]
+    assert len(worker.failed_assets) == 1
+    assert worker.failed_assets[0][0] == 40
+    assert "detail=indexer failed" in worker.failed_assets[0][1]
 
 
 def test_completion_failure_after_indexing_logs_critical(caplog: pytest.LogCaptureFixture) -> None:

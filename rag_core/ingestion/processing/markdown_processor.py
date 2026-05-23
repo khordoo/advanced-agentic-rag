@@ -95,12 +95,17 @@ class MarkdownProcessor(BaseProcessor):
 
         # --- Step 1: Convert to Markdown ---
         if file_ext == ".pdf":
-            markdown, tables = convert_pdf_to_markdown(
-                input_path=absolute_path,
-                table_context_window=self.table_context_window,
-                file_id=asset.asset_key,
-                asset_name=asset.asset_name,
-            )
+            try:
+                markdown, tables = convert_pdf_to_markdown(
+                    input_path=absolute_path,
+                    table_context_window=self.table_context_window,
+                    file_id=asset.asset_key,
+                    asset_name=asset.asset_name,
+                )
+            except Exception as exc:
+                raise RuntimeError(
+                    f"convert_pdf_to_markdown failed for {absolute_path}: {exc}"
+                ) from exc
         elif file_ext == ".md":
             markdown = Path(absolute_path).read_text(encoding="utf-8")
             tables = []
@@ -120,28 +125,38 @@ class MarkdownProcessor(BaseProcessor):
         )
 
         # --- Step 2: Summarise tables ---
-        table_chunks = summerize_and_chunk_table(
-            tables,
-            tags=asset.tags,
-            scopes=asset.scopes,
-            model=self.table_summarizer,
-            summerize_enabled=self.summarize_tables_enabled,
-        )
+        try:
+            table_chunks = summerize_and_chunk_table(
+                tables,
+                tags=asset.tags,
+                scopes=asset.scopes,
+                model=self.table_summarizer,
+                summerize_enabled=self.summarize_tables_enabled,
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                f"table summarization failed for {absolute_path}: {exc}"
+            ) from exc
         logger.info(
             "Table summarization complete",
             extra={"asset_id": asset.id, "table_chunks": len(table_chunks)},
         )
 
         # --- Step 3: Chunk the markdown ---
-        text_chunks = chunk_markdown(
-            markdown=markdown,
-            source_path=absolute_path,
-            tags=asset.tags,
-            scopes=asset.scopes,
-            config=self.config,
-            file_id=asset.asset_key,
-            asset_name=asset.asset_name,
-        )
+        try:
+            text_chunks = chunk_markdown(
+                markdown=markdown,
+                source_path=absolute_path,
+                tags=asset.tags,
+                scopes=asset.scopes,
+                config=self.config,
+                file_id=asset.asset_key,
+                asset_name=asset.asset_name,
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                f"chunk_markdown failed for {absolute_path}: {exc}"
+            ) from exc
         logger.info(
             "Chunked markdown into parent chunks",
             extra={"asset_id": asset.id, "parent_chunks": len(text_chunks)},

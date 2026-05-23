@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 import random
 import socket
 import time
@@ -215,14 +216,20 @@ class SourceIngestionWorkerService:
                     extra={"worker_id": self.worker_id, "asset_id": asset.id},
                 )
         except Exception as exc:
+            error_payload = self._build_asset_error_message(asset=asset, exc=exc)
             logger.exception(
                 "Failure processing source asset",
-                extra={"worker_id": self.worker_id, "asset_id": asset.id},
+                extra={
+                    "worker_id": self.worker_id,
+                    "asset_id": asset.id,
+                    "source_uri": asset.source_uri,
+                    "error_payload": error_payload,
+                },
             )
             new_state = self._mark_asset_failed(
                 asset.id,
                 lease_version=asset.lease_version,
-                error_message=str(exc),
+                error_message=error_payload,
             )
             if new_state == AssetState.PENDING:
                 logger.warning(
@@ -315,6 +322,31 @@ class SourceIngestionWorkerService:
 
     def _process_asset(self, asset: ClaimedSourceAsset) -> list[ParentChunk]:
         return self.processor.process_asset(asset)
+
+    @staticmethod
+    def _build_asset_error_message(asset: ClaimedSourceAsset, exc: Exception) -> str:
+        source_uri = asset.source_uri
+        resolved_path = source_uri
+        file_ext = Path(source_uri).suffix.lower()
+        stage = "asset_processing"
+
+        if "file://" in source_uri:
+            resolved_path = source_uri.replace("file://", "", 1)
+
+        message = str(exc)
+        lowered = message.lower()
+        if "convert_pdf_to_markdown" in lowered or "pdf ingestion requires" in lowered:
+            stage = "convert_pdf_to_markdown"
+        elif "table" in lowered and "summar" in lowered:
+            stage = "table_summarization"
+        elif "chunk" in lowered:
+            stage = "chunk_markdown"
+
+        return (
+            f"type={type(exc).__name__}; stage={stage}; asset_id={asset.id}; "
+            f"asset_key={asset.asset_key}; source_uri={source_uri}; "
+            f"resolved_path={resolved_path}; ext={file_ext}; detail={message}"
+        )
 
     def _index_chunks(
         self,

@@ -4,16 +4,18 @@ TODO: "Note: If memory becomes an issue for large docs, we should re-implement t
 """
 
 from __future__ import annotations
-from typing import List
+from typing import Any, List
 import logging
 import os
 import re
 from pathlib import Path
 
-from docling.document_converter import DocumentConverter
-from docling_core.types.doc import DoclingDocument,DocItemLabel, TableItem, TextItem
-
 logger = logging.getLogger(__name__)
+
+try:
+    from docling.document_converter import DocumentConverter
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    DocumentConverter = None
 
 PAGE_TMPL = "<!-- PAGE_{n} -->"
 _pattern_str = re.escape(PAGE_TMPL).replace(r"\{n\}", r"(\d+)")
@@ -52,6 +54,12 @@ def convert_pdf_to_markdown(
     if not input_path.is_file():
         raise FileNotFoundError(f"Source PDF not found: {input_path}")
 
+    if DocumentConverter is None:
+        raise RuntimeError(
+            "PDF ingestion requires optional dependency `doc-processing`. "
+            "Install with `uv sync --extra doc-processing`."
+        )
+
     converter = DocumentConverter()
     logger.info("Converting %s to markdown …", input_path.name)
     result = converter.convert(str(input_path))
@@ -84,12 +92,14 @@ def convert_pdf_to_markdown(
 
 
 def _enrich_tables_with_surrounding_text(
-    document: DoclingDocument,
+    document: Any,
     source_path: Path,
     table_context_window=3,
     file_id: str | None = None,
     asset_name: str | None = None,
 ) -> List[str]:
+    from docling_core.types.doc import DocItemLabel, TableItem, TextItem
+
     # Convert to list so we can look ahead/behind by index
     # Dcouments are genrally small for processing in memeory should be fast
     items = [item for item, _ in document.iterate_items()]

@@ -24,8 +24,26 @@ uv sync --extra dev
 # Configure
 cp .env.example .env
 
-# Ingest source files from data/source_documents/
-uv run python -m rag_core.ingestion.pipeline
+# Start local infrastructure and services
+docker compose --project-directory . -f docker/docker-compose.yaml up -d
+
+# Default worker image includes PDF Docling processing.
+# If you also need local reranking in the worker image:
+# INGESTION_WORKER_UV_SYNC_EXTRAS="--extra ingestion --extra doc-processing --extra rerank" \
+# docker compose --project-directory . -f docker/docker-compose.yaml up -d --build
+
+# Open Prefect dashboard
+# http://localhost:4200
+
+# Register a clickable deployment in Prefect UI (one-time or after flow changes)
+uv run --extra ingestion python -m orchestration.ingestion.flows end_to_end \
+  --register-deployment --deployment-name local-ingestion-runner --work-pool ingestion-pool
+
+# Equivalent Makefile shortcut
+make register-ingestion-deployment
+
+# Register both safe ingestion + destructive factory-reset deployments
+make register-ingestion-deployments
 
 # Start CLI
 uv run rag_core/cli.py
@@ -86,6 +104,29 @@ asset claims are coordinated through database leases.
 canary runs, or bounded orchestrator tasks. Leave it commented out for the
 default drain-the-queue behavior.
 
+## Prefect UI Trigger
+
+Use Deployments in Prefect UI for one-click ingestion runs:
+1. Start stack (`docker compose --project-directory . -f docker/docker-compose.yaml up -d`).
+2. Open `http://localhost:4200`, go to **Deployments**.
+3. Start ingestion from `local-ingestion-runner` via **Quick Run** (or create a **Schedule** from that deployment page).
+4. If `local-ingestion-runner` is missing, register deployments with `make register-ingestion-deployments`, then refresh the Deployments page.
+
+For destructive reset operations, run the separate `*-factory-reset` deployment and set `confirm_destructive_wipe=true`.
+
+If runs fail on first start due to missing schema, run:
+
+```bash
+make migrate-up
+```
+
+If Docker builds fail with `No space left on device` while extracting NVIDIA/CUDA wheels, use the default lightweight extras (already in `.env.example`) or clean disk first:
+
+```bash
+docker system prune -af --volumes
+uv cache clean
+```
+
 ## Folder Conventions
 
 - `docs/` contains project guides and operational documentation.
@@ -100,7 +141,10 @@ default drain-the-queue behavior.
 
 ```text
 advanced-rag/
+├── app/                    # API transport layer
+├── orchestration/          # Prefect flows/worker runtime
 ├── rag_core/
+├── infra/                  # Future IaC
 ├── docs/
 ├── data/source_documents/
 ├── examples/

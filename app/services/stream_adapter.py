@@ -15,6 +15,7 @@ Design constraints:
 
 import json
 import logging
+import re
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -93,6 +94,7 @@ class _StreamState:
     final_json: dict | None = None
     raw_fallback: str = ""
     retry_count: int = 0
+    last_intent_line: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -122,7 +124,8 @@ def _extract_tool_detail(event: dict) -> str:
     if tool_name == "semantic_search":
         query = run_input.get("query", "")
         if query:
-            return f'Searching: "{query[:80]}"'
+            formatted_query = _format_ui_query(query)
+            return f'• Searching knowledge base for: "{formatted_query}"'
         return "Running semantic search..."
     if tool_name == "page_lookup":
         page = run_input.get("page_number", "?")
@@ -130,6 +133,31 @@ def _extract_tool_detail(event: dict) -> str:
     if tool_name == "table_lookup":
         return "Looking up table data..."
     return f"Executing {tool_name}..."
+
+
+def _format_ui_query(raw_query: str, max_words: int = 5) -> str:
+    """Normalize verbose retrieval queries into short UI-facing intent fragments."""
+    clean_text = re.sub(r"\s+", " ", raw_query.strip()).strip("\"' ")
+    if not clean_text:
+        return ""
+
+    words = clean_text.split(" ")
+    if len(words) <= max_words:
+        return clean_text
+    return " ".join(words[:max_words]) + "..."
+
+
+def _semantic_intent_key(event: dict) -> str:
+    """Return a normalized semantic-search intent key for dedupe, else empty string."""
+    if event.get("name", "") != "semantic_search":
+        return ""
+    run_input = event.get("data", {}).get("input", {})
+    if not isinstance(run_input, dict):
+        return ""
+    query = run_input.get("query", "")
+    if not isinstance(query, str) or not query.strip():
+        return ""
+    return _format_ui_query(query)
 
 
 # ---------------------------------------------------------------------------
@@ -181,7 +209,15 @@ async def adapt_graph_stream(
                 if not state.think_open:
                     yield "<think>\n"
                     state.think_open = True
-                yield f"{_extract_tool_detail(event)}\n"
+                detail = _extract_tool_detail(event)
+                semantic_key = _semantic_intent_key(event)
+                if semantic_key:
+                    if semantic_key == state.last_intent_line:
+                        continue
+                    state.last_intent_line = semantic_key
+                else:
+                    state.last_intent_line = ""
+                yield f"{detail}\n"
 
             # Verifier outcome → <think> feedback
             elif event_type == "on_chain_end" and event_name == NodeName.SELF_CORRECTING_AGENT:
