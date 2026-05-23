@@ -4,7 +4,12 @@ ENV_FILE:= .env
 COMPOSE_FILE:=docker/docker-compose.yaml
 ALEMBIC_CONFIG:=db/alembic.ini
 ALEMBIC_BASE:=$(if $(shell command -v uv 2>/dev/null),uv run alembic,$(if $(wildcard .venv/bin/alembic),.venv/bin/alembic,))
-ALEMBIC:=$(ALEMBIC_BASE) -c $(ALEMBIC_CONFIG)
+HOST_POSTGRES_HOST?=localhost
+HOST_QDRANT_URL?=http://localhost:6333
+HOST_PREFECT_API_URL?=http://localhost:4200/api
+HOST_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT?=http://localhost:6006/v1/traces
+HOST_ENV:=POSTGRES_HOST=$(HOST_POSTGRES_HOST) QDRANT_URL=$(HOST_QDRANT_URL) PREFECT_API_URL=$(HOST_PREFECT_API_URL) OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=$(HOST_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT)
+ALEMBIC:=$(HOST_ENV) $(ALEMBIC_BASE) -c $(ALEMBIC_CONFIG)
 # Contaienr name
 # 1. Capture the "rest" of the arguments
 ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
@@ -49,23 +54,23 @@ ingest: migrate-up
 	@echo "Ensuring all local dependencies are synced..."
 	uv sync --all-extras
 	@echo "Starting Ingestion Pipeline..."
-	uv run python -m rag_core.ingestion.pipeline
+	$(HOST_ENV) uv run python -m rag_core.ingestion.pipeline
 
 register-ingestion-deployment:
-	uv run --extra ingestion python -m orchestration.ingestion.flows end_to_end \
+	$(HOST_ENV) uv run --extra ingestion python -m orchestration.ingestion.flows end_to_end \
 		--register-deployment \
 		--deployment-name $${DEPLOYMENT_NAME:-local-ingestion-runner} \
 		--work-pool $${WORK_POOL:-ingestion-pool}
 
 register-ingestion-deployments:
-	uv run --extra ingestion python -m orchestration.ingestion.flows end_to_end \
+	$(HOST_ENV) uv run --extra ingestion python -m orchestration.ingestion.flows end_to_end \
 		--register-all-deployments \
 		--deployment-name $${DEPLOYMENT_NAME:-local-ingestion-runner} \
 		--work-pool $${WORK_POOL:-ingestion-pool}
 
 run-ingestion-flow:
 	@if [ -n "$(MAX_JOBS)" ]; then \
-		uv run --extra ingestion python -m orchestration.ingestion.flows end_to_end --max-jobs $(MAX_JOBS); \
+		$(HOST_ENV) uv run --extra ingestion python -m orchestration.ingestion.flows end_to_end --max-jobs $(MAX_JOBS); \
 	else \
-		uv run --extra ingestion python -m orchestration.ingestion.flows end_to_end; \
+		$(HOST_ENV) uv run --extra ingestion python -m orchestration.ingestion.flows end_to_end; \
 	fi

@@ -33,6 +33,7 @@ After startup, open:
 - Prefect dashboard: `http://localhost:4200`
 - RAG API health: `http://localhost:8000/ping`
 - Web UI: `http://localhost:3000`
+- Qdrant dashboard: `http://localhost:6333/dashboard`
 - Phoenix: `http://localhost:6006`
 
 ## Auto-Provisioning (Zero Manual Steps)
@@ -72,8 +73,12 @@ make register-ingestion-deployments
 Host-side manual trigger (optional):
 
 ```bash
-uv run --extra ingestion python -m orchestration.ingestion.flows end_to_end
+make run-ingestion-flow
 ```
+
+The `.env` file is Docker Compose-first. Makefile host-run targets translate
+Docker service hostnames to host-reachable defaults through `HOST_*` variables
+such as `HOST_POSTGRES_HOST=localhost` and `HOST_QDRANT_URL=http://localhost:6333`.
 
 ## Data Persistence
 

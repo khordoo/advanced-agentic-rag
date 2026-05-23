@@ -13,8 +13,10 @@ services:
     env_file:
       - .env
     environment:
-      - POSTGRES_HOST=core-db
-      - QDRANT_URL=http://qdrant:6333
+      - POSTGRES_HOST=${POSTGRES_HOST:-core-db}
+      - QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}
+      - OPEN_AI_COMPATIBLE_BASE_URL=${OPEN_AI_COMPATIBLE_BASE_URL:-http://host.docker.internal:1234/v1}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}
@@ -73,9 +75,9 @@ services:
     env_file:
       - .env
     environment:
-      POSTGRES_HOST: core-db
-      QDRANT_URL: http://qdrant:6333
-      PREFECT_API_URL: http://prefect-server:4200/api
+      POSTGRES_HOST: ${POSTGRES_HOST:-core-db}
+      QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
+      PREFECT_API_URL: ${PREFECT_API_URL:-http://prefect-server:4200/api}
       PREFECT_INGESTION_WORK_POOL: ${PREFECT_INGESTION_WORK_POOL:-ingestion-pool}
       PREFECT_WORKER_LIMIT: ${PREFECT_WORKER_LIMIT:-2}
     volumes:
@@ -92,8 +94,8 @@ services:
       - "${RAG_WEB_UI_PORT:-3000}:8080"
     environment:
       # You just point the UI to your RAG API as if it were OpenAI!
-      - OPENAI_API_BASE_URL=http://rag_api:8000/v1
-      - OPENAI_API_KEY=dummy_key
+      - OPENAI_API_BASE_URL=${OPENAI_API_BASE_URL:-http://rag_api:8000/v1}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-dummy_key}
     healthcheck:
       test:
         - "CMD-SHELL"
