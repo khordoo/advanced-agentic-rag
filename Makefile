@@ -74,3 +74,6 @@ run-ingestion-flow:
 	else \
 		$(HOST_ENV) uv run --extra ingestion python -m orchestration.ingestion.flows end_to_end; \
 	fi
+
+test:
+	uv run pytest tests/

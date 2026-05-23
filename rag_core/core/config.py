@@ -33,8 +33,6 @@ _DEFAULTS: dict[str, str] = {
     "PROCCESED_DOCS_DIR": "data/processed",
     "DOCUMENT_STORE_PERSIST_PATH": "artifacts/document_store/document_store.pkl",
     "SYNTHETIC_QA_PERSIST_PATH": "data/synthetic/eval_question_answers.json",
-    "HF_EMBEDDING_MODEL": "sentence-transformers/all-MiniLM-L6-v2",
-    "HF_RERANKER_MODEL": "BAAI/bge-reranker-v2-m3",
     "LLM_MAX_PARALLEL_REQUEST": "3",
     "PARENT_CHUNK_SIZE": "1500",
     "PARENT_CHUNK_OVERLAP": "150",
