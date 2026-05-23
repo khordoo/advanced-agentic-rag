@@ -5,10 +5,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
 
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect, select
 from sqlalchemy.exc import SQLAlchemyError
 
 from rag_core.core.config import RetrievalSettings, get_qdrant_settings, get_retrieval_settings
+from rag_core.store.postgres.models.documents import DocumentChunk, DocumentSection
+from rag_core.store.postgres.models.ingestion import IngestionRun, SourceAsset
 from rag_core.store.postgres.session import Database, get_database
 from rag_core.store.qdrant import QdrantConnectionManager
 
@@ -17,10 +19,10 @@ logger = logging.getLogger(__name__)
 SetupReason = Literal["database_unavailable", "schema_not_migrated", "knowledge_base_empty"]
 
 REQUIRED_TABLES: tuple[str, ...] = (
-    "ingestion_runs",
-    "source_assets",
-    "document_sections",
-    "document_chunks",
+    IngestionRun.__tablename__,
+    SourceAsset.__tablename__,
+    DocumentSection.__tablename__,
+    DocumentChunk.__tablename__,
 )
 
 
@@ -87,9 +89,7 @@ class ApplicationReadinessChecker:
     def _ensure_postgres_documents_exist(self) -> None:
         try:
             with self._db.get_session() as session:
-                has_chunks = bool(
-                    session.scalar(text("SELECT EXISTS (SELECT 1 FROM document_chunks LIMIT 1)"))
-                )
+                has_chunks = bool(session.scalar(select(DocumentChunk.id).limit(1)))
         except SQLAlchemyError as exc:
             logger.warning("readiness_postgres_check_failed", exc_info=exc)
             lowered = str(exc).lower()
@@ -155,4 +155,3 @@ class ApplicationReadinessChecker:
                     "the `local-ingestion-runner` deployment from Prefect, then try again."
                 ),
             )
-

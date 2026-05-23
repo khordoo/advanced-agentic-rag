@@ -18,6 +18,7 @@ from rag_core.ingestion.pipeline import run_discovery_pipeline
 from rag_core.ingestion.pipeline import run_end_to_end_pipeline
 from rag_core.ingestion.pipeline import run_ingestion_pipeline
 from rag_core.ingestion.services.worker import SourceIngestionWorkerService
+from rag_core.store.postgres.models.ingestion import IngestionRun, SourceAsset
 from rag_core.store.postgres.session import get_database
 
 
@@ -122,10 +123,9 @@ def reset_ingestion_registries_task() -> None:
     logger = _get_logger()
     logger.warning("Resetting ingestion registries")
     database = get_database()
+    table_names = f"{SourceAsset.__tablename__}, {IngestionRun.__tablename__}"
     with database.get_session() as session:
-        session.execute(
-            text("TRUNCATE TABLE source_assets, ingestion_runs RESTART IDENTITY CASCADE")
-        )
+        session.execute(text(f"TRUNCATE TABLE {table_names} RESTART IDENTITY CASCADE"))
         session.commit()
     logger.warning("Ingestion registries reset completed")
 
