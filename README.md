@@ -23,7 +23,8 @@ uv sync --extra dev
 
 # Configure
 cp .env.example .env
-# Optional: set HF_TOKEN in .env to avoid Hugging Face rate limits or prefetch gated models.
+# Optional: Set HF_TOKEN in .env if you use gated models or hit rate limits.
+# For standard use with default models, you can leave it blank.
 
 # Start local infrastructure and services
 docker compose --project-directory . -f docker/docker-compose.yaml up -d
