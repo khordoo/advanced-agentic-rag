@@ -46,8 +46,6 @@ _DEFAULTS: dict[str, str] = {
     # Qdrant (production track)
     "QDRANT_URL": "http://localhost:6333",
     "QDRANT_COLLECTION_NAME": "docs",
-    # LangFuse (production track)
-    "LANGFUSE_HOST": "http://localhost:3000",
     "LOG_LEVEL": "INFO",
 }
 

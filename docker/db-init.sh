@@ -32,10 +32,8 @@ require_non_empty "POSTGRES_USER" "${POSTGRES_USER:-}"
 require_non_empty "POSTGRES_DB" "${POSTGRES_DB:-}"
 require_non_empty "PERFECT_DB" "${PERFECT_DB:-}"
 require_non_empty "RAG_DB (or POSTGRES_RAG_DB)" "$RAG_DB_NAME"
-require_non_empty "LANGFUSE_DB" "${LANGFUSE_DB:-}"
 
 create_db "${PERFECT_DB}"
 create_db "$RAG_DB_NAME"
-create_db "${LANGFUSE_DB}"
 
 create_extension "$RAG_DB_NAME" "vector"

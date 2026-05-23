@@ -12,6 +12,7 @@ from app.routes.health import health_router
 from app.routes.openai import openai_router
 from app.schemas.openai import OpenAIError, OpenAIErrorEnvelope
 from app.services.rag_service import RagService
+from rag_core.core.telemetry import init_observability
 from rag_core.genetation.graph import RagGraphFactory
 from rag_core.prompts.loader import AgentPrompt
 
@@ -21,6 +22,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
+    init_observability(service_name="advanced-rag-api")
     graph = RagGraphFactory.build_default()
 
     agent_prompt = AgentPrompt.from_package("primary_rag_agent")
