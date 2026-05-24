@@ -86,6 +86,7 @@ services:
       QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
       PREFECT_API_URL: ${PREFECT_API_URL:-http://prefect-server:4200/api}
       PREFECT_INGESTION_WORK_POOL: ${PREFECT_INGESTION_WORK_POOL:-ingestion-pool}
+      PREFECT_LOGGING_EXTRA_LOGGERS: ${PREFECT_LOGGING_EXTRA_LOGGERS:-rag_core}
       PREFECT_WORKER_LIMIT: ${PREFECT_WORKER_LIMIT:-2}
     volumes:
       - ./data/source_documents:/app/data/source_documents:ro

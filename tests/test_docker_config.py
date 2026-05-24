@@ -29,6 +29,7 @@ def test_docker_services_pass_through_docker_first_urls() -> None:
     assert worker_env["POSTGRES_HOST"] == "${POSTGRES_HOST:-core-db}"
     assert worker_env["QDRANT_URL"] == "${QDRANT_URL:-http://qdrant:6333}"
     assert worker_env["PREFECT_API_URL"] == "${PREFECT_API_URL:-http://prefect-server:4200/api}"
+    assert worker_env["PREFECT_LOGGING_EXTRA_LOGGERS"] == "${PREFECT_LOGGING_EXTRA_LOGGERS:-rag_core}"
     assert "OPENAI_API_BASE_URL=${OPENAI_API_BASE_URL:-http://rag_api:8000/v1}" in web_env
     assert "OPENAI_API_KEY=${OPENAI_API_KEY:-dummy_key}" in web_env
     assert services["rag_api"]["depends_on"]["qdrant"]["condition"] == "service_started"
@@ -56,6 +57,7 @@ def test_env_example_defaults_are_docker_compose_first() -> None:
     assert "QDRANT_URL=http://qdrant:6333" in env_example
     assert "POSTGRES_HOST=core-db" in env_example
     assert "PREFECT_API_URL=http://prefect-server:4200/api" in env_example
+    assert "PREFECT_LOGGING_EXTRA_LOGGERS=rag_core" in env_example
     assert "OPENAI_API_BASE_URL=http://rag_api:8000/v1" in env_example
     assert "localhost or another reachable host" in env_example
     assert "Makefile host-run targets already do" in env_example
@@ -77,4 +79,4 @@ def test_makefile_host_targets_translate_docker_service_names() -> None:
     assert "HOST_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT?=http://localhost:6006/v1/traces" in makefile
     assert "HOST_ENV:=POSTGRES_HOST=$(HOST_POSTGRES_HOST)" in makefile
     assert "$(HOST_ENV) $(ALEMBIC_BASE) -c $(ALEMBIC_CONFIG)" in makefile
-    assert "$(HOST_ENV) uv run python -m rag_core.ingestion.pipeline" in makefile
+    assert "ingestion-worker run --no-sync python -m orchestration.ingestion.flows end_to_end" in makefile
