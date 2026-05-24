@@ -1,4 +1,4 @@
-.PHONY: up down reset logs stat migrate-up migrate-down migrate-new migrate-status migrate-statusd register-ingestion-deployment register-ingestion-deployments run-ingestion-flow
+.PHONY: up down reset logs stat migrate-up migrate-down migrate-new migrate-status migrate-statusd ingest register-ingestion-deployment register-ingestion-deployments run-ingestion-flow test
 
 ENV_FILE:= .env
 COMPOSE_FILE:=docker/docker-compose.yaml
@@ -10,7 +10,8 @@ HOST_PREFECT_API_URL?=http://localhost:4200/api
 HOST_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT?=http://localhost:6006/v1/traces
 HOST_ENV:=POSTGRES_HOST=$(HOST_POSTGRES_HOST) QDRANT_URL=$(HOST_QDRANT_URL) PREFECT_API_URL=$(HOST_PREFECT_API_URL) OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=$(HOST_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT)
 ALEMBIC:=$(HOST_ENV) $(ALEMBIC_BASE) -c $(ALEMBIC_CONFIG)
-# Contaienr name
+
+# Container name
 # 1. Capture the "rest" of the arguments
 ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
 # 2. Prevent 'make' from complaining that the container name isn't a valid command
@@ -25,8 +26,9 @@ down:
 reset:
 	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) down --volumes
 	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) up --build -d
+
 logs:
-	docker compose --project-directory . -f $(COMPOSE_FILE) logs -f --tail=100 $(ARG)
+	docker compose --project-directory . -f $(COMPOSE_FILE) logs -f --tail=100 $(ARGS)
 
 stat:
 	docker stats
@@ -51,28 +53,11 @@ migrate-status:
 migrate-statusd: migrate-status
 
 ingest: migrate-up
-	@echo "Ensuring all local dependencies are synced..."
-	uv sync --all-extras
-	@echo "Starting Ingestion Pipeline..."
-	$(HOST_ENV) uv run python -m rag_core.ingestion.pipeline
-
-register-ingestion-deployment:
-	$(HOST_ENV) uv run --extra ingestion python -m orchestration.ingestion.flows end_to_end \
-		--register-deployment \
-		--deployment-name $${DEPLOYMENT_NAME:-local-ingestion-runner} \
-		--work-pool $${WORK_POOL:-ingestion-pool}
-
-register-ingestion-deployments:
-	$(HOST_ENV) uv run --extra ingestion python -m orchestration.ingestion.flows end_to_end \
-		--register-all-deployments \
-		--deployment-name $${DEPLOYMENT_NAME:-local-ingestion-runner} \
-		--work-pool $${WORK_POOL:-ingestion-pool}
-
-run-ingestion-flow:
+	@echo "Triggering Prefect Ingestion Flow inside Docker..."
 	@if [ -n "$(MAX_JOBS)" ]; then \
-		$(HOST_ENV) uv run --extra ingestion python -m orchestration.ingestion.flows end_to_end --max-jobs $(MAX_JOBS); \
+		docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) run --rm --entrypoint "uv" ingestion-worker run --no-sync python -m orchestration.ingestion.flows end_to_end --max-jobs $(MAX_JOBS); \
 	else \
-		$(HOST_ENV) uv run --extra ingestion python -m orchestration.ingestion.flows end_to_end; \
+		docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) run --rm --entrypoint "uv" ingestion-worker run --no-sync python -m orchestration.ingestion.flows end_to_end; \
 	fi
 
 test:
