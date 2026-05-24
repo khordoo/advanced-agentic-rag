@@ -11,9 +11,8 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from langchain_core.messages import AIMessage, HumanMessage
 
-from rag_core.agents import AgentFactory
 from rag_core.core.config import setup_logging
-from rag_core.core.telemetry import get_observability_callbacks
+from rag_core.core.telemetry import init_observability
 from rag_core.genetation.graph import RagGraphFactory
 from rag_core.prompts.loader import AgentPrompt
 from rag_core.prompts.specs.base import RagFinalResponseSchema
@@ -29,20 +28,19 @@ _sessions: dict[str, list] = {}
 _app_graph = None
 _agent_prompt = None
 _system_instructions = ""
-_langfuse_callbacks = []
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Build the LangGraph app & prompt once at startup."""
-    global _app_graph, _agent_prompt, _system_instructions, _langfuse_callbacks
+    global _app_graph, _agent_prompt, _system_instructions
 
     logger.info("🚀  Initializing RAG Web Server...")
+    init_observability(service_name="advanced-rag-web")
     _agent_prompt = AgentPrompt.from_package("primary_rag_agent")
     _system_instructions = _agent_prompt.get_system_instructions()
 
     _app_graph = RagGraphFactory.build_default()
-    _langfuse_callbacks = get_observability_callbacks()
     logger.info("✅  RAG graph ready.")
 
     yield  # ── app is running ──
@@ -96,7 +94,6 @@ async def chat(request: Request):
             res = await _app_graph.ainvoke(
                 {"messages": messages, "system_instructions": _system_instructions},
                 config={
-                    "callbacks": _langfuse_callbacks,
                     "metadata": {"env": "local", "app": "web-ui"},
                 },
             )

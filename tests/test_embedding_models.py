@@ -42,11 +42,11 @@ def test_base_embedding_model_contract_with_fake() -> None:
 def test_fastembed_embedding_model_lazy_loads_and_embeds(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    loaded_models: list[str] = []
+    loaded_models: list[tuple[str, str | None]] = []
 
     class _FakeTextEmbedding:
-        def __init__(self, model_name: str) -> None:
-            loaded_models.append(model_name)
+        def __init__(self, model_name: str, cache_dir: str | None = None) -> None:
+            loaded_models.append((model_name, cache_dir))
 
         def embed(self, texts: list[str]):
             assert texts == ["alpha", "beta"]
@@ -62,15 +62,44 @@ def test_fastembed_embedding_model_lazy_loads_and_embeds(
     assert model.dimension == 2
     assert loaded_models == []
     assert model.embed_documents(["alpha", "beta"]) == [[1.0, 2.0], [3.5, 4.0]]
-    assert loaded_models == ["local-model"]
+    assert loaded_models == [("local-model", None)]
+
+
+def test_fastembed_embedding_model_uses_configured_cache_dir(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    loaded_models: list[tuple[str, str | None]] = []
+
+    class _FakeTextEmbedding:
+        def __init__(self, model_name: str, cache_dir: str | None = None) -> None:
+            loaded_models.append((model_name, cache_dir))
+
+        def embed(self, texts: list[str]):
+            assert texts == ["alpha"]
+            return [_ArrayLike([1, 2])]
+
+    monkeypatch.setattr(
+        "rag_core.embeddings.fastembed._get_fastembed_model",
+        _FakeTextEmbedding,
+    )
+
+    model = FastEmbedEmbeddingModel(
+        model_name="local-model",
+        dimension=2,
+        cache_dir="/app/.cache/fastembed",
+    )
+
+    assert model.embed_documents(["alpha"]) == [[1.0, 2.0]]
+    assert loaded_models == [("local-model", "/app/.cache/fastembed")]
 
 
 def test_fastembed_embedding_model_embed_query(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class _FakeTextEmbedding:
-        def __init__(self, model_name: str) -> None:
+        def __init__(self, model_name: str, cache_dir: str | None = None) -> None:
             self.model_name = model_name
+            self.cache_dir = cache_dir
 
         def embed(self, texts: list[str]):
             assert texts == ["query text"]
@@ -90,8 +119,9 @@ def test_fastembed_embedding_model_rejects_dimension_mismatch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class _FakeTextEmbedding:
-        def __init__(self, model_name: str) -> None:
+        def __init__(self, model_name: str, cache_dir: str | None = None) -> None:
             self.model_name = model_name
+            self.cache_dir = cache_dir
 
         def embed(self, texts: list[str]):
             del texts
@@ -112,6 +142,7 @@ def test_create_embedding_model_returns_fastembed() -> None:
         provider="fastembed",
         model_name="local-model",
         dimension=384,
+        fastembed_cache_dir="/app/.cache/fastembed",
         _env_file=None,
     )
 
@@ -119,6 +150,7 @@ def test_create_embedding_model_returns_fastembed() -> None:
 
     assert isinstance(model, FastEmbedEmbeddingModel)
     assert model.model_name == "local-model"
+    assert model.cache_dir == "/app/.cache/fastembed"
     assert model.dimension == 384
 
 
@@ -134,12 +166,14 @@ def test_embedding_settings_reads_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("EMBEDDING_PROVIDER", "fastembed")
     monkeypatch.setenv("EMBEDDING_MODEL_NAME", "custom-model")
     monkeypatch.setenv("EMBEDDING_DIMENSION", "768")
+    monkeypatch.setenv("FASTEMBED_CACHE_DIR", "/app/.cache/fastembed")
 
     settings = EmbeddingSettings(_env_file=None)
 
     assert settings.provider == "fastembed"
     assert settings.model_name == "custom-model"
     assert settings.dimension == 768
+    assert settings.fastembed_cache_dir == "/app/.cache/fastembed"
 
 
 def test_create_embedding_model_openai_placeholder_raises() -> None:

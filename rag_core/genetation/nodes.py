@@ -13,7 +13,6 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from langchain_core.tools import BaseTool
-from langfuse import observe
 from langgraph.prebuilt import ToolNode
 from pydantic import ValidationError
 from tenacity import (
@@ -28,7 +27,6 @@ from rag_core.core.config import (
     get_generation_settings,
     setup_logging,
 )
-from rag_core.core.telemetry import init_langfuse_client
 from rag_core.genetation.parsers import extract_text_from_message, parse_agent_response
 from rag_core.genetation.state import RagState
 from rag_core.prompts.loader import AgentPrompt
@@ -41,9 +39,6 @@ from rag_core.prompts.specs.base import RagFinalResponseSchema
 
 setup_logging()
 logger = logging.getLogger(__name__)
-
-# Initialise the Langfuse SDK singleton so @observe decorators send traces
-init_langfuse_client()
 
 
 class NodeName(StrEnum):
@@ -76,7 +71,6 @@ class GraphNodes:
         self.reasoning_llm = reasoning_llm.bind_tools(tools)
         self.tool_executor = ToolNode(tools)
 
-    @observe(name=NodeName.INITIAL_ROUTER, as_type="evaluator")
     def route_initial_node(self, state: RagState) -> str:
         if not self.settings.enable_intent_routing:
             logger.info(
@@ -91,7 +85,6 @@ class GraphNodes:
         )
         return NodeName.INTENT_ROUTER_AGENT
 
-    @observe(name=NodeName.GENERAL_ASSISTANT_AGENT, as_type="agent")
     def execute_general_assistant_agent(self, state: RagState) -> dict:
         logger.info("Executing General Assistant Agent node...")
         agent_prompt = AgentPrompt.from_package("general_assistant")
@@ -103,7 +96,6 @@ class GraphNodes:
         formatted = RagFinalResponseSchema(answer=response_text, citations=[])
         return {"messages": [AIMessage(content=formatted.model_dump_json())]}
 
-    @observe(name=NodeName.PRIMARY_RAG_AGENT, as_type="agent")
     def execute_primary_rag_agent(self, state: RagState) -> dict:
         logger.info("Executing Primary RAG Agent node...")
         source_docs = state.get("source_docs", [])
@@ -119,7 +111,6 @@ class GraphNodes:
             "source_docs": source_docs,
         }
 
-    @observe(name=NodeName.SELF_CORRECTING_AGENT, as_type="evaluator")
     def execute_self_correcting_agent(self, state: RagState) -> dict:
         logger.info("Executing self_correcting node...")
         current_attempts = state.get("self_correction_attempts", 0)
@@ -203,7 +194,6 @@ class GraphNodes:
                 "messages": [HumanMessage(content=feedback_msg)],
             }
 
-    @observe(name=NodeName.FALLBACK_HANDLER, as_type="generation")
     def execute_fallback_handler(self, state: RagState) -> dict:
         logger.warning("Circuit breaker tripped. Injecting safe fallback response.")
 
@@ -217,7 +207,6 @@ class GraphNodes:
 
         return {"messages": [fallback_msg]}
 
-    @observe(name=NodeName.INTENT_ROUTER_AGENT, as_type="agent")
     def execute_intent_router_agent(self, state: RagState) -> dict:
         """Fast triage agent to classify intent."""
         logger.info("Executing Intent Router node...")
@@ -259,7 +248,6 @@ class GraphNodes:
             "self_correction_attempts": 0,
         }
 
-    @observe(name=NodeName.INTENT_ROUTER, as_type="evaluator")
     def route_after_triage(self, state: RagState) -> str:
         """Reads the intent from the state and returns the name of the next node."""
         if IntentCategory.GENERAL_ASSISTANT.value == state.get("intent_route", ""):
@@ -268,7 +256,6 @@ class GraphNodes:
         logger.info("Routing to: %s", NodeName.PRIMARY_RAG_AGENT)
         return NodeName.PRIMARY_RAG_AGENT
 
-    @observe(name=NodeName.TOOLS, as_type="tool")
     def execute_tools(self, state: RagState) -> dict:
         logger.info("Executing Tool Execution node...")
         last_message = state["messages"][-1]
@@ -359,7 +346,6 @@ class GraphNodes:
         remapped = re.sub(r"(\[(\d+)\])(?:[\s,]*\[\2\])+", r"\1", remapped)
         return remapped
 
-    @observe(name=NodeName.POST_PROCESSING, as_type="tool")
     def execute_post_processing(self, state: RagState) -> dict:
         logger.info("Executing Post-Processing node...")
         try:
@@ -401,7 +387,6 @@ class GraphNodes:
             fallback = RagFinalResponseSchema(answer=raw_content, citations=[])
             return {"messages": [AIMessage(content=fallback.model_dump_json())]}
 
-    @observe(name=NodeName.TOOL_ROUTER, as_type="evaluator")
     def tool_router(self, state: RagState) -> str:
         iteration_count = state.get("iteration_count", 0)
         logger.debug("Global iteration count: %d", iteration_count)

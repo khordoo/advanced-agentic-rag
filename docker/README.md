@@ -10,12 +10,8 @@ docker compose --project-directory . -f docker/docker-compose.yaml up -d
 docker compose --project-directory . -f docker/docker-compose.yaml ps
 ```
 
-Default worker builds include PDF Docling processing. To also include local reranking runtime in the worker image:
-
-```bash
-INGESTION_WORKER_UV_SYNC_EXTRAS="--extra ingestion --extra doc-processing --extra rerank" \
-docker compose --project-directory . -f docker/docker-compose.yaml up -d --build
-```
+Default worker builds include ingestion, PDF Docling processing, and the dense
+FastEmbed model cache. The reranker is only needed by the API image.
 
 ## Services
 
@@ -25,15 +21,16 @@ docker compose --project-directory . -f docker/docker-compose.yaml up -d --build
 | **RAG API** | `8000` | OpenAI-compatible RAG API |
 | **Web UI** | `3000` | Chat interface |
 | **Qdrant** | `6333` (REST), `6334` (gRPC) | Vector DB with hybrid search (BM25 + vector) |
-| **LangFuse** | `3001` | LLM observability, tracing, and evaluation |
-| **PostgreSQL (core-db)** | `5432` | Shared DB host (RAG + LangFuse + Prefect metadata) |
+| **Phoenix** | `6006` | OpenTelemetry/OpenInference tracing UI |
+| **PostgreSQL (core-db)** | `5432` | Shared DB host (RAG + Prefect metadata) |
 | **Ingestion Worker** | internal | Prefect process worker for ingestion flows |
 
 After startup, open:
 - Prefect dashboard: `http://localhost:4200`
 - RAG API health: `http://localhost:8000/ping`
 - Web UI: `http://localhost:3000`
-- LangFuse: `http://localhost:3001`
+- Qdrant dashboard: `http://localhost:6333/dashboard`
+- Phoenix: `http://localhost:6006`
 
 ## Auto-Provisioning (Zero Manual Steps)
 
@@ -72,21 +69,24 @@ make register-ingestion-deployments
 Host-side manual trigger (optional):
 
 ```bash
-uv run --extra ingestion python -m orchestration.ingestion.flows end_to_end
+make run-ingestion-flow
 ```
+
+The `.env` file is Docker Compose-first. Makefile host-run targets translate
+Docker service hostnames to host-reachable defaults through `HOST_*` variables
+such as `HOST_POSTGRES_HOST=localhost` and `HOST_QDRANT_URL=http://localhost:6333`.
 
 ## Data Persistence
 
 All data is stored in Docker volumes:
 - `qdrant_data` — Vector DB storage
 - `postgres_data` — PostgreSQL data directory
-- `clickhouse_data` — ClickHouse data
-- `minio_data` — MinIO data
 - `open-webui-data` — Open WebUI data
+- `phoenix_data` — Phoenix trace storage
 
-To reset:
+To reset the stack and wipe all Docker volumes, including Phoenix traces:
 ```bash
-docker compose --project-directory . -f docker/docker-compose.yaml down -v  # -v removes volumes
+make reset
 ```
 
 If image builds fail due to disk pressure (`No space left on device`), clean caches and old layers:

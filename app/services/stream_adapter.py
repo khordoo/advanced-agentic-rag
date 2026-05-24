@@ -51,7 +51,7 @@ _NODE_STATUS_MAP: dict[str, tuple[StreamPhase, str]] = {
     ),
     NodeName.PRIMARY_RAG_AGENT: (
         StreamPhase.REASONING,
-        "Reasoning over retrieved documents...", 
+        "Analyzing context and formulating response...",
     ),
     NodeName.TOOLS: (
         StreamPhase.RETRIEVAL,

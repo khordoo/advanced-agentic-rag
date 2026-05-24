@@ -83,7 +83,7 @@ def run_eval(
     ragas_llm = LangchainLLMWrapper(llm_judge)
 
     hf_emb = HuggingFaceEmbeddings(
-        model_name=config.get("HF_EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
+        model_name=config.get("EMBEDDING_MODEL_NAME", "BAAI/bge-small-en-v1.5")
     )
     ragas_emb = LangchainEmbeddingsWrapper(hf_emb)
 

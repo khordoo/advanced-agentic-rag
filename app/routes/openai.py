@@ -21,6 +21,7 @@ from app.schemas.openai import (
 from app.services.formatters import ChatPresenter
 from app.services.rag_service import RagService
 from app.services.stream_adapter import adapt_graph_stream
+from rag_core.core.readiness import SetupRequiredError
 
 openai_router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -115,6 +116,8 @@ async def rag(
 
     try:
         raw_agent_output = await service.generate_chat_completion(chat)
+    except SetupRequiredError:
+        raise
     except UpstreamModelError:
         raise
     except Exception as exc:

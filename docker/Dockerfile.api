@@ -3,6 +3,8 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 # Make Python Docker-friendly (prevents weird log buffering and cache issues)
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV HF_HOME=/app/.cache/huggingface
+ENV FASTEMBED_CACHE_DIR=/app/.cache/fastembed
 
 WORKDIR /app
 
@@ -12,15 +14,23 @@ COPY pyproject.toml uv.lock README.md ./
 ARG UV_SYNC_EXTRAS="--extra api"
 RUN uv sync --frozen --no-dev --no-install-project ${UV_SYNC_EXTRAS}
 
+ARG EMBEDDING_MODEL_NAME="BAAI/bge-small-en-v1.5"
+ARG QDRANT_SPARSE_MODEL="Qdrant/bm42-all-minilm-l6-v2-attentions"
+RUN .venv/bin/python -c "import os; from fastembed import TextEmbedding; TextEmbedding(model_name='${EMBEDDING_MODEL_NAME}', cache_dir=os.environ['FASTEMBED_CACHE_DIR'])"
+RUN .venv/bin/python -c "import os; from fastembed import SparseTextEmbedding; SparseTextEmbedding(model_name='${QDRANT_SPARSE_MODEL}', cache_dir=os.environ['FASTEMBED_CACHE_DIR'])"
+
 ARG API_ENABLE_CPU_RERANK=true
 ARG TORCH_CPU_INDEX_URL="https://download.pytorch.org/whl/cpu"
+ARG RERANK_MODEL_NAME="BAAI/bge-reranker-v2-m3"
+ARG HF_TOKEN=""
 RUN if [ "${API_ENABLE_CPU_RERANK}" = "true" ]; then \
       uv pip install --python .venv/bin/python --index-url "${TORCH_CPU_INDEX_URL}" "torch==2.12.0+cpu" && \
       uv pip install --python .venv/bin/python \
         "langchain>=0.3.0" \
         "sentence-transformers==5.3.0" \
         "transformers==4.57.1" \
-        "huggingface-hub==0.36.0"; \
+        "huggingface-hub==0.36.0" && \
+      HF_TOKEN="${HF_TOKEN}" .venv/bin/huggingface-cli download "${RERANK_MODEL_NAME}"; \
     fi
 
 

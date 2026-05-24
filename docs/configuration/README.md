@@ -26,6 +26,15 @@ Postgres defaults to `k=2`, see:
 - [Retrieval RRF Semantics](retrieval-rrf.md)
   Note: optional integer env vars must be omitted/commented out when unused; empty values are invalid.
 
+## Hugging Face & Model Prefetching
+
+The project prefetches embedding and reranker models during Docker builds to
+minimize startup latency.
+
+- `HF_TOKEN` (Optional): Only required if you change the default models to a
+  gated model (e.g., Llama-3) or if your build environment is hitting Hugging
+  Face rate limits. For standard public models, leave this blank.
+
 ## Adding an Embedding Provider
 
 `EMBEDDING_PROVIDER` is intentionally validated against the built-in

@@ -20,8 +20,8 @@ def clear_settings_caches(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setenv("EMBEDDING_PROVIDER", "fastembed")
     monkeypatch.setenv("INGESTION_INDEXER_BACKEND", "qdrant")
-    monkeypatch.setenv("QDRANT_EMBED_MODEL", "BAAI/bge-small-en-v1.5")
-    monkeypatch.setenv("QDRANT_SPARSE_MODEL", "prithivida/Splade_PP_en_v1")
+    monkeypatch.setenv("EMBEDDING_MODEL_NAME", "BAAI/bge-small-en-v1.5")
+    monkeypatch.setenv("QDRANT_SPARSE_MODEL", "Qdrant/bm42-all-minilm-l6-v2-attentions")
     rag_core.core.config.get_embedding_settings.cache_clear()
     rag_core.core.config.get_ingestion_settings.cache_clear()
     rag_core.core.config.get_qdrant_settings.cache_clear()
@@ -368,4 +368,3 @@ def test_run_pipeline_reads_runtime_overwrite_setting(
 
     assert ingestion_pipeline.run_pipeline() is expected
     assert calls == [True]
-

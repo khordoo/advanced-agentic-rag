@@ -22,8 +22,8 @@ from rag_core.store.postgres.models.documents import DocumentChunk
 def clear_settings_caches(monkeypatch: pytest.MonkeyPatch) -> None:
     import rag_core.core.config
 
-    monkeypatch.setenv("QDRANT_EMBED_MODEL", "BAAI/bge-small-en-v1.5")
-    monkeypatch.setenv("QDRANT_SPARSE_MODEL", "prithivida/Splade_PP_en_v1")
+    monkeypatch.setenv("EMBEDDING_MODEL_NAME", "BAAI/bge-small-en-v1.5")
+    monkeypatch.setenv("QDRANT_SPARSE_MODEL", "Qdrant/bm42-all-minilm-l6-v2-attentions")
     rag_core.core.config.get_embedding_settings.cache_clear()
     rag_core.core.config.get_ingestion_settings.cache_clear()
     rag_core.core.config.get_qdrant_settings.cache_clear()
@@ -83,13 +83,26 @@ def test_create_indexer_qdrant_rejects_openai_provider(
 
     message = str(exc_info.value)
     assert "EMBEDDING_PROVIDER=fastembed" in message
-    assert "QDRANT_EMBED_MODEL=BAAI/bge-small-en-v1.5" in message
-    assert "QDRANT_SPARSE_MODEL=prithivida/Splade_PP_en_v1" in message
+    assert "EMBEDDING_MODEL_NAME=BAAI/bge-small-en-v1.5" in message
+    assert "QDRANT_SPARSE_MODEL=Qdrant/bm42-all-minilm-l6-v2-attentions" in message
 
 
 def test_qdrant_settings_reject_empty_dense_model() -> None:
     with pytest.raises(ValidationError, match="Qdrant model names must not be empty"):
         QdrantSettings(embed_model=" ", _env_file=None)
+
+
+def test_qdrant_settings_reads_shared_embedding_model_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("EMBEDDING_MODEL_NAME", "custom-dense-model")
+    monkeypatch.setenv("FASTEMBED_CACHE_DIR", "/app/.cache/fastembed")
+    monkeypatch.setenv("QDRANT_EMBED_MODEL", "legacy-qdrant-model")
+
+    settings = QdrantSettings(_env_file=None)
+
+    assert settings.embed_model == "custom-dense-model"
+    assert settings.fastembed_cache_dir == "/app/.cache/fastembed"
 
 
 def test_qdrant_settings_reject_empty_sparse_model() -> None:

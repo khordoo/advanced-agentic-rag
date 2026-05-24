@@ -39,9 +39,19 @@ class AgentToolFactory:
         retriever: BaseRetriever | None = None,
         search_service: RAGSearchService | None = None,
     ) -> None:
-        self.search_service = search_service or RAGSearchService(retriever=retriever)
-        self.retriever = self.search_service.retriever
+        self._retriever = retriever
+        self._search_service = search_service
         self._tools: list[StructuredTool] | None = None
+
+    @property
+    def search_service(self) -> RAGSearchService:
+        if self._search_service is None:
+            self._search_service = RAGSearchService(retriever=self._retriever)
+        return self._search_service
+
+    @property
+    def retriever(self) -> BaseRetriever:
+        return self.search_service.retriever
 
     def _semantic_search(self, query: str, asset_key: str | None = None) -> str:
         docs = self.search_service.search(query=query, asset_key=asset_key)

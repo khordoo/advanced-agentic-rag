@@ -141,10 +141,10 @@ class PostgresIndexer(BaseIndexer):
         return sections, chunks
 
     def reset_collections(self) -> None:
-        """Truncate document_chunks and document_sections tables.
+        """Clear the Postgres document tables.
 
-        Uses TRUNCATE CASCADE so foreign-key dependents are cleaned up
-        atomically.
+        Uses ORM table metadata so model table-name changes are reflected
+        automatically.
         """
         logger.info("Resetting Postgres document tables ...")
         with self._db.get_session() as session:

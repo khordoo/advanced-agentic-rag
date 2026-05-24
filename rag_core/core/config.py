@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Literal
 
 from dotenv import dotenv_values, load_dotenv
-from pydantic import Field, computed_field, field_validator
+from pydantic import AliasChoices, Field, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pythonjsonlogger.json import JsonFormatter
 
@@ -33,8 +33,6 @@ _DEFAULTS: dict[str, str] = {
     "PROCCESED_DOCS_DIR": "data/processed",
     "DOCUMENT_STORE_PERSIST_PATH": "artifacts/document_store/document_store.pkl",
     "SYNTHETIC_QA_PERSIST_PATH": "data/synthetic/eval_question_answers.json",
-    "HF_EMBEDDING_MODEL": "sentence-transformers/all-MiniLM-L6-v2",
-    "HF_RERANKER_MODEL": "BAAI/bge-reranker-v2-m3",
     "LLM_MAX_PARALLEL_REQUEST": "3",
     "PARENT_CHUNK_SIZE": "1500",
     "PARENT_CHUNK_OVERLAP": "150",
@@ -46,8 +44,6 @@ _DEFAULTS: dict[str, str] = {
     # Qdrant (production track)
     "QDRANT_URL": "http://localhost:6333",
     "QDRANT_COLLECTION_NAME": "docs",
-    # LangFuse (production track)
-    "LANGFUSE_HOST": "http://localhost:3000",
     "LOG_LEVEL": "INFO",
 }
 
@@ -272,8 +268,19 @@ class RerankerSettings(BaseSettings):
 
 class QdrantSettings(BaseSettings):
     url: str = "http://localhost:6333"
-    embed_model: str = Field(default="BAAI/bge-small-en-v1.5", min_length=1)
-    sparse_model: str = Field(default="prithivida/Splade_PP_en_v1", min_length=1)
+    embed_model: str = Field(
+        default="BAAI/bge-small-en-v1.5",
+        min_length=1,
+        validation_alias=AliasChoices("EMBEDDING_MODEL_NAME", "embed_model"),
+    )
+    fastembed_cache_dir: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("FASTEMBED_CACHE_DIR", "fastembed_cache_dir"),
+    )
+    sparse_model: str = Field(
+        default="Qdrant/bm42-all-minilm-l6-v2-attentions",
+        min_length=1,
+    )
     collection_namespace: str = "docs"
     chunk_collection_name: str = f"{collection_namespace}_chunks"
     parent_collection_name: str = f"{collection_namespace}_parents"
@@ -295,6 +302,10 @@ class EmbeddingSettings(BaseSettings):
     provider: EmbeddingProvider = EmbeddingProvider.FASTEMBED
     model_name: str = "BAAI/bge-small-en-v1.5"
     dimension: int = Field(default=384, ge=1)
+    fastembed_cache_dir: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("FASTEMBED_CACHE_DIR", "fastembed_cache_dir"),
+    )
 
     model_config = SettingsConfigDict(env_prefix="EMBEDDING_", env_file=".env", extra="ignore")
 

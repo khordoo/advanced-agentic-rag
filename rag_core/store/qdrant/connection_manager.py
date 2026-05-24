@@ -39,8 +39,8 @@ class QdrantConnectionManager:
         client.get_collections()
 
         logger.info("Loading FastEmbed models into memory …")
-        client.set_model(settings.embed_model)
-        client.set_sparse_model(settings.sparse_model)
+        client.set_model(settings.embed_model, cache_dir=settings.fastembed_cache_dir)
+        client.set_sparse_model(settings.sparse_model, cache_dir=settings.fastembed_cache_dir)
 
         return client
 

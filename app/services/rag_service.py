@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from app.core.exceptions import UpstreamModelError
 from app.schemas.openai import ChatCompletionRequest
+from rag_core.core.readiness import ApplicationReadinessChecker
 
 logger = logging.getLogger(__name__)
 
@@ -29,14 +30,17 @@ class RagService:
         system_instructions: str,
         model_id: str,
         drop_frontend_prompts: bool = True,
+        readiness_checker: ApplicationReadinessChecker | None = None,
     ):
         self.graph = graph
         self.system_instructions = system_instructions
         self.model_id = model_id
         self.drop_frontend_prompts = drop_frontend_prompts
+        self.readiness_checker = readiness_checker
 
     async def generate_chat_completion(self, chat_req: ChatCompletionRequest) -> GenerationResult:
         """Runs graph inference and returns canonical output + resolved model metadata."""
+        self._ensure_ready()
 
         langchain_msgs = chat_req.to_langchain_messages(
             drop_system_messages=self.drop_frontend_prompts
@@ -78,6 +82,7 @@ class RagService:
         The caller (``adapt_graph_stream``) is responsible for filtering
         events and formatting output.
         """
+        self._ensure_ready()
         langchain_msgs = chat_req.to_langchain_messages(
             drop_system_messages=self.drop_frontend_prompts
         )
@@ -85,3 +90,7 @@ class RagService:
             {"messages": langchain_msgs, "system_instructions": self.system_instructions},
             version="v2",
         )
+
+    def _ensure_ready(self) -> None:
+        if self.readiness_checker is not None:
+            self.readiness_checker.ensure_ready()

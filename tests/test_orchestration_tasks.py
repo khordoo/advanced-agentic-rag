@@ -4,7 +4,7 @@ import pytest
 
 prefect = pytest.importorskip("prefect")
 
-from orchestration.ingestion import tasks
+from orchestration.ingestion import tasks  # noqa: E402
 
 
 def test_end_to_end_task_raises_when_core_pipeline_reports_failure(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -107,5 +107,6 @@ def test_reset_ingestion_registries_task_truncates_tables(
     monkeypatch.setattr(tasks, "get_database", lambda: _Database())
     tasks.reset_ingestion_registries_task.fn()
 
-    assert "TRUNCATE TABLE source_assets, ingestion_runs RESTART IDENTITY CASCADE" in seen["sql"]
+    table_names = f"{tasks.SourceAsset.__tablename__}, {tasks.IngestionRun.__tablename__}"
+    assert f"TRUNCATE TABLE {table_names} RESTART IDENTITY CASCADE" in seen["sql"]
     assert seen["commits"] == 1
