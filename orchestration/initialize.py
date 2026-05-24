@@ -12,13 +12,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import sys
 import time
 
 import httpx
 from prefect.client.orchestration import get_client
 
+from orchestration.config import get_prefect_config
 from orchestration.ingestion.flows import end_to_end_flow, factory_reset_flow
 
 logger = logging.getLogger("orchestration.initialize")
@@ -26,22 +26,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)-7s | %(name)s — %(message)s",
 )
-
-# ---------------------------------------------------------------------------
-# Configuration (read from env, matching docker-compose.yaml)
-# ---------------------------------------------------------------------------
-PREFECT_API_URL: str = os.getenv("PREFECT_API_URL", "http://localhost:4200/api")
-WORK_POOL_NAME: str = os.getenv("PREFECT_INGESTION_WORK_POOL", "ingestion-pool")
-WORK_POOL_TYPE: str = "process"
-
-DEPLOYMENT_NAME: str = os.getenv(
-    "PREFECT_DEPLOYMENT_NAME", "local-ingestion-runner"
-)
-
-# Server readiness probe
-MAX_WAIT_SECONDS: int = int(os.getenv("PREFECT_INIT_MAX_WAIT", "120"))
-INITIAL_BACKOFF: float = 1.0
-MAX_BACKOFF: float = 10.0
+config = get_prefect_config()
 
 
 # ---------------------------------------------------------------------------
@@ -53,11 +38,11 @@ def wait_for_server() -> None:
     Uses exponential backoff with a ceiling.  Exits the process with
     code 1 if the server is not reachable within *MAX_WAIT_SECONDS*.
     """
-    health_url = f"{PREFECT_API_URL}/health"
+    health_url = f"{config.api_url}/health"
     logger.info("Waiting for Prefect API at %s …", health_url)
 
-    backoff = INITIAL_BACKOFF
-    deadline = time.monotonic() + MAX_WAIT_SECONDS
+    backoff = config.initial_backoff
+    deadline = time.monotonic() + config.max_wait_seconds
 
     while time.monotonic() < deadline:
         try:
@@ -76,11 +61,11 @@ def wait_for_server() -> None:
             logger.warning("HTTP error probing Prefect API: %s", exc)
 
         time.sleep(backoff)
-        backoff = min(backoff * 2, MAX_BACKOFF)
+        backoff = min(backoff * 2, config.max_backoff)
 
     logger.critical(
         "Prefect API did not become healthy within %ds. Aborting.",
-        MAX_WAIT_SECONDS,
+        config.max_wait_seconds,
     )
     sys.exit(1)
 
@@ -99,7 +84,7 @@ async def ensure_work_pool() -> None:
 
     async with get_client() as client:
         try:
-            pool = await client.read_work_pool(WORK_POOL_NAME)
+            pool = await client.read_work_pool(config.work_pool_name)
             logger.info(
                 "Work pool '%s' already exists (type=%s) — skipping creation ✓",
                 pool.name,
@@ -109,19 +94,19 @@ async def ensure_work_pool() -> None:
         except ObjectNotFound:
             logger.info(
                 "Work pool '%s' not found — creating (type=%s) …",
-                WORK_POOL_NAME,
-                WORK_POOL_TYPE,
+                config.work_pool_name,
+                config.work_pool_type,
             )
 
         from prefect.client.schemas.actions import WorkPoolCreate
 
         await client.create_work_pool(
             work_pool=WorkPoolCreate(
-                name=WORK_POOL_NAME,
-                type=WORK_POOL_TYPE,
+                name=config.work_pool_name,
+                type=config.work_pool_type,
             )
         )
-        logger.info("Work pool '%s' created ✓", WORK_POOL_NAME)
+        logger.info("Work pool '%s' created ✓", config.work_pool_name)
 
 
 # ---------------------------------------------------------------------------
@@ -159,7 +144,7 @@ async def register_deployments() -> None:
     in Prefect 3.x — unnecessary because the worker container already has
     the code baked into its image.
     """
-    logger.info("Registering deployments to pool '%s' …", WORK_POOL_NAME)
+    logger.info("Registering deployments to pool '%s' …", config.work_pool_name)
 
     async with get_client() as client:
         for flow_obj, suffix, tags, description in _DEPLOYMENT_SPECS:
@@ -170,13 +155,13 @@ async def register_deployments() -> None:
             # Format: "module/path.py:flow_function_name"
             entrypoint = f"orchestration/ingestion/flows.py:{flow_obj.fn.__name__}"
 
-            deployment_name = f"{DEPLOYMENT_NAME}{suffix}"
+            deployment_name = f"{config.deployment_name}{suffix}"
 
             # Step 3: Upsert the deployment.
             deployment_id = await client.create_deployment(
                 flow_id=flow_id,
                 name=deployment_name,
-                work_pool_name=WORK_POOL_NAME,
+                work_pool_name=config.work_pool_name,
                 tags=tags,
                 description=description,
                 entrypoint=entrypoint,
@@ -213,4 +198,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
