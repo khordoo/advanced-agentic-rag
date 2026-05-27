@@ -39,12 +39,6 @@ RUN set -eux; \
     rm -rf /var/lib/apt/lists/*; \
     fi
 
-ARG EMBEDDING_MODEL_NAME="BAAI/bge-small-en-v1.5"
-ARG QDRANT_SPARSE_MODEL="Qdrant/bm42-all-minilm-l6-v2-attentions"
-ARG HF_TOKEN=""
-RUN .venv/bin/python -c "import os; from fastembed import TextEmbedding; TextEmbedding(model_name='${EMBEDDING_MODEL_NAME}', cache_dir=os.environ['FASTEMBED_CACHE_DIR'])"
-RUN .venv/bin/python -c "import os; from fastembed import SparseTextEmbedding; SparseTextEmbedding(model_name='${QDRANT_SPARSE_MODEL}', cache_dir=os.environ['FASTEMBED_CACHE_DIR'])"
-
 COPY rag_core/ rag_core/
 COPY orchestration/ orchestration/
 COPY evaluation/ evaluation/

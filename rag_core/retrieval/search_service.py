@@ -59,17 +59,8 @@ class RAGSearchService:
             return documents
 
         if self.reranker is None:
-            try:
-                from rag_core.reranking.local_reranker import LocalReranker
-            except ModuleNotFoundError as exc:
-                if exc.name == "sentence_transformers":
-                    raise RuntimeError(
-                        "Reranking is enabled but sentence-transformers is not installed. "
-                        "Run `make eval` for eval workers, rebuild the API image "
-                        "with rerank support, or set RERANK_ENABLED=false."
-                    ) from exc
-                raise
-            active_reranker = LocalReranker(settings=self._reranker_settings)
+            from rag_core.reranking.fastembed_reranker import FastEmbedReranker
+            active_reranker = FastEmbedReranker(settings=self._reranker_settings)
         else:
             active_reranker = self.reranker
         top_k = rerank_top_k if rerank_top_k is not None else self._reranker_settings.top_k

@@ -140,7 +140,9 @@ uv cache clean
 The evaluation subsystem runs RAGAS metrics + Phoenix reference-free LLM judges against a ground truth QA dataset, storing results as Phoenix Experiments with full trace correlation.
 
 > [!IMPORTANT]
-> **Evaluation is runtime-gated by default.** A fresh clone with `cp .env.example .env && make ingest` registers eval deployments but never imports heavy eval deps (ragas, phoenix, phoenix.evals) unless an eval flow is actually run.
+> **Evaluation is runtime-gated by default.** A fresh clone registers eval 
+> deployments but only installs evaluation libraries (ragas, phoenix) when 
+> `make eval` is run, keeping the base images lightweight.
 
 ### How It Works
 

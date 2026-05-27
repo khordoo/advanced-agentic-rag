@@ -10,7 +10,7 @@ HOST_PREFECT_API_URL?=http://localhost:4200/api
 HOST_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT?=http://localhost:6006/v1/traces
 HOST_ENV:=POSTGRES_HOST=$(HOST_POSTGRES_HOST) QDRANT_URL=$(HOST_QDRANT_URL) PREFECT_API_URL=$(HOST_PREFECT_API_URL) OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=$(HOST_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT)
 ALEMBIC:=$(HOST_ENV) $(ALEMBIC_BASE) -c $(ALEMBIC_CONFIG)
-EVAL_RERANK_ENABLED?=false
+EVAL_RERANK_ENABLED?=true
 
 # Container name
 # 1. Capture the "rest" of the arguments
@@ -76,12 +76,11 @@ test:
 	uv run pytest tests/
 
 eval:
+	@echo "🔁 Building eval-capable worker image..."
+	@docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) build --build-arg UV_SYNC_EXTRAS="--extra ingestion --extra doc-processing --extra eval" ingestion-worker
+	@docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) up -d --force-recreate --wait ingestion-worker
 	@echo "🔍 Checking worker environment for evaluation dependencies..."
-	@docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) run --rm --entrypoint python ingestion-worker -c "import ragas" 2>/dev/null || \
-		(echo "⚠️ Missing Eval dependencies! Auto-upgrading image (this will take a few minutes)..." && \
-		 docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) build --build-arg UV_SYNC_EXTRAS="--extra ingestion --extra doc-processing --extra eval" ingestion-worker && \
-		 docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) up -d --force-recreate --wait ingestion-worker && \
-		 echo "✅ Eval dependencies installed and ingestion-worker restarted.")
+	@docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) run --rm --entrypoint "uv" ingestion-worker run --no-sync python -c "from evaluation.runtime import assert_eval_runtime_ready; assert_eval_runtime_ready()"
 	@echo "🚀 Environment verified. Running Evaluation..."
 	@echo "💡 Tip: You can also trigger this pipeline visually from the Prefect UI at http://localhost:4200 (Deployment: evaluate-ground-truth)"
 	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) run --rm -e RERANK_ENABLED=$(EVAL_RERANK_ENABLED) --entrypoint "uv" ingestion-worker run --no-sync python -c "from evaluation.orchestration.flows import eval_golden_flow; eval_golden_flow()"

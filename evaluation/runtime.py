@@ -6,6 +6,8 @@ import importlib
 import logging
 from collections.abc import Iterable
 
+from evaluation.ragas_compat import apply_ragas_compat
+
 logger = logging.getLogger("evaluation.runtime")
 
 
@@ -23,16 +25,16 @@ def _missing_modules(module_names: Iterable[str]) -> list[str]:
     return missing
 
 
-def assert_eval_runtime_ready(*, rerank_enabled: bool) -> None:
+def assert_eval_runtime_ready() -> None:
     """Fail fast when the current image cannot run requested eval features."""
+    apply_ragas_compat()
+
     required_modules = [
         "ragas",
         "phoenix.client",
         "phoenix.evals",
-        "langchain_huggingface",
+        "fastembed",
     ]
-    if rerank_enabled:
-        required_modules.append("sentence_transformers")
 
     missing = sorted(set(_missing_modules(required_modules)))
     if not missing:
@@ -41,9 +43,8 @@ def assert_eval_runtime_ready(*, rerank_enabled: bool) -> None:
     missing_csv = ", ".join(missing)
     message = (
         "Evaluation runtime check failed. Missing optional dependencies: "
-        f"{missing_csv}. Evaluation flows require an eval-capable worker image. "
-        "Run `make eval` to rebuild and restart ingestion-worker. "
-        "If you do not want reranking during eval, set RERANK_ENABLED=false."
+        f"{missing_csv}. Evaluation flows require the [eval] extras. "
+        "Run `make eval` to install them and trigger the pipeline."
     )
     logger.critical(message)
     raise EvaluationRuntimeError(message)

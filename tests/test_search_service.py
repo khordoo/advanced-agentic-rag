@@ -105,26 +105,3 @@ def test_search_service_explicit_rerank_false_overrides_enabled_setting() -> Non
 
     assert docs[0].metadata["retrieval_score"] == 0.6
     assert "rerank_rank" not in docs[0].metadata
-
-
-def test_search_service_reports_missing_default_reranker_dependency() -> None:
-    retriever = _FakeRetriever()
-    service = RAGSearchService(
-        retriever=retriever,
-        retrieval_settings=RetrievalSettings(backend="qdrant", _env_file=None),
-        reranker_settings=RerankerSettings(enabled=True, top_k=2, _env_file=None),
-    )
-
-    real_import = builtins.__import__
-
-    def fake_import(name, *args, **kwargs):
-        if name == "sentence_transformers":
-            raise ModuleNotFoundError(
-                "No module named 'sentence_transformers'",
-                name="sentence_transformers",
-            )
-        return real_import(name, *args, **kwargs)
-
-    with patch("builtins.__import__", side_effect=fake_import):
-        with pytest.raises(RuntimeError, match="make eval"):
-            service.search("q", rerank=True)

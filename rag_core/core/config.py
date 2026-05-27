@@ -9,18 +9,13 @@ from pathlib import Path
 from typing import Literal
 
 from dotenv import dotenv_values, load_dotenv
-from pydantic import AliasChoices, Field, computed_field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pythonjsonlogger.json import JsonFormatter
 
 from rag_core.embeddings.types import EmbeddingProvider
 
 logger = logging.getLogger(__name__)
-
-try:
-    import torch
-except ModuleNotFoundError:  # pragma: no cover - optional dependency
-    torch = None
 
 # Keys that MUST exist in the environment / .env
 _REQUIRED_KEYS: list[str] = []
@@ -230,40 +225,27 @@ class RetrievalSettings(BaseSettings):
 
 
 class RerankerSettings(BaseSettings):
-    """Configuration settings for the Reranker.
-    We set top_k=10 since childs chunks will have duplicate parent chunks
-    and we want to return at least 5 unique parent chunks to the LLM agent
-    """
+    """Configuration settings for the FastEmbed reranker."""
 
-    provider: str = "huggingface"
+    provider: str = "fastembed"
     enabled: bool = True
-    model_name: str = "BAAI/bge-reranker-v2-m3"  # "cross-encoder/ms-marco-MiniLM-L-6-v2"  # "BAAI/bge-reranker-v2-m3"
+    model_name: str = "BAAI/bge-reranker-base"
     top_k: int = Field(
         default=3,
         ge=1,
         le=50,
-        description="Number of documents to return afterrerank",
+        description="Number of documents to return after rerank",
     )
     device: Literal["cuda", "cpu", "mps", "auto"] = Field(
-        default="auto",
-        description="Device to use for reranking",
+        default="cpu",
+        description="Legacy setting retained for config compatibility. FastEmbed uses ONNX Runtime.",
         examples=["cuda", "cpu", "mps", "auto"],
     )
+    fastembed_cache_dir: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("FASTEMBED_CACHE_DIR", "fastembed_cache_dir"),
+    )
     model_config = SettingsConfigDict(env_prefix="RERANK_", env_file=".env", extra="ignore")
-
-    @computed_field
-    @property
-    def resolve_device(self) -> Literal["cuda", "cpu", "mps"]:
-        if self.device == "auto":
-            if torch is None:
-                return "cpu"
-            if torch.cuda.is_available():
-                return "cuda"
-            elif torch.backends.mps.is_available():
-                return "mps"
-            else:
-                return "cpu"
-        return self.device
 
 
 class QdrantSettings(BaseSettings):

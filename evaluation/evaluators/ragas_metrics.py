@@ -1,6 +1,6 @@
 """Factory for RAGAS metric → Phoenix-compatible evaluator callables.
 
-All heavy imports (ragas, langchain_huggingface, rag_core.agents) are
+All heavy imports (ragas, model clients, rag_core.agents) are
 deferred into ``build_ragas_evaluators()`` — never at module level.
 
 Each returned callable has the Phoenix evaluator signature::
@@ -11,6 +11,7 @@ Each returned callable has the Phoenix evaluator signature::
 from __future__ import annotations
 
 import logging
+import asyncio
 from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,26 @@ _METRIC_MAP: dict[str, tuple[str, dict[str, Any]]] = {
     "context_precision": ("ContextPrecision", {}),
     "answer_correctness": ("AnswerCorrectness", {"weights": [0.8, 0.2]}),
 }
+
+
+class _RagasFastEmbedAdapter:
+    """LangChain-style embedding adapter backed by rag_core FastEmbed."""
+
+    def __init__(self, embedding_model: Any) -> None:
+        self.embedding_model = embedding_model
+        self.model = getattr(embedding_model, "model_name", None)
+
+    def embed_query(self, text: str) -> list[float]:
+        return self.embedding_model.embed_query(text)
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return self.embedding_model.embed_documents(texts)
+
+    async def aembed_query(self, text: str) -> list[float]:
+        return await asyncio.to_thread(self.embed_query, text)
+
+    async def aembed_documents(self, texts: list[str]) -> list[list[float]]:
+        return await asyncio.to_thread(self.embed_documents, texts)
 
 
 def build_ragas_evaluators(
@@ -47,6 +68,10 @@ def build_ragas_evaluators(
         One callable per metric in ``eval_config.ragas_metrics``.
     """
     # ── Lazy imports ─────────────────────────────────────────────────
+    from evaluation.ragas_compat import apply_ragas_compat
+
+    apply_ragas_compat()
+
     from ragas import EvaluationDataset, evaluate  # noqa: F811
     from ragas.metrics import (
         AnswerCorrectness,
@@ -58,9 +83,9 @@ def build_ragas_evaluators(
     from ragas.llms import LangchainLLMWrapper
     from ragas.embeddings import LangchainEmbeddingsWrapper
     from ragas.run_config import RunConfig
-    from langchain_huggingface import HuggingFaceEmbeddings
 
     from rag_core.agents import AgentFactory
+    from rag_core.embeddings import create_embedding_model
     from evaluation.pipeline.adapter import to_ragas_sample
 
     # ── Metric class lookup ──────────────────────────────────────────
@@ -81,13 +106,13 @@ def build_ragas_evaluators(
     )
     ragas_llm = LangchainLLMWrapper(judge_llm)
 
-    hf_emb = HuggingFaceEmbeddings(
-        model_name=config.get("EMBEDDING_MODEL_NAME", "BAAI/bge-small-en-v1.5")
-    )
-    ragas_emb = LangchainEmbeddingsWrapper(hf_emb)
-
     max_workers = int(config.get("LLM_MAX_PARALLEL_REQUEST", 3))
     run_config = RunConfig(timeout=60, max_retries=3, max_workers=max_workers)
+    embedding_model = create_embedding_model()
+    ragas_emb = LangchainEmbeddingsWrapper(
+        _RagasFastEmbedAdapter(embedding_model),
+        run_config=run_config,
+    )
 
     evaluators: list[Callable] = []
 

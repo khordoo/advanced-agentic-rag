@@ -30,26 +30,24 @@ def _get_logger() -> logging.Logger:
 
 def _assert_eval_runtime_ready() -> None:
     """Validate optional eval/runtime dependencies at flow execution time."""
-    from rag_core.core.config import RerankerSettings
     from evaluation.runtime import assert_eval_runtime_ready, EvaluationRuntimeError
 
     try:
-        assert_eval_runtime_ready(
-            rerank_enabled=RerankerSettings().enabled,
-        )
+        assert_eval_runtime_ready()
     except EvaluationRuntimeError:
         log = _get_logger()
         import sys
+
         sys.tracebacklimit = 0
 
         error_msg = (
             "\n\n" + "=" * 70 + "\n"
             "🚨 MISSING EVALUATION DEPENDENCIES\n\n"
-            "You are trying to run an evaluation flow, but the current worker\n"
-            "container does not have the heavy machine learning dependencies installed.\n\n"
+            "The current worker image does not have evaluation libraries installed\n"
+            "(ragas, phoenix-evals, etc.).\n\n"
             "To unlock evaluations, run this command in your terminal once:\n"
             "  make eval\n\n"
-            "This will automatically upgrade your worker image and trigger the pipeline.\n"
+            "This will install the eval extras and trigger the pipeline.\n"
             + "=" * 70 + "\n"
         )
 

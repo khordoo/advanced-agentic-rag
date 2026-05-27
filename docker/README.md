@@ -10,8 +10,9 @@ docker compose --project-directory . -f docker/docker-compose.yaml up -d
 docker compose --project-directory . -f docker/docker-compose.yaml ps
 ```
 
-Default worker builds include ingestion, PDF Docling processing, and the dense
-FastEmbed model cache. The reranker is only needed by the API image.
+Default worker and API images include runtime code and dependencies only. The
+`model-warmer` service downloads the dense, sparse, and `BAAI/bge-reranker-base`
+FastEmbed models into a shared Docker volume before the API and worker start.
 
 ## Services
 
@@ -24,6 +25,7 @@ FastEmbed model cache. The reranker is only needed by the API image.
 | **Phoenix** | `6006` | OpenTelemetry/OpenInference tracing UI |
 | **PostgreSQL (core-db)** | `5432` | Shared DB host (RAG + Prefect metadata) |
 | **Ingestion Worker** | internal | Prefect process worker for ingestion flows |
+| **Model Warmer** | internal | Preloads FastEmbed models into the shared cache volume |
 
 After startup, open:
 - Prefect dashboard: `http://localhost:4200`

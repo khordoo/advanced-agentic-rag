@@ -1,16 +1,27 @@
 services:
+  model-warmer:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+      args:
+        UV_SYNC_EXTRAS: ${RAG_API_UV_SYNC_EXTRAS:---extra api}
+    container_name: model-warmer
+    env_file:
+      - .env
+    environment:
+      - FASTEMBED_CACHE_DIR=/app/.cache/fastembed
+      - RERANK_MODEL_NAME=BAAI/bge-reranker-base
+    volumes:
+      - fastembed-cache:/app/.cache/fastembed
+    command: >
+      .venv/bin/python -c "import os; from fastembed import TextEmbedding, SparseTextEmbedding; from fastembed.rerank.cross_encoder import TextCrossEncoder; cache_dir=os.environ['FASTEMBED_CACHE_DIR']; dense=os.environ.get('EMBEDDING_MODEL_NAME', 'BAAI/bge-small-en-v1.5'); sparse=os.environ.get('QDRANT_SPARSE_MODEL', 'Qdrant/bm42-all-minilm-l6-v2-attentions'); reranker=os.environ.get('RERANK_MODEL_NAME', 'BAAI/bge-reranker-base'); print(f'Downloading embedding model: {dense}'); TextEmbedding(model_name=dense, cache_dir=cache_dir); print(f'Downloading sparse model: {sparse}'); SparseTextEmbedding(model_name=sparse, cache_dir=cache_dir); print(f'Downloading reranker: {reranker}'); TextCrossEncoder(model_name=reranker, cache_dir=cache_dir); print('Models downloaded successfully.');"
+
   rag_api:
     build:
       context: .
       dockerfile: docker/Dockerfile.api
       args:
         UV_SYNC_EXTRAS: ${RAG_API_UV_SYNC_EXTRAS:---extra api}
-        API_ENABLE_CPU_RERANK: ${RAG_API_ENABLE_CPU_RERANK:-true}
-        TORCH_CPU_INDEX_URL: ${RAG_API_TORCH_CPU_INDEX_URL:-https://download.pytorch.org/whl/cpu}
-        EMBEDDING_MODEL_NAME: ${EMBEDDING_MODEL_NAME:-BAAI/bge-small-en-v1.5}
-        QDRANT_SPARSE_MODEL: ${QDRANT_SPARSE_MODEL:-Qdrant/bm42-all-minilm-l6-v2-attentions}
-        RERANK_MODEL_NAME: ${RERANK_MODEL_NAME:-BAAI/bge-reranker-v2-m3}
-        HF_TOKEN: ${HF_TOKEN:-}
     container_name: api
     ports:
       - "${RAG_API_PORT:-8000}:8000"
@@ -27,6 +38,8 @@ services:
       - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-http://phoenix:6006/v1/traces}
       - OTEL_EXPORTER_OTLP_PROTOCOL=${OTEL_EXPORTER_OTLP_PROTOCOL:-http/protobuf}
       - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-advanced-rag-api}
+    volumes:
+      - fastembed-cache:/app/.cache/fastembed
     healthcheck:
       # Use Python's built-in urllib so we don't need to install curl
       test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/ping')" ]
@@ -36,6 +49,7 @@ services:
       start_period: 10s # Gives Uvicorn time to boot and load your models
     depends_on:
       qdrant: { condition: service_started }
+      model-warmer: { condition: service_completed_successfully }
 
   prefect-server:
     image: prefecthq/prefect:3-python3.11
@@ -62,9 +76,6 @@ services:
       dockerfile: docker/Dockerfile.worker
       args:
         UV_SYNC_EXTRAS: ${INGESTION_WORKER_UV_SYNC_EXTRAS:---extra ingestion --extra doc-processing}
-        EMBEDDING_MODEL_NAME: ${EMBEDDING_MODEL_NAME:-BAAI/bge-small-en-v1.5}
-        QDRANT_SPARSE_MODEL: ${QDRANT_SPARSE_MODEL:-Qdrant/bm42-all-minilm-l6-v2-attentions}
-        HF_TOKEN: ${HF_TOKEN:-}
     container_name: ingestion-worker
     restart: always
     env_file:
@@ -79,10 +90,12 @@ services:
     volumes:
       - ./data/source_documents:/app/data/source_documents:ro
       - hf-cache-volume:/app/.cache/huggingface
+      - fastembed-cache:/app/.cache/fastembed
     depends_on:
       core-db: { condition: service_healthy }
       qdrant: { condition: service_started }
       prefect-server: { condition: service_healthy }
+      model-warmer: { condition: service_completed_successfully }
 
   web_ui:
     image: ghcr.io/open-webui/open-webui:v0.9.5
@@ -166,6 +179,7 @@ volumes:
   open-webui-data:
   phoenix_data:
   hf-cache-volume:
+  fastembed-cache:
 
 networks:
   default:

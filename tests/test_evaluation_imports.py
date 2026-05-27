@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import importlib
+import sys
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -199,29 +200,42 @@ class TestEvalConfigParsing:
 class TestEvalRuntimeChecks:
     """Verify eval dependency checks fail with actionable messages."""
 
-    def test_runtime_check_reports_missing_rerank_dependency(self):
-        """Missing rerank deps point users at make eval."""
+    def test_ragas_compat_shims_removed_vertexai_import_path(self):
+        """RAGAS can import its stale VertexAI path without supporting VertexAI."""
+        from evaluation.ragas_compat import apply_ragas_compat
+
+        module_name = "langchain_community.chat_models.vertexai"
+        sys.modules.pop(module_name, None)
+
+        apply_ragas_compat()
+
+        module = importlib.import_module(module_name)
+        with pytest.raises(RuntimeError, match="VertexAI is not supported"):
+            module.ChatVertexAI()
+
+    def test_runtime_check_reports_missing_eval_dependency(self):
+        """Missing eval deps point users at make eval."""
         from evaluation.runtime import EvaluationRuntimeError
         from evaluation.runtime import assert_eval_runtime_ready
 
         real_import_module = importlib.import_module
 
         def fake_import_module(name, package=None):
-            if name == "sentence_transformers":
+            if name == "ragas":
                 raise ModuleNotFoundError(
-                    "No module named 'sentence_transformers'",
-                    name="sentence_transformers",
+                    "No module named 'ragas'",
+                    name="ragas",
                 )
             return real_import_module(name, package=package)
 
         with patch("importlib.import_module", side_effect=fake_import_module):
             with pytest.raises(EvaluationRuntimeError) as exc_info:
-                assert_eval_runtime_ready(rerank_enabled=True)
+                assert_eval_runtime_ready()
 
         message = str(exc_info.value)
-        assert "sentence_transformers" in message
+        assert "ragas" in message
         assert "make eval" in message
-        assert "RERANK_ENABLED=false" in message
+        assert "Evaluation flows require the [eval] extras" in message
 
 
 class TestEvalDatasetUpload:
