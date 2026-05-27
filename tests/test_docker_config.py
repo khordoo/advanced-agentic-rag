@@ -57,7 +57,8 @@ def test_env_example_defaults_are_docker_compose_first() -> None:
     assert "QDRANT_URL=http://qdrant:6333" in env_example
     assert "POSTGRES_HOST=core-db" in env_example
     assert "PREFECT_API_URL=http://prefect-server:4200/api" in env_example
-    assert "PREFECT_DEPLOYMENT_NAME=local-ingestion-runner" in env_example
+    assert "PREFECT_INGESTION_WORK_POOL=rag-work-pool" in env_example
+    assert "PREFECT_DEPLOYMENT_NAME=ingest-documents" in env_example
     assert "PREFECT_INIT_MAX_WAIT=120" in env_example
     assert "PREFECT_LOGGING_EXTRA_LOGGERS=rag_core" in env_example
     assert "OPENAI_API_BASE_URL=http://rag_api:8000/v1" in env_example

@@ -42,6 +42,16 @@ ingestion = [
     "prefect>=3.7.1",
 ]
 
+# Evaluation pipeline: RAGAS metrics + Phoenix Experiments + LLM judges
+eval = [
+    "ragas>=0.4.3",
+    "arize-phoenix-client>=1.28.0",
+    "arize-phoenix-evals>=2.0.0",
+    "langchain-huggingface>=1.2.1",
+    "pandas>=2.3.3",
+    "prefect>=3.7.1",
+]
+
 # Optional heavy ML runtime for local reranking / legacy retriever paths
 rerank = [
     "torch>=2.11.0",
@@ -61,7 +71,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["rag_core", "orchestration"]
+packages = ["rag_core", "orchestration", "evaluation"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -73,5 +83,4 @@ dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.25",
     "ruff>=0.15.10",
-    "ragas>=0.4.3",
 ]

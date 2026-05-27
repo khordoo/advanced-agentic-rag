@@ -7,7 +7,7 @@ from rag_core.core.config import (
     RetrievalSettings,
     get_retrieval_settings,
 )
-from rag_core.reranking import BaseReranker, LocalReranker
+from rag_core.reranking.base import BaseReranker
 from rag_core.retrieval.base import BaseRetriever
 from rag_core.retrieval.factory import create_retriever
 
@@ -58,7 +58,20 @@ class RAGSearchService:
         if not should_rerank or not documents:
             return documents
 
-        active_reranker = self.reranker or LocalReranker(settings=self._reranker_settings)
+        if self.reranker is None:
+            try:
+                from rag_core.reranking.local_reranker import LocalReranker
+            except ModuleNotFoundError as exc:
+                if exc.name == "sentence_transformers":
+                    raise RuntimeError(
+                        "Reranking is enabled but sentence-transformers is not installed. "
+                        "Run `make eval` for eval workers, rebuild the API image "
+                        "with rerank support, or set RERANK_ENABLED=false."
+                    ) from exc
+                raise
+            active_reranker = LocalReranker(settings=self._reranker_settings)
+        else:
+            active_reranker = self.reranker
         top_k = rerank_top_k if rerank_top_k is not None else self._reranker_settings.top_k
         reranked = active_reranker.rerank(query, documents, top_k=top_k)
 

@@ -37,9 +37,26 @@ def end_to_end_flow(
     max_jobs: int | None = None,
 ) -> dict[str, object]:
     """Orchestrate discovery followed by ingestion."""
-    _get_logger().info("Running end-to-end ingestion flow")
+    logger = _get_logger()
+    logger.info("Running end-to-end ingestion flow")
     run_database_migrations_task()
-    return end_to_end_ingestion_task(max_jobs=max_jobs)
+    result = end_to_end_ingestion_task(max_jobs=max_jobs)
+
+    # ── Optional post-ingestion eval hook (non-blocking) ─────────────
+    try:
+        from evaluation.config import get_eval_config  # lazy
+
+        eval_config = get_eval_config()
+        if eval_config.enabled and eval_config.post_ingestion_hook:
+            logger.info("Post-ingestion eval hook triggered — running ground truth eval")
+            from evaluation.orchestration.flows import eval_golden_flow  # lazy
+
+            eval_golden_flow()
+    except Exception as exc:
+        # Eval failures NEVER break ingestion
+        logger.warning("Post-ingestion eval hook failed (non-fatal): %s", exc)
+
+    return result
 
 
 @flow(name="rag-factory-reset-flow", log_prints=True)
@@ -78,16 +95,16 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--register-all-deployments",
         action="store_true",
-        help="Register both safe ingestion and destructive factory-reset deployments",
+        help="Register both document ingestion and destructive reset deployments",
     )
     parser.add_argument(
         "--deployment-name",
-        default="local-ingestion-runner",
+        default="ingest-documents",
         help="Deployment name when --register-deployment is used",
     )
     parser.add_argument(
         "--work-pool",
-        default="ingestion-pool",
+        default="rag-work-pool",
         help="Prefect work pool name for deployment registration",
     )
     parser.add_argument(
@@ -109,18 +126,15 @@ def main() -> None:
             work_pool=args.work_pool,
             work_queue=args.work_queue,
             tags=["ingestion", "safe", "oss"],
-            description="Safe RAG end-to-end ingestion run with migration preflight.",
+            description="Discover, process, and index source documents for retrieval.",
         )
         _register_deployment(
             target_flow=factory_reset_flow,
-            deployment_name=f"{args.deployment_name}-factory-reset",
+            deployment_name="reset-document-index",
             work_pool=args.work_pool,
             work_queue=args.work_queue,
             tags=["ingestion", "admin", "dangerous", "destructive", "oss"],
-            description=(
-                "DANGEROUS: Wipes vector backend and ingestion registries. "
-                "Requires confirm_destructive_wipe=true."
-            ),
+            description="Destructively clears indexed documents and ingestion state for a clean rebuild.",
         )
         return
 
@@ -133,10 +147,7 @@ def main() -> None:
                 work_pool=args.work_pool,
                 work_queue=args.work_queue,
                 tags=["ingestion", "admin", "dangerous", "destructive", "oss"],
-                description=(
-                    "DANGEROUS: Wipes vector backend and ingestion registries. "
-                    "Requires confirm_destructive_wipe=true."
-                ),
+                description="Destructively clears indexed documents and ingestion state for a clean rebuild.",
             )
         else:
             _register_deployment(
@@ -145,7 +156,7 @@ def main() -> None:
                 work_pool=args.work_pool,
                 work_queue=args.work_queue,
                 tags=["ingestion", "safe", "oss"],
-                description="Safe RAG ingestion deployment for UI-triggered runs.",
+                description="Discover, process, and index source documents for retrieval.",
             )
         return
 

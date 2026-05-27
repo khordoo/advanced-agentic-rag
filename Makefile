@@ -1,4 +1,4 @@
-.PHONY: up down reset logs stat migrate-up migrate-down migrate-new migrate-status migrate-statusd ingest register-ingestion-deployment register-ingestion-deployments run-ingestion-flow test
+.PHONY: up down reset logs stat migrate-up migrate-down migrate-new migrate-status migrate-statusd ingest register-ingestion-deployment register-ingestion-deployments run-ingestion-flow test eval register-eval-deployment
 
 ENV_FILE:= .env
 COMPOSE_FILE:=docker/docker-compose.yaml
@@ -18,14 +18,19 @@ ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
 $(eval $(ARGS):;@:)
 
 up:
-	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) up -d
+	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) up -d --wait
 
 down:
 	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) down
 
 reset:
+	@echo "🛑 Stopping and removing containers (including volumes)..."
 	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) down --volumes
-	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) up --build -d
+	@echo "🧹 Sweeping the Docker floor (Removing dangling images and dead build cache)..."
+	docker image prune -f
+	docker builder prune -f
+	@echo "🚀 Rebuilding and starting up..."
+	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) up --build -d --wait
 
 logs:
 	docker compose --project-directory . -f $(COMPOSE_FILE) logs -f --tail=100 $(ARGS)
@@ -62,3 +67,18 @@ ingest: migrate-up
 
 test:
 	uv run pytest tests/
+
+eval:
+	@echo "🔍 Checking worker environment for evaluation dependencies..."
+	@docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) run --rm --entrypoint python ingestion-worker -c "import ragas" 2>/dev/null || \
+		(echo "⚠️ Missing Eval dependencies! Auto-upgrading image (this will take a few minutes)..." && \
+		 docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) build --build-arg UV_SYNC_EXTRAS="--extra ingestion --extra doc-processing --extra eval --extra rerank" ingestion-worker && \
+		 docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) up -d --force-recreate --wait ingestion-worker && \
+		 echo "✅ Eval dependencies installed and ingestion-worker restarted.")
+	@echo "🚀 Environment verified. Running Evaluation..."
+	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) run --rm --entrypoint "uv" ingestion-worker run --no-sync python -c "from evaluation.orchestration.flows import eval_golden_flow; eval_golden_flow()"
+
+
+register-eval-deployment:
+	@echo "Registering eval deployments (requires EVAL_ENABLED=true)..."
+	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) run --rm --entrypoint "uv" ingestion-worker run --no-sync python -m orchestration.initialize

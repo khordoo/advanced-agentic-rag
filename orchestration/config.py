@@ -16,12 +16,12 @@ class PrefectConfig(BaseSettings):
         validation_alias="PREFECT_API_URL",
     )
     work_pool_name: str = Field(
-        default="ingestion-pool",
+        default="rag-work-pool",
         validation_alias="PREFECT_INGESTION_WORK_POOL",
     )
     work_pool_type: str = "process"
     deployment_name: str = Field(
-        default="local-ingestion-runner",
+        default="ingest-documents",
         validation_alias="PREFECT_DEPLOYMENT_NAME",
     )
     max_wait_seconds: int = Field(

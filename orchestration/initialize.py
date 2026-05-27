@@ -21,6 +21,10 @@ from prefect.client.orchestration import get_client
 from orchestration.config import get_prefect_config
 from orchestration.ingestion.flows import end_to_end_flow, factory_reset_flow
 
+# Safe to import without [eval] extra — no heavy deps at module level
+from evaluation.config import get_eval_config
+from evaluation.orchestration.deployments import build_eval_deployment_specs
+
 logger = logging.getLogger("orchestration.initialize")
 logging.basicConfig(
     level=logging.INFO,
@@ -113,24 +117,61 @@ async def ensure_work_pool() -> None:
 # 3. Automated deployment registration
 # ---------------------------------------------------------------------------
 
-# Deployment specifications: each tuple is (flow_object, deployment_suffix, tags, description).
+# Deployment specifications: each tuple is (flow_object, deployment_name, tags, description).
 _DEPLOYMENT_SPECS: list[tuple] = [
     (
         end_to_end_flow,
-        "",
+        "ingest-documents",
         ["ingestion", "safe", "oss"],
-        "Safe RAG end-to-end ingestion run with migration preflight.",
+        "Discover, process, and index source documents for retrieval.",
     ),
     (
         factory_reset_flow,
-        "-factory-reset",
+        "reset-document-index",
         ["ingestion", "admin", "dangerous", "destructive", "oss"],
-        (
-            "DANGEROUS: Wipes vector backend and ingestion registries. "
-            "Requires confirm_destructive_wipe=true."
-        ),
+        "Destructively clears indexed documents and ingestion state for a clean rebuild.",
     ),
 ]
+
+
+async def _register_deployment_spec(
+    *,
+    flow_obj,
+    deployment_name: str,
+    tags: list[str],
+    description: str,
+    flow_module_path: str,
+    schedule_cron: str | None = None,
+) -> object:
+    """Register one deployment spec and return the deployment id."""
+    schedules = None
+    if schedule_cron:
+        from prefect.client.schemas.actions import DeploymentScheduleCreate
+        from prefect.client.schemas.schedules import CronSchedule
+
+        schedules = [
+            DeploymentScheduleCreate(schedule=CronSchedule(cron=schedule_cron))
+        ]
+
+    async with get_client() as client:
+        flow_id = await client.create_flow_from_name(flow_obj.name)
+        entrypoint = f"{flow_module_path}:{flow_obj.fn.__name__}"
+
+        deployment_kwargs = {
+            "flow_id": flow_id,
+            "name": deployment_name,
+            "work_pool_name": config.work_pool_name,
+            "tags": tags,
+            "description": description,
+            "entrypoint": entrypoint,
+            "path": "/app",
+        }
+        if schedules:
+            deployment_kwargs["schedules"] = schedules
+
+        deployment_id = await client.create_deployment(**deployment_kwargs)
+
+    return deployment_id
 
 
 async def register_deployments() -> None:
@@ -144,35 +185,55 @@ async def register_deployments() -> None:
     in Prefect 3.x — unnecessary because the worker container already has
     the code baked into its image.
     """
+    logger.info("Building deployment specifications …")
+    # ── Ingestion specs ──────────────────────────────────────────────
+    ingestion_specs = _DEPLOYMENT_SPECS
+
+    # ── Eval specs (dynamic, feature-flagged) ────────────────────────
+    eval_config = get_eval_config()
+    eval_specs = build_eval_deployment_specs(eval_config)
+
     logger.info("Registering deployments to pool '%s' …", config.work_pool_name)
 
-    async with get_client() as client:
-        for flow_obj, suffix, tags, description in _DEPLOYMENT_SPECS:
-            # Step 1: Ensure the flow is registered and get its server-side UUID.
-            flow_id = await client.create_flow_from_name(flow_obj.name)
+    # A) Ingestion
+    for flow_obj, deployment_name, tags, description in ingestion_specs:
+        deployment_id = await _register_deployment_spec(
+            flow_obj=flow_obj,
+            deployment_name=deployment_name,
+            tags=tags,
+            description=description,
+            flow_module_path="orchestration/ingestion/flows.py",
+        )
+        logger.info(
+            "Deployment '%s' → flow '%s' registered (id=%s) ✓",
+            deployment_name,
+            flow_obj.name,
+            deployment_id,
+        )
 
-            # Step 2: Build the entrypoint string Prefect uses to locate the flow.
-            # Format: "module/path.py:flow_function_name"
-            entrypoint = f"orchestration/ingestion/flows.py:{flow_obj.fn.__name__}"
+    logger.info("All ingestion deployments registered ✓")
 
-            deployment_name = f"{config.deployment_name}{suffix}"
-
-            # Step 3: Upsert the deployment.
-            deployment_id = await client.create_deployment(
-                flow_id=flow_id,
-                name=deployment_name,
-                work_pool_name=config.work_pool_name,
+    # B) Evaluation
+    if not eval_specs:
+        logger.info("Eval deployments disabled (EVAL_ENABLED=false) — skipping")
+    else:
+        for spec in eval_specs:
+            flow_obj, deployment_name, tags, description, schedule_cron = spec
+            deployment_id = await _register_deployment_spec(
+                flow_obj=flow_obj,
+                deployment_name=deployment_name,
                 tags=tags,
                 description=description,
-                entrypoint=entrypoint,
-                path="/app",
+                flow_module_path="evaluation/orchestration/flows.py",
+                schedule_cron=schedule_cron,
             )
             logger.info(
-                "Deployment '%s' → flow '%s' registered (id=%s) ✓",
+                "Eval deployment '%s' → flow '%s' registered (id=%s) ✓",
                 deployment_name,
                 flow_obj.name,
                 deployment_id,
             )
+        logger.info("All eval deployments registered ✓")
 
     logger.info("All deployments registered ✓")
 

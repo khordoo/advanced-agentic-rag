@@ -100,8 +100,10 @@ def test_register_deployments_uses_configured_deployment_and_pool(
     monkeypatch.setattr(
         initialize,
         "_DEPLOYMENT_SPECS",
-        [(_Flow(), "", ["safe"], "description")],
+        [(_Flow(), "example-deployment", ["safe"], "description")],
     )
+    monkeypatch.setattr(initialize, "get_eval_config", lambda: SimpleNamespace())
+    monkeypatch.setattr(initialize, "build_eval_deployment_specs", lambda config: [])
     monkeypatch.setattr(initialize, "get_client", lambda: _Client())
 
     asyncio.run(initialize.register_deployments())
@@ -109,7 +111,7 @@ def test_register_deployments_uses_configured_deployment_and_pool(
     assert records == [
         {
             "flow_id": "example-flow-id",
-            "name": "custom-deployment",
+            "name": "example-deployment",
             "work_pool_name": "custom-pool",
             "tags": ["safe"],
             "description": "description",
@@ -117,3 +119,71 @@ def test_register_deployments_uses_configured_deployment_and_pool(
             "path": "/app",
         }
     ]
+
+
+def test_register_deployments_registers_eval_cron_without_status(
+    monkeypatch,
+) -> None:
+    records: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        initialize,
+        "config",
+        PrefectConfig(
+            work_pool_name="custom-pool",
+            deployment_name="custom-deployment",
+            _env_file=None,
+        ),
+    )
+
+    class _FlowFn:
+        __name__ = "eval_flow"
+
+    class _Flow:
+        name = "eval-flow"
+        fn = _FlowFn()
+
+    class _Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def create_flow_from_name(self, name: str):
+            return f"{name}-id"
+
+        async def create_deployment(self, **kwargs):
+            records.append(kwargs)
+            return "deployment-id"
+
+    monkeypatch.setattr(initialize, "_DEPLOYMENT_SPECS", [])
+    monkeypatch.setattr(initialize, "get_eval_config", lambda: SimpleNamespace())
+    monkeypatch.setattr(
+        initialize,
+        "build_eval_deployment_specs",
+        lambda config: [
+            (
+                _Flow(),
+                "eval-deployment",
+                ["evaluation"],
+                "eval description",
+                "0 1 * * *",
+            )
+        ],
+    )
+    monkeypatch.setattr(initialize, "get_client", lambda: _Client())
+
+    asyncio.run(initialize.register_deployments())
+
+    assert len(records) == 1
+    record = records[0]
+    assert "status" not in record
+    assert record["flow_id"] == "eval-flow-id"
+    assert record["name"] == "eval-deployment"
+    assert record["work_pool_name"] == "custom-pool"
+    assert record["tags"] == ["evaluation"]
+    assert record["description"] == "eval description"
+    assert record["entrypoint"] == "evaluation/orchestration/flows.py:eval_flow"
+    assert record["path"] == "/app"
+    assert len(record["schedules"]) == 1
+    assert record["schedules"][0].schedule.cron == "0 1 * * *"

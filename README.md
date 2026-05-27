@@ -1,6 +1,6 @@
 # Advanced RAG Pipeline
 
-Production-oriented Retrieval-Augmented Generation pipeline with hierarchical chunking, reranking, hybrid retrieval, and evaluation tooling.
+Production-oriented Retrieval-Augmented Generation pipeline with hierarchical chunking, reranking, hybrid retrieval, and automated evaluation via Phoenix Experiments + RAGAS.
 
 ## Start Here
 
@@ -13,6 +13,7 @@ Use this file as the landing page, then go to detailed guides in [`docs/`](docs/
 - [Generation Model Settings](docs/configuration/generation-models.md)
 - [Ingestion Rules](docs/ingestion/README.md)
 - [Agents & Prompt Profiles](docs/agents/README.md)
+- [Evaluation Pipeline](#evaluation-pipeline) ← new
 
 ## Quick Start
 
@@ -34,12 +35,12 @@ docker compose --project-directory . -f docker/docker-compose.yaml up -d
 
 # Register a clickable deployment in Prefect UI (one-time or after flow changes)
 uv run --extra ingestion python -m orchestration.ingestion.flows end_to_end \
-  --register-deployment --deployment-name local-ingestion-runner --work-pool ingestion-pool
+  --register-deployment --deployment-name ingest-documents --work-pool rag-work-pool
 
 # Equivalent Makefile shortcut
 make register-ingestion-deployment
 
-# Register both safe ingestion + destructive factory-reset deployments
+# Register both document ingestion + destructive reset deployments
 make register-ingestion-deployments
 
 # Start CLI
@@ -106,10 +107,10 @@ default drain-the-queue behavior.
 Use Deployments in Prefect UI for one-click ingestion runs:
 1. Start stack (`docker compose --project-directory . -f docker/docker-compose.yaml up -d`).
 2. Open `http://localhost:4200`, go to **Deployments**.
-3. Start ingestion from `local-ingestion-runner` via **Quick Run** (or create a **Schedule** from that deployment page).
-4. If `local-ingestion-runner` is missing, register deployments with `make register-ingestion-deployments`, then refresh the Deployments page.
+3. Start ingestion from `ingest-documents` via **Quick Run** (or create a **Schedule** from that deployment page).
+4. If `ingest-documents` is missing, register deployments with `make register-ingestion-deployments`, then refresh the Deployments page.
 
-For destructive reset operations, run the separate `*-factory-reset` deployment and set `confirm_destructive_wipe=true`.
+For destructive reset operations, run the separate `reset-document-index` deployment and set `confirm_destructive_wipe=true`.
 
 If runs fail on first start due to missing schema, run:
 
@@ -134,20 +135,183 @@ uv cache clean
 - Metadata extraction extension hooks (scopes/tags/extended metadata) are also documented in:
   - [`docs/ingestion/README.md`](docs/ingestion/README.md)
 
+## Evaluation Pipeline
+
+The evaluation subsystem runs RAGAS metrics + Phoenix reference-free LLM judges against a ground truth QA dataset, storing results as Phoenix Experiments with full trace correlation.
+
+> [!IMPORTANT]
+> **Evaluation is feature-flagged OFF by default.** A fresh clone with `cp .env.example .env && make ingest` never imports heavy eval deps (ragas, phoenix, phoenix.evals) and never registers eval deployments. This is the Day-1 open-source contract.
+
+### How It Works
+
+```text
+  ground_truth_dataset.csv ──→ Phoenix Dataset ("rag-ground-truth-v1")
+                        │
+                        ▼
+          eval_golden_flow (Prefect @flow)
+                        │
+        ┌───────────────┼───────────────┐
+        ▼               ▼               ▼
+  resolve_dataset   run_experiment   apply_thresholds
+                        │
+              ┌─────────┴─────────┐
+              ▼                   ▼
+     RAGAS Evaluators      Phoenix Judges
+  (Faithfulness, etc.)  (Hallucination, etc.)
+              │                   │
+              └─────────┬─────────┘
+                        ▼
+              Prefect markdown artifact
+           (Phoenix UI link + metrics table)
+```
+
+1. The ground truth QA set (`evaluation/datasets/ground_truth_dataset.csv`) is uploaded to Phoenix as a versioned Dataset (idempotent by content hash).
+2. `eval_golden_flow` constructs a `RAGPipeline` once, runs it per example via `phoenix.experiments.run_experiment`, and evaluates with both RAGAS metrics and Phoenix reference-free judges.
+3. Results are stored as a Phoenix Experiment (visible in the Phoenix UI with per-example traces) and summarised as a Prefect markdown artifact.
+4. Optional threshold gates can fail the flow if metrics drop below configured minimums.
+
+### Quick Start: Enable Evaluation
+
+```bash
+# 1. Set EVAL_ENABLED=true in your .env
+EVAL_ENABLED=true
+
+# 2. Start infrastructure (includes Phoenix at http://localhost:6006)
+make up
+
+# 3. Upload ground truth dataset (idempotent)
+docker compose --project-directory . --env-file .env -f docker/docker-compose.yaml \
+  run --rm --entrypoint "uv" ingestion-worker \
+  run --no-sync python -c \
+  "from evaluation.datasets.loaders import ensure_dataset_uploaded; \
+   from evaluation.config import get_eval_config; \
+   print(ensure_dataset_uploaded(get_eval_config()))"
+
+# 4. Run an experiment (one-shot)
+make eval
+# Or with a custom experiment name:
+docker compose --project-directory . --env-file .env -f docker/docker-compose.yaml \
+  run --rm --entrypoint "uv" ingestion-worker \
+  run --no-sync python -c \
+  "from evaluation.orchestration.flows import eval_golden_flow; \
+   eval_golden_flow(experiment_name='my-first-eval')"
+
+# 5. Verify in Phoenix UI (http://localhost:6006):
+#    - Project "advanced-rag-eval" exists
+#    - Dataset "rag-ground-truth-v1" appears
+#    - Experiment shows row count == ground truth row count
+#    - Each row has evaluator scores + full RAG span tree
+
+# 6. Register eval deployments in Prefect for scheduled/UI-triggered runs:
+make register-eval-deployment
+```
+
+`make eval` automatically detects missing dependencies and performs an idempotent
+auto-upgrade of the ingestion-worker image (preserving ingestion and doc-processing
+extras, then adding evaluation and reranking). To run a lighter
+eval image without reranking, set `RERANK_ENABLED=false` and build the worker
+with `--extra ingestion --extra doc-processing --extra eval`.
+
+### Evaluation Modes
+
+| Mode | Flow | Trigger | Ground Truth | Description |
+|------|------|---------|-------------|-------------|
+| **Ground truth** | `eval_golden_flow` | `EVAL_SCHEDULE_CRON` or manual | ✅ Required | Runs RAGAS + Phoenix judges against `ground_truth_dataset.csv` |
+| **Trace-based** | `eval_trace_flow` | `EVAL_TRACE_SCHEDULE_CRON` | ❌ Not needed | Runs reference-free judges on recent production spans |
+| **Synthetic QA** | `synthetic_qa_flow` | Manual | N/A | Generates QA pairs from document store → Phoenix Dataset |
+
+### Threshold Gates
+
+Set `EVAL_THRESHOLDS` to a JSON dict to enforce minimum scores:
+
+```bash
+# Fail the flow if faithfulness < 0.9 or context_recall < 0.85
+EVAL_THRESHOLDS='{"faithfulness": 0.9, "context_recall": 0.85}'
+```
+
+When a threshold is breached, the flow raises `RuntimeError` and the Prefect markdown artifact highlights the breaches. Leave empty for warn-only mode (never fails).
+
+### Post-Ingestion Hook
+
+To automatically run evaluation after each ingestion:
+
+```bash
+EVAL_ENABLED=true
+EVAL_POST_INGESTION_HOOK=true
+```
+
+The hook is non-blocking — eval failures are logged but never break ingestion.
+
+### EVAL_* Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `EVAL_ENABLED` | `false` | Master kill switch |
+| `EVAL_SCHEDULE_CRON` | _(empty)_ | Cron for scheduled ground truth eval |
+| `EVAL_TRACE_SCHEDULE_CRON` | _(empty)_ | Cron for trace-based eval |
+| `EVAL_POST_INGESTION_HOOK` | `false` | Run eval after ingestion |
+| `EVAL_DATASET_NAME` | `rag-ground-truth-v1` | Phoenix Dataset name |
+| `EVAL_DATASET_CSV_PATH` | `evaluation/datasets/ground_truth_dataset.csv` | Ground truth CSV path |
+| `EVAL_PHOENIX_PROJECT` | `advanced-rag-eval` | Phoenix project (isolated from prod) |
+| `EVAL_PHOENIX_ENDPOINT` | _(auto)_ | Override Phoenix endpoint |
+| `EVAL_JUDGE_PROVIDER` | `aws` | LLM provider for judges |
+| `EVAL_JUDGE_MODEL` | _(provider default)_ | Override judge model |
+| `EVAL_CONCURRENCY` | `4` | Max parallel examples |
+| `EVAL_MAX_EXAMPLES` | _(all)_ | Hard cap to bound judge cost |
+| `EVAL_RAGAS_METRICS` | `faithfulness,answer_relevancy,...` | RAGAS metrics to run |
+| `EVAL_PHOENIX_EVALUATORS` | `hallucination,qa_correctness,relevance` | Phoenix judges to run |
+| `EVAL_THRESHOLDS` | _(empty)_ | JSON dict of metric → min score |
+| `EVAL_CSV_ARTIFACT_ENABLED` | `false` | Emit CSV Prefect artifact |
+| `EVAL_TRACE_LOOKBACK_MINUTES` | `60` | Time window for trace eval |
+
+> [!TIP]
+> **OSS users without AWS:** Set `EVAL_JUDGE_PROVIDER=ollama` (or `lmstudio`) and `EVAL_JUDGE_MODEL=<your-model>` to use local judge models.
+
+### Evaluation Package Structure
+
+```text
+evaluation/
+├── config.py                    # EvalConfig(BaseSettings) + feature flags
+├── phoenix_bootstrap.py         # Lazy phoenix.Client() factory
+├── datasets/
+│   ├── ground_truth_dataset.csv              # Golden QA set (hand-curated)
+│   └── loaders.py               # CSV→Phoenix Dataset upload (idempotent)
+├── generation/
+│   └── synthetic.py             # Async QA generation → Phoenix Dataset
+├── pipeline/
+│   ├── task.py                  # run_rag_for_example (per-example isolation)
+│   └── adapter.py               # Phoenix ↔ RAG ↔ RAGAS shape conversion
+├── evaluators/
+│   ├── ragas_metrics.py         # RAGAS metric → Phoenix evaluator factory
+│   ├── phoenix_judges.py        # Reference-free LLM-as-judge evaluators
+│   └── thresholds.py            # Pass/fail policy (PassFailReport)
+├── reporting/
+│   └── artifacts.py             # Prefect markdown + CSV artifacts
+└── orchestration/
+    ├── flows.py                 # @flow: eval_golden, eval_trace, synthetic_qa
+    ├── tasks.py                 # @task wrappers (one per stage)
+    └── deployments.py           # Dynamic deployment specs ([] when disabled)
+```
+
 ## Project Structure
 
 ```text
 advanced-rag/
 ├── app/                    # API transport layer
 ├── orchestration/          # Prefect flows/worker runtime
-├── rag_core/
-├── infra/                  # Future IaC
+├── rag_core/               # Core RAG engine
+├── evaluation/             # Evaluation pipeline (feature-flagged)
+│   ├── config.py           #   EvalConfig + feature flags
+│   ├── datasets/           #   Golden QA sets + loaders
+│   ├── evaluators/         #   RAGAS + Phoenix judge factories
+│   ├── pipeline/           #   Per-example task + adapters
+│   ├── reporting/          #   Prefect artifact emitters
+│   └── orchestration/      #   Flows, tasks, deployment specs
+├── docker/
 ├── docs/
 ├── data/source_documents/
-├── examples/
-├── evaluation/
-├── docker/
-└── tests/
+├── tests/
+└── examples/
 ```
 
 ## License

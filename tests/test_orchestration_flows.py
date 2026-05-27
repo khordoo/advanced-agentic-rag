@@ -5,12 +5,13 @@ from prefect.testing.utilities import prefect_test_harness
 
 prefect = pytest.importorskip("prefect")
 
+from orchestration.ingestion import flows  # noqa: E402
+
+
 @pytest.fixture(autouse=True)
 def prefect_test_fixture():
     with prefect_test_harness():
         yield
-
-from orchestration.ingestion import flows
 
 
 def test_end_to_end_flow_runs_migrations_before_ingestion(
@@ -80,8 +81,8 @@ def test_register_all_deployments_registers_safe_and_destructive(
             max_jobs=None,
             register_deployment=False,
             register_all_deployments=True,
-            deployment_name="local-ingestion-runner",
-            work_pool="ingestion-pool",
+            deployment_name="ingest-documents",
+            work_pool="rag-work-pool",
             work_queue=None,
         ),
     )
@@ -90,8 +91,8 @@ def test_register_all_deployments_registers_safe_and_destructive(
     assert len(records) == 2
     assert records[0]["target_flow"] is flows.end_to_end_flow
     assert records[1]["target_flow"] is flows.factory_reset_flow
-    assert records[0]["deployment_name"] == "local-ingestion-runner"
-    assert records[1]["deployment_name"] == "local-ingestion-runner-factory-reset"
+    assert records[0]["deployment_name"] == "ingest-documents"
+    assert records[1]["deployment_name"] == "reset-document-index"
     assert "safe" in records[0]["tags"]
     assert "dangerous" in records[1]["tags"]
 

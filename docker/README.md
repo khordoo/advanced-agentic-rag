@@ -39,10 +39,10 @@ entrypoint script (`docker/entrypoint-worker.sh`) runs the pre-flight initializa
 module (`orchestration/initialize.py`), which:
 
 1. **Waits for the Prefect API** to become healthy (exponential backoff).
-2. **Creates the `ingestion-pool` work pool** (type: `process`) if it doesn't exist.
+2. **Creates the `rag-work-pool` work pool** (type: `process`) if it doesn't exist.
 3. **Registers both canonical deployments** to the Prefect server:
-   - `local-ingestion-runner` — safe end-to-end ingestion with migration preflight.
-   - `local-ingestion-runner-factory-reset` — destructive wipe (requires explicit confirmation parameter).
+   - `ingest-documents` — discover, process, and index source documents for retrieval.
+   - `reset-document-index` — destructive reset of indexed documents and ingestion state.
 
 All operations are **idempotent** — restarting the stack or re-creating containers
 is always safe and never produces duplicate resources.
@@ -57,10 +57,10 @@ Trigger ingestion from Prefect UI (recommended):
 
 1. Open `http://localhost:4200`
 2. Go to **Deployments**
-3. Open `local-ingestion-runner`
+3. Open `ingest-documents`
 4. Click **Quick Run** for immediate ingestion, or create a **Schedule** from the same deployment
 
-If `local-ingestion-runner` is not visible in Deployments:
+If `ingest-documents` is not visible in Deployments:
 
 ```bash
 make register-ingestion-deployments
