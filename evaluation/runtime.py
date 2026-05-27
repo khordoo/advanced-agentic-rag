@@ -10,7 +10,7 @@ logger = logging.getLogger("evaluation.runtime")
 
 
 class EvaluationRuntimeError(RuntimeError):
-    """Raised when eval is enabled but required optional deps are missing."""
+    """Raised when a requested eval flow is missing optional deps."""
 
 
 def _missing_modules(module_names: Iterable[str]) -> list[str]:
@@ -24,7 +24,7 @@ def _missing_modules(module_names: Iterable[str]) -> list[str]:
 
 
 def assert_eval_runtime_ready(*, rerank_enabled: bool) -> None:
-    """Fail fast when the current image cannot run enabled eval features."""
+    """Fail fast when the current image cannot run requested eval features."""
     required_modules = [
         "ragas",
         "phoenix.client",
@@ -41,7 +41,7 @@ def assert_eval_runtime_ready(*, rerank_enabled: bool) -> None:
     missing_csv = ", ".join(missing)
     message = (
         "Evaluation runtime check failed. Missing optional dependencies: "
-        f"{missing_csv}. EVAL_ENABLED=true requires an eval-capable worker image. "
+        f"{missing_csv}. Evaluation flows require an eval-capable worker image. "
         "Run `make eval` to rebuild and restart ingestion-worker. "
         "If you do not want reranking during eval, set RERANK_ENABLED=false."
     )

@@ -40,9 +40,12 @@ module (`orchestration/initialize.py`), which:
 
 1. **Waits for the Prefect API** to become healthy (exponential backoff).
 2. **Creates the `rag-work-pool` work pool** (type: `process`) if it doesn't exist.
-3. **Registers both canonical deployments** to the Prefect server:
+3. **Registers all canonical deployments** to the Prefect server:
    - `ingest-documents` — discover, process, and index source documents for retrieval.
    - `reset-document-index` — destructive reset of indexed documents and ingestion state.
+   - `evaluate-ground-truth` — evaluate RAG answers against the ground truth dataset.
+   - `evaluate-traces` — evaluate recent production traces with reference-free judges.
+   - `generate-synthetic-qa` — generate synthetic QA examples from indexed documents.
 
 All operations are **idempotent** — restarting the stack or re-creating containers
 is always safe and never produces duplicate resources.

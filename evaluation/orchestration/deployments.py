@@ -1,8 +1,8 @@
 """Declarative deployment specs for evaluation flows.
 
-Consumed by ``orchestration/initialize.py``.  Returns an empty list
-when ``eval_config.enabled`` is ``False`` — this is the kill switch
-that prevents eval deployments from being registered on Day-1.
+Consumed by ``orchestration/initialize.py``.  Eval deployments are
+registered unconditionally; optional eval dependencies are checked when
+the corresponding flow executes.
 
 Top-level imports: evaluation.config + flow objects (both safe without
 the ``[eval]`` extra installed).
@@ -26,21 +26,7 @@ def build_eval_deployment_specs(eval_config: EvalConfig) -> list[tuple]:
     """Return deployment specs analogous to ``_DEPLOYMENT_SPECS`` in initialize.py.
 
     Each tuple: ``(flow_object, deployment_name, tags, description, schedule_cron)``.
-
-    Returns ``[]`` when ``eval_config.enabled`` is ``False``.
     """
-    if not eval_config.enabled:
-        logger.debug("Eval disabled — returning empty deployment specs")
-        return []
-
-    from rag_core.core.config import RerankerSettings
-
-    from evaluation.runtime import assert_eval_runtime_ready
-
-    assert_eval_runtime_ready(
-        rerank_enabled=RerankerSettings().enabled,
-    )
-
     specs: list[tuple] = [
         (
             eval_golden_flow,

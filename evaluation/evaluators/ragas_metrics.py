@@ -124,7 +124,7 @@ def build_ragas_evaluators(
                         dataset=ds,
                         metrics=[metric],
                         llm=ragas_llm,
-                        embeddings=hf_emb,
+                        embeddings=ragas_emb,
                         run_config=run_config,
                     )
                     # Extract scalar score

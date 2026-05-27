@@ -1,6 +1,6 @@
 """Typed configuration for the RAG evaluation pipeline.
 
-All fields are feature-flagged OFF by default so a fresh clone with
+All fields are lightweight by default so a fresh clone with
 ``cp .env.example .env && make ingest`` never imports heavy eval deps.
 
 Top-level imports are limited to stdlib + Pydantic + pydantic_settings.
@@ -23,16 +23,12 @@ logger = logging.getLogger(__name__)
 class EvalConfig(BaseSettings):
     """Strongly typed configuration for evaluation runs.
 
-    Every field maps to an ``EVAL_*`` environment variable.  The master
-    kill-switch is :pyattr:`enabled` — when *False* no heavy imports are
-    executed, no deployments are registered, and no eval flows run.
+    Every field maps to an ``EVAL_*`` environment variable.  Evaluation
+    deployments are always registered; optional runtime dependencies are
+    checked when an eval flow is actually executed.
     """
 
     # ── Feature flags ────────────────────────────────────────────────
-    enabled: bool = Field(
-        default=False,
-        description="Master kill switch for the entire evaluation subsystem.",
-    )
     schedule_cron: str | None = Field(
         default=None,
         description="Cron expression for scheduled ground truth evaluation.",
@@ -41,7 +37,7 @@ class EvalConfig(BaseSettings):
         default=None,
         description="Cron expression for online trace-based evaluation.",
     )
-    post_ingestion_hook: bool = Field(
+    auto_run_after_ingestion: bool = Field(
         default=False,
         description="Run eval_golden_flow at the end of ingestion (non-blocking).",
     )

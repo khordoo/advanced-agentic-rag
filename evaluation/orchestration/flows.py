@@ -2,7 +2,7 @@
 
 Top-level imports: stdlib + prefect + evaluation.config only.
 All heavy deps (RagService, RagGraphFactory, evaluator factories, Phoenix client APIs)
-are imported **lazily inside flow bodies** after the enabled guard.
+are imported **lazily inside flow bodies** after runtime checks.
 
 Pattern mirrors ``orchestration/ingestion/flows.py``.
 """
@@ -28,6 +28,17 @@ def _get_logger() -> logging.Logger:
         return logging.getLogger(__name__)
 
 
+def _assert_eval_runtime_ready() -> None:
+    """Validate optional eval/runtime dependencies at flow execution time."""
+    from rag_core.core.config import RerankerSettings
+
+    from evaluation.runtime import assert_eval_runtime_ready
+
+    assert_eval_runtime_ready(
+        rerank_enabled=RerankerSettings().enabled,
+    )
+
+
 # ---------------------------------------------------------------------------
 # A) Scheduled offline eval (golden dataset)
 # ---------------------------------------------------------------------------
@@ -38,27 +49,17 @@ def eval_golden_flow(
     dataset_name: str | None = None,
     experiment_name: str | None = None,
     evaluator_names: list[str] | None = None,
-) -> dict | None:
+) -> dict:
     """Run a full evaluation experiment against the golden dataset.
 
-    Returns a summary dict on success, or ``None`` if eval is disabled.
+    Returns a summary dict on success.
     """
     eval_config = get_eval_config()
     log = _get_logger()
 
-    # ── Guard: kill switch ───────────────────────────────────────────
-    if not eval_config.enabled:
-        log.info("EVAL_ENABLED=false — skipping golden evaluation")
-        return None
-
-    from rag_core.core.config import RerankerSettings
     from rag_core.core.readiness import ApplicationReadinessChecker
 
-    from evaluation.runtime import assert_eval_runtime_ready
-
-    assert_eval_runtime_ready(
-        rerank_enabled=RerankerSettings().enabled,
-    )
+    _assert_eval_runtime_ready()
 
     # ── Guard: Ensure ingestion has run ──────────────────────────────
     try:
@@ -187,7 +188,7 @@ def eval_golden_flow(
 def eval_trace_flow(
     time_window_minutes: int | None = None,
     evaluator_names: list[str] | None = None,
-) -> dict | None:
+) -> dict:
     """Run reference-free evaluators on recent production traces.
 
     Pulls spans from the Phoenix production project within the time window,
@@ -196,9 +197,7 @@ def eval_trace_flow(
     eval_config = get_eval_config()
     log = _get_logger()
 
-    if not eval_config.enabled:
-        log.info("EVAL_ENABLED=false — skipping trace evaluation")
-        return None
+    _assert_eval_runtime_ready()
 
     # ── Placeholder for trace-based eval ─────────────────────────────
     # Full implementation depends on Phoenix span query API.
@@ -220,14 +219,12 @@ def eval_trace_flow(
 @flow(name="rag-synthetic-qa-flow", log_prints=True)
 def synthetic_qa_flow(
     corpus_source: str = "document_store",
-) -> dict | None:
+) -> dict:
     """Generate synthetic QA pairs and upload as a Phoenix Dataset."""
     eval_config = get_eval_config()
     log = _get_logger()
 
-    if not eval_config.enabled:
-        log.info("EVAL_ENABLED=false — skipping synthetic QA generation")
-        return None
+    _assert_eval_runtime_ready()
 
     import asyncio
 

@@ -189,7 +189,7 @@ async def register_deployments() -> None:
     # ── Ingestion specs ──────────────────────────────────────────────
     ingestion_specs = _DEPLOYMENT_SPECS
 
-    # ── Eval specs (dynamic, feature-flagged) ────────────────────────
+    # ── Eval specs ───────────────────────────────────────────────────
     eval_config = get_eval_config()
     eval_specs = build_eval_deployment_specs(eval_config)
 
@@ -214,26 +214,23 @@ async def register_deployments() -> None:
     logger.info("All ingestion deployments registered ✓")
 
     # B) Evaluation
-    if not eval_specs:
-        logger.info("Eval deployments disabled (EVAL_ENABLED=false) — skipping")
-    else:
-        for spec in eval_specs:
-            flow_obj, deployment_name, tags, description, schedule_cron = spec
-            deployment_id = await _register_deployment_spec(
-                flow_obj=flow_obj,
-                deployment_name=deployment_name,
-                tags=tags,
-                description=description,
-                flow_module_path="evaluation/orchestration/flows.py",
-                schedule_cron=schedule_cron,
-            )
-            logger.info(
-                "Eval deployment '%s' → flow '%s' registered (id=%s) ✓",
-                deployment_name,
-                flow_obj.name,
-                deployment_id,
-            )
-        logger.info("All eval deployments registered ✓")
+    for spec in eval_specs:
+        flow_obj, deployment_name, tags, description, schedule_cron = spec
+        deployment_id = await _register_deployment_spec(
+            flow_obj=flow_obj,
+            deployment_name=deployment_name,
+            tags=tags,
+            description=description,
+            flow_module_path="evaluation/orchestration/flows.py",
+            schedule_cron=schedule_cron,
+        )
+        logger.info(
+            "Eval deployment '%s' → flow '%s' registered (id=%s) ✓",
+            deployment_name,
+            flow_obj.name,
+            deployment_id,
+        )
+    logger.info("All eval deployments registered ✓")
 
     logger.info("All deployments registered ✓")
 

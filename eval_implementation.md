@@ -1,5 +1,10 @@
 RAG Evaluation Pipeline — Architecture Spec & Rewrite Plan
 
+Runtime cleanup note: evaluation deployments are now registered by default and
+optional eval dependencies are checked only when an eval flow executes.
+`EVAL_ENABLED` and `EVAL_POST_INGESTION_HOOK` have been replaced by runtime
+gating and `EVAL_AUTO_RUN_AFTER_INGESTION`.
+
  Target repo: /Users/mahmoodkhordoo/Developer/playgorund/rag-chunking
  Audience: downstream execution agent
  Constraints honored:

@@ -119,7 +119,6 @@ def emit_csv_artifact(experiment, eval_config) -> None:
         return
 
     try:
-        import pandas as pd  # lazy
         from prefect.artifacts import create_table_artifact  # lazy
 
         if hasattr(experiment, "get_results"):

@@ -47,7 +47,7 @@ def end_to_end_flow(
         from evaluation.config import get_eval_config  # lazy
 
         eval_config = get_eval_config()
-        if eval_config.enabled and eval_config.post_ingestion_hook:
+        if eval_config.auto_run_after_ingestion:
             logger.info("Post-ingestion eval hook triggered — running ground truth eval")
             from evaluation.orchestration.flows import eval_golden_flow  # lazy
 

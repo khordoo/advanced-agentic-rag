@@ -125,8 +125,6 @@ async def generate_synthetic_dataset(config: dict, eval_config) -> str:
         return ""
 
     import pandas as pd  # lazy
-    import phoenix as px  # lazy
-
     from evaluation.phoenix_bootstrap import get_phoenix_client
 
     dataset_name = f"rag-synthetic-v{int(time.time())}"

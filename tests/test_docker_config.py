@@ -81,5 +81,7 @@ def test_makefile_host_targets_translate_docker_service_names() -> None:
     assert "HOST_PREFECT_API_URL?=http://localhost:4200/api" in makefile
     assert "HOST_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT?=http://localhost:6006/v1/traces" in makefile
     assert "HOST_ENV:=POSTGRES_HOST=$(HOST_POSTGRES_HOST)" in makefile
+    assert "EVAL_RERANK_ENABLED?=false" in makefile
+    assert "--extra ingestion --extra doc-processing --extra eval --extra rerank" not in makefile
     assert "$(HOST_ENV) $(ALEMBIC_BASE) -c $(ALEMBIC_CONFIG)" in makefile
     assert "ingestion-worker run --no-sync python -m orchestration.ingestion.flows end_to_end" in makefile

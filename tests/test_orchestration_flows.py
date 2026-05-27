@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 from prefect.testing.utilities import prefect_test_harness
 
@@ -32,6 +34,31 @@ def test_end_to_end_flow_runs_migrations_before_ingestion(
 
     flows.end_to_end_flow(max_jobs=1)
     assert calls == ["migrate", "ingest"]
+
+
+def test_end_to_end_flow_uses_auto_run_after_ingestion_hook(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    monkeypatch.setattr(flows, "run_database_migrations_task", lambda: None)
+    monkeypatch.setattr(
+        flows,
+        "end_to_end_ingestion_task",
+        lambda **_: {"succeeded": True},
+    )
+    monkeypatch.setattr(
+        "evaluation.config.get_eval_config",
+        lambda: SimpleNamespace(auto_run_after_ingestion=True),
+    )
+    monkeypatch.setattr(
+        "evaluation.orchestration.flows.eval_golden_flow",
+        lambda: calls.append("eval"),
+    )
+
+    flows.end_to_end_flow(max_jobs=1)
+
+    assert calls == ["eval"]
 
 
 def test_factory_reset_flow_requires_confirmation() -> None:

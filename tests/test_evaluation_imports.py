@@ -2,8 +2,8 @@
 
 These tests verify the Day-1 open-source contract:
   - Importing evaluation modules does NOT require ragas / phoenix
-  - eval_golden_flow() returns None when EVAL_ENABLED=false
-  - build_eval_deployment_specs() returns [] when disabled
+  - Eval deployments are registered without importing heavy deps
+  - Eval flows validate optional deps at execution time
 
 No Phoenix server, no heavy ML deps required.
 """
@@ -66,8 +66,8 @@ class TestEvaluationImports:
         assert hasattr(evaluation.evaluators.thresholds, "evaluate_thresholds")
 
 
-class TestEvalDisabledContract:
-    """Verify that eval stays inert when EVAL_ENABLED=false.
+class TestEvalRuntimeGatingContract:
+    """Verify that eval is runtime-gated instead of registration-gated.
 
     These tests call the underlying flow function (``flow_obj.fn``) directly
     to avoid Prefect attempting to connect to its API server, which is
@@ -75,46 +75,55 @@ class TestEvalDisabledContract:
     """
 
     @patch.dict(os.environ, {"EVAL_ENABLED": "false"}, clear=False)
-    def test_golden_flow_returns_none_when_disabled(self):
-        """eval_golden_flow() must return None, never raise, when disabled."""
+    def test_golden_flow_checks_runtime_even_when_legacy_enabled_false(self):
+        """Legacy EVAL_ENABLED=false must not skip a requested eval run."""
         from evaluation.config import get_eval_config
+        from evaluation.runtime import EvaluationRuntimeError
 
         get_eval_config.cache_clear()
         try:
-            from evaluation.orchestration.flows import eval_golden_flow
+            from evaluation.orchestration import flows
 
-            # Call the unwrapped function to bypass Prefect client
-            result = eval_golden_flow.fn()
-            assert result is None
+            with patch.object(
+                flows,
+                "_assert_eval_runtime_ready",
+                side_effect=EvaluationRuntimeError("runtime check called"),
+            ):
+                with pytest.raises(EvaluationRuntimeError, match="runtime check called"):
+                    flows.eval_golden_flow.fn()
         finally:
             get_eval_config.cache_clear()
 
     @patch.dict(os.environ, {"EVAL_ENABLED": "false"}, clear=False)
-    def test_deployment_specs_empty_when_disabled(self):
-        """build_eval_deployment_specs must return [] when disabled."""
+    def test_deployment_specs_return_all_eval_deployments(self):
+        """build_eval_deployment_specs always returns the eval deployment set."""
         from evaluation.config import EvalConfig, get_eval_config
         from evaluation.orchestration.deployments import build_eval_deployment_specs
 
         get_eval_config.cache_clear()
         try:
-            config = EvalConfig(enabled=False)
+            config = EvalConfig(_env_file=None)
             specs = build_eval_deployment_specs(config)
-            assert specs == []
+            assert [spec[1] for spec in specs] == [
+                "evaluate-ground-truth",
+                "evaluate-traces",
+                "generate-synthetic-qa",
+            ]
         finally:
             get_eval_config.cache_clear()
 
     @patch.dict(os.environ, {"EVAL_ENABLED": "false"}, clear=False)
-    def test_trace_flow_returns_none_when_disabled(self):
-        """eval_trace_flow() must return None when disabled."""
+    def test_trace_flow_runs_when_runtime_ready(self):
+        """Trace flow no longer returns None due to legacy EVAL_ENABLED=false."""
         from evaluation.config import get_eval_config
 
         get_eval_config.cache_clear()
         try:
-            from evaluation.orchestration.flows import eval_trace_flow
+            from evaluation.orchestration import flows
 
-            # Call the unwrapped function to bypass Prefect client
-            result = eval_trace_flow.fn()
-            assert result is None
+            with patch.object(flows, "_assert_eval_runtime_ready"):
+                result = flows.eval_trace_flow.fn()
+            assert result == {"status": "not_implemented", "lookback_minutes": 60}
         finally:
             get_eval_config.cache_clear()
 
@@ -176,6 +185,15 @@ class TestEvalConfigParsing:
         config = EvalConfig(_env_file=None)
 
         assert config.max_examples is None
+
+    @patch.dict(os.environ, {"EVAL_AUTO_RUN_AFTER_INGESTION": "true"}, clear=False)
+    def test_auto_run_after_ingestion_env_parses(self):
+        """Post-ingestion eval auto-run uses the new env variable name."""
+        from evaluation.config import EvalConfig
+
+        config = EvalConfig(_env_file=None)
+
+        assert config.auto_run_after_ingestion is True
 
 
 class TestEvalRuntimeChecks:

@@ -140,7 +140,7 @@ uv cache clean
 The evaluation subsystem runs RAGAS metrics + Phoenix reference-free LLM judges against a ground truth QA dataset, storing results as Phoenix Experiments with full trace correlation.
 
 > [!IMPORTANT]
-> **Evaluation is feature-flagged OFF by default.** A fresh clone with `cp .env.example .env && make ingest` never imports heavy eval deps (ragas, phoenix, phoenix.evals) and never registers eval deployments. This is the Day-1 open-source contract.
+> **Evaluation is runtime-gated by default.** A fresh clone with `cp .env.example .env && make ingest` registers eval deployments but never imports heavy eval deps (ragas, phoenix, phoenix.evals) unless an eval flow is actually run.
 
 ### How It Works
 
@@ -170,16 +170,13 @@ The evaluation subsystem runs RAGAS metrics + Phoenix reference-free LLM judges 
 3. Results are stored as a Phoenix Experiment (visible in the Phoenix UI with per-example traces) and summarised as a Prefect markdown artifact.
 4. Optional threshold gates can fail the flow if metrics drop below configured minimums.
 
-### Quick Start: Enable Evaluation
+### Quick Start: Run Evaluation
 
 ```bash
-# 1. Set EVAL_ENABLED=true in your .env
-EVAL_ENABLED=true
-
-# 2. Start infrastructure (includes Phoenix at http://localhost:6006)
+# 1. Start infrastructure (includes Phoenix at http://localhost:6006)
 make up
 
-# 3. Upload ground truth dataset (idempotent)
+# 2. Upload ground truth dataset (idempotent)
 docker compose --project-directory . --env-file .env -f docker/docker-compose.yaml \
   run --rm --entrypoint "uv" ingestion-worker \
   run --no-sync python -c \
@@ -187,7 +184,7 @@ docker compose --project-directory . --env-file .env -f docker/docker-compose.ya
    from evaluation.config import get_eval_config; \
    print(ensure_dataset_uploaded(get_eval_config()))"
 
-# 4. Run an experiment (one-shot)
+# 3. Run an experiment (one-shot)
 make eval
 # Or with a custom experiment name:
 docker compose --project-directory . --env-file .env -f docker/docker-compose.yaml \
@@ -196,21 +193,21 @@ docker compose --project-directory . --env-file .env -f docker/docker-compose.ya
   "from evaluation.orchestration.flows import eval_golden_flow; \
    eval_golden_flow(experiment_name='my-first-eval')"
 
-# 5. Verify in Phoenix UI (http://localhost:6006):
+# 4. Verify in Phoenix UI (http://localhost:6006):
 #    - Project "advanced-rag-eval" exists
 #    - Dataset "rag-ground-truth-v1" appears
 #    - Experiment shows row count == ground truth row count
 #    - Each row has evaluator scores + full RAG span tree
 
-# 6. Register eval deployments in Prefect for scheduled/UI-triggered runs:
+# 5. Register all Prefect deployments manually if needed:
 make register-eval-deployment
 ```
 
 `make eval` automatically detects missing dependencies and performs an idempotent
 auto-upgrade of the ingestion-worker image (preserving ingestion and doc-processing
-extras, then adding evaluation and reranking). To run a lighter
-eval image without reranking, set `RERANK_ENABLED=false` and build the worker
-with `--extra ingestion --extra doc-processing --extra eval`.
+extras, then adding evaluation). It runs with `RERANK_ENABLED=false` by default
+to keep CUDA and reranking out of the worker/eval path. For reranked evals, build
+the worker separately with the `rerank` extra and run `make eval EVAL_RERANK_ENABLED=true`.
 
 ### Evaluation Modes
 
@@ -236,8 +233,7 @@ When a threshold is breached, the flow raises `RuntimeError` and the Prefect mar
 To automatically run evaluation after each ingestion:
 
 ```bash
-EVAL_ENABLED=true
-EVAL_POST_INGESTION_HOOK=true
+EVAL_AUTO_RUN_AFTER_INGESTION=true
 ```
 
 The hook is non-blocking — eval failures are logged but never break ingestion.
@@ -246,10 +242,9 @@ The hook is non-blocking — eval failures are logged but never break ingestion.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `EVAL_ENABLED` | `false` | Master kill switch |
 | `EVAL_SCHEDULE_CRON` | _(empty)_ | Cron for scheduled ground truth eval |
 | `EVAL_TRACE_SCHEDULE_CRON` | _(empty)_ | Cron for trace-based eval |
-| `EVAL_POST_INGESTION_HOOK` | `false` | Run eval after ingestion |
+| `EVAL_AUTO_RUN_AFTER_INGESTION` | `false` | Run eval after ingestion |
 | `EVAL_DATASET_NAME` | `rag-ground-truth-v1` | Phoenix Dataset name |
 | `EVAL_DATASET_CSV_PATH` | `evaluation/datasets/ground_truth_dataset.csv` | Ground truth CSV path |
 | `EVAL_PHOENIX_PROJECT` | `advanced-rag-eval` | Phoenix project (isolated from prod) |
@@ -290,7 +285,7 @@ evaluation/
 └── orchestration/
     ├── flows.py                 # @flow: eval_golden, eval_trace, synthetic_qa
     ├── tasks.py                 # @task wrappers (one per stage)
-    └── deployments.py           # Dynamic deployment specs ([] when disabled)
+    └── deployments.py           # Eval deployment specs
 ```
 
 ## Project Structure
@@ -300,7 +295,7 @@ advanced-rag/
 ├── app/                    # API transport layer
 ├── orchestration/          # Prefect flows/worker runtime
 ├── rag_core/               # Core RAG engine
-├── evaluation/             # Evaluation pipeline (feature-flagged)
+├── evaluation/             # Evaluation pipeline
 │   ├── config.py           #   EvalConfig + feature flags
 │   ├── datasets/           #   Golden QA sets + loaders
 │   ├── evaluators/         #   RAGAS + Phoenix judge factories
