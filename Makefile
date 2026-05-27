@@ -1,4 +1,4 @@
-.PHONY: up down reset logs stat migrate-up migrate-down migrate-new migrate-status migrate-statusd ingest register-ingestion-deployment register-ingestion-deployments run-ingestion-flow test eval register-eval-deployment
+.PHONY: up down reset deep-clean logs stat migrate-up migrate-down migrate-new migrate-status migrate-statusd ingest register-ingestion-deployment register-ingestion-deployments run-ingestion-flow test eval register-eval-deployment
 
 ENV_FILE:= .env
 COMPOSE_FILE:=docker/docker-compose.yaml
@@ -25,13 +25,18 @@ down:
 	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) down
 
 reset:
-	@echo "🛑 Stopping and removing containers (including volumes)..."
+	@echo "🛑 Stopping and removing containers..."
 	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) down --volumes
-	@echo "🧹 Sweeping the Docker floor (Removing dangling images and dead build cache)..."
+	@echo "🧹 Sweeping dangling ghost images..."
 	docker image prune -f
-	docker builder prune -f
-	@echo "🚀 Rebuilding and starting up..."
+	@echo "🚀 Rebuilding and starting up (using fast cache)..."
 	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) up --build -d --wait
+
+deep-clean:
+	@echo "🗑️ Clearing all Docker caches to reclaim hard drive space..."
+	docker builder prune -a -f
+	docker image prune -a -f
+	@echo "✅ System is pristine. Next build will be from scratch."
 
 logs:
 	docker compose --project-directory . -f $(COMPOSE_FILE) logs -f --tail=100 $(ARGS)
@@ -60,6 +65,7 @@ migrate-statusd: migrate-status
 
 ingest: migrate-up
 	@echo "Triggering Prefect Ingestion Flow inside Docker..."
+	@echo "💡 Tip: You can also trigger this pipeline visually from the Prefect UI at http://localhost:4200 (Deployment: ingest-documents)"
 	@if [ -n "$(MAX_JOBS)" ]; then \
 		docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) run --rm --entrypoint "uv" ingestion-worker run --no-sync python -m orchestration.ingestion.flows end_to_end --max-jobs $(MAX_JOBS); \
 	else \
@@ -77,6 +83,7 @@ eval:
 		 docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) up -d --force-recreate --wait ingestion-worker && \
 		 echo "✅ Eval dependencies installed and ingestion-worker restarted.")
 	@echo "🚀 Environment verified. Running Evaluation..."
+	@echo "💡 Tip: You can also trigger this pipeline visually from the Prefect UI at http://localhost:4200 (Deployment: evaluate-ground-truth)"
 	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) run --rm -e RERANK_ENABLED=$(EVAL_RERANK_ENABLED) --entrypoint "uv" ingestion-worker run --no-sync python -c "from evaluation.orchestration.flows import eval_golden_flow; eval_golden_flow()"
 
 
