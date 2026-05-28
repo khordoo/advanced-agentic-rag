@@ -53,7 +53,10 @@ class RagService:
 
         try:
             res = await self.graph.ainvoke(
-                {"messages": langchain_msgs, "system_instructions": self.system_instructions}
+                {
+                    "messages": langchain_msgs,
+                    "system_instructions": self.system_instructions,
+                }
             )
             messages = res.get("messages")
             if not isinstance(messages, list) or not messages:
@@ -62,7 +65,9 @@ class RagService:
             final_message = messages[-1]
             content = getattr(final_message, "content", None)
             if not isinstance(content, str) or not content.strip():
-                raise UpstreamModelError("Upstream model output content is empty or invalid.")
+                raise UpstreamModelError(
+                    "Upstream model output content is empty or invalid."
+                )
 
             parsed_output = json.loads(content)
             if not isinstance(parsed_output, dict):
@@ -70,12 +75,18 @@ class RagService:
         except UpstreamModelError:
             raise
         except (json.JSONDecodeError, KeyError, TypeError, AttributeError) as exc:
-            raise UpstreamModelError("Upstream model returned malformed JSON output.") from exc
+            raise UpstreamModelError(
+                "Upstream model returned malformed JSON output."
+            ) from exc
         except Exception as exc:
             raise UpstreamModelError("Upstream model invocation failed.") from exc
 
         source_docs = res.get("source_docs", []) if include_source_docs else []
-
+        print("==" * 50)
+        print("-----RAg Service----------------")
+        for s in source_docs:
+            print(s)
+            print("--" * 20)
         return GenerationResult(
             requested_model_id=chat_req.model,
             resolved_model_id=self.model_id,
@@ -95,7 +106,10 @@ class RagService:
             drop_system_messages=self.drop_frontend_prompts
         )
         return self.graph.astream_events(
-            {"messages": langchain_msgs, "system_instructions": self.system_instructions},
+            {
+                "messages": langchain_msgs,
+                "system_instructions": self.system_instructions,
+            },
             version="v2",
         )
 

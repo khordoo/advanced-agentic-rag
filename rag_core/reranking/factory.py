@@ -6,6 +6,7 @@ import logging
 
 from rag_core.core.config import RerankerSettings, get_reranker_settings
 from rag_core.reranking.base import BaseReranker
+from rag_core.reranking.bedrock_reranker import BedrockReranker
 from rag_core.reranking.fastembed_reranker import FastEmbedReranker
 
 logger = logging.getLogger(__name__)
@@ -18,6 +19,15 @@ def get_reranker(settings: RerankerSettings | None = None) -> BaseReranker:
 
     if provider == "fastembed":
         reranker = FastEmbedReranker(settings=active_settings)
+        logger.info(
+            "Reranker selected (provider=%s, reranker=%s)",
+            provider,
+            reranker.__class__.__name__,
+        )
+        return reranker
+
+    if provider == "bedrock":
+        reranker = BedrockReranker(settings=active_settings)
         logger.info(
             "Reranker selected (provider=%s, reranker=%s)",
             provider,

@@ -50,7 +50,7 @@ services:
 
   rag_cli:
     image: advanced-rag-api:local
-    profiles: ["tools"]
+    profiles: [ "tools" ]
     container_name: cli
     stdin_open: true
     tty: true
@@ -69,13 +69,13 @@ services:
       - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-advanced-rag-cli}
     volumes:
       - fastembed-cache:/app/.cache/fastembed
-    command: [".venv/bin/python", "-m", "rag_core.cli"]
+    command: [ ".venv/bin/python", "-m", "rag_core.cli" ]
     depends_on:
       rag_api: { condition: service_healthy }
 
   rag_ui:
     image: advanced-rag-api:local
-    profiles: ["tools"]
+    profiles: [ "tools" ]
     container_name: local-ui
     ports:
       - "${RAG_LOCAL_UI_PORT:-8501}:8501"
@@ -96,7 +96,7 @@ services:
     volumes:
       - ./examples:/app/examples
       - fastembed-cache:/app/.cache/fastembed
-    entrypoint: ["/entrypoint-ui.sh"]
+    entrypoint: [ "/entrypoint-ui.sh" ]
     depends_on:
       rag_api: { condition: service_healthy }
 

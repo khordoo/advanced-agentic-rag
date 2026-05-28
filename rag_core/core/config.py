@@ -225,7 +225,7 @@ class RetrievalSettings(BaseSettings):
 
 
 class RerankerSettings(BaseSettings):
-    """Configuration settings for the FastEmbed reranker."""
+    """Configuration settings for reranker providers."""
 
     provider: str = "fastembed"
     enabled: bool = True
@@ -502,3 +502,37 @@ def get_reranker_settings() -> RerankerSettings:
 def get_retrieval_settings() -> RetrievalSettings:
     logger.info("Reading .env file and caching Retrieval pipeline settings...")
     return RetrievalSettings()
+
+
+def log_runtime_status() -> None:
+    """Log the key runtime configuration in one place."""
+    generation = get_generation_settings()
+    retrieval = get_retrieval_settings()
+    reranker = get_reranker_settings()
+
+    logger.info(
+        "Runtime status: retrieval backend=%s top_k=%d oversample=%d hybrid_alpha=%.2f",
+        retrieval.backend,
+        retrieval.top_k,
+        retrieval.oversample_factor,
+        retrieval.hybrid_alpha,
+    )
+    if reranker.enabled:
+        logger.info(
+            "Runtime status: reranker enabled provider=%s model=%s top_k=%d",
+            reranker.provider,
+            reranker.model_name,
+            reranker.top_k,
+        )
+    else:
+        logger.info("Runtime status: reranker disabled")
+
+    logger.info(
+        "Runtime status: generation provider=%s reasoning=%s verifier=%s fast=%s intent_routing=%s grounding_verifier=%s",
+        generation.model_provider,
+        generation.reasoning_model,
+        generation.verifier_model,
+        generation.fast_model,
+        generation.enable_intent_routing,
+        generation.enable_grounding_verifier,
+    )
