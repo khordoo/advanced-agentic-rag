@@ -1,4 +1,4 @@
-.PHONY: up down reset deep-clean logs stat migrate-up migrate-down migrate-new migrate-status migrate-statusd ingest register-ingestion-deployment register-ingestion-deployments run-ingestion-flow test eval register-eval-deployment
+.PHONY: up down reset deep-clean logs stat cli ui migrate-up migrate-down migrate-new migrate-status migrate-statusd ingest register-ingestion-deployment register-ingestion-deployments run-ingestion-flow test eval register-eval-deployment
 
 ENV_FILE:= .env
 COMPOSE_FILE:=docker/docker-compose.yaml
@@ -43,6 +43,15 @@ logs:
 
 stat:
 	docker stats
+
+cli: up
+	@echo "🚀 Launching interactive RAG CLI..."
+	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) run --rm rag_cli
+
+ui: up
+	@echo "🚀 Launching local UI using RAG_LOCAL_UI_PORT from $(ENV_FILE) (default: 8501)..."
+	@echo "Note: Streamlit mode uses a dev-only examples/ mount for hot reloading."
+	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) run --rm --service-ports rag_ui
 
 migrate-up:
 	@test -n "$(ALEMBIC_BASE)" || (echo "Alembic not found. Install uv or create .venv with alembic."; exit 1)

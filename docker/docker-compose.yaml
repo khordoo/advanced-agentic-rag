@@ -1,10 +1,6 @@
 services:
   model-warmer:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.api
-      args:
-        UV_SYNC_EXTRAS: ${RAG_API_UV_SYNC_EXTRAS:---extra api}
+    image: advanced-rag-api:local
     container_name: model-warmer
     env_file:
       - .env
@@ -17,11 +13,12 @@ services:
       .venv/bin/python -c "import os; from fastembed import TextEmbedding, SparseTextEmbedding; from fastembed.rerank.cross_encoder import TextCrossEncoder; cache_dir=os.environ['FASTEMBED_CACHE_DIR']; dense=os.environ.get('EMBEDDING_MODEL_NAME', 'BAAI/bge-small-en-v1.5'); sparse=os.environ.get('QDRANT_SPARSE_MODEL', 'Qdrant/bm42-all-minilm-l6-v2-attentions'); reranker=os.environ.get('RERANK_MODEL_NAME', 'BAAI/bge-reranker-base'); print(f'Downloading embedding model: {dense}'); TextEmbedding(model_name=dense, cache_dir=cache_dir); print(f'Downloading sparse model: {sparse}'); SparseTextEmbedding(model_name=sparse, cache_dir=cache_dir); print(f'Downloading reranker: {reranker}'); TextCrossEncoder(model_name=reranker, cache_dir=cache_dir); print('Models downloaded successfully.');"
 
   rag_api:
+    image: advanced-rag-api:local
     build:
       context: .
       dockerfile: docker/Dockerfile.api
       args:
-        UV_SYNC_EXTRAS: ${RAG_API_UV_SYNC_EXTRAS:---extra api}
+        UV_SYNC_EXTRAS: ${RAG_API_UV_SYNC_EXTRAS:---extra api --extra ui}
     container_name: api
     ports:
       - "${RAG_API_PORT:-8000}:8000"
@@ -50,6 +47,58 @@ services:
     depends_on:
       qdrant: { condition: service_started }
       model-warmer: { condition: service_completed_successfully }
+
+  rag_cli:
+    image: advanced-rag-api:local
+    profiles: ["tools"]
+    container_name: cli
+    stdin_open: true
+    tty: true
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_HOST=${POSTGRES_HOST:-core-db}
+      - QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}
+      - OPEN_AI_COMPATIBLE_BASE_URL=${OPEN_AI_COMPATIBLE_BASE_URL:-http://host.docker.internal:1234/v1}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}
+      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-http://phoenix:6006/v1/traces}
+      - OTEL_EXPORTER_OTLP_PROTOCOL=${OTEL_EXPORTER_OTLP_PROTOCOL:-http/protobuf}
+      - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-advanced-rag-cli}
+    volumes:
+      - fastembed-cache:/app/.cache/fastembed
+    command: [".venv/bin/python", "-m", "rag_core.cli"]
+    depends_on:
+      rag_api: { condition: service_healthy }
+
+  rag_ui:
+    image: advanced-rag-api:local
+    profiles: ["tools"]
+    container_name: local-ui
+    ports:
+      - "${RAG_LOCAL_UI_PORT:-8501}:8501"
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_HOST=${POSTGRES_HOST:-core-db}
+      - QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}
+      - OPEN_AI_COMPATIBLE_BASE_URL=${OPEN_AI_COMPATIBLE_BASE_URL:-http://host.docker.internal:1234/v1}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}
+      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-http://phoenix:6006/v1/traces}
+      - OTEL_EXPORTER_OTLP_PROTOCOL=${OTEL_EXPORTER_OTLP_PROTOCOL:-http/protobuf}
+      - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-advanced-rag-ui}
+      - UI_APP=${UI_APP:-fastapi}
+    volumes:
+      - ./examples:/app/examples
+      - fastembed-cache:/app/.cache/fastembed
+    entrypoint: ["/entrypoint-ui.sh"]
+    depends_on:
+      rag_api: { condition: service_healthy }
 
   prefect-server:
     image: prefecthq/prefect:3-python3.11
