@@ -160,7 +160,8 @@ def eval_golden_flow(
         task_fn=task_fn,
         evaluators=evaluators,
         experiment_name=exp_name,
-        concurrency=eval_config.concurrency,
+        timeout=eval_config.timeout,
+        max_retries=eval_config.max_retries,
         project_name=eval_config.phoenix_project,
     )
 

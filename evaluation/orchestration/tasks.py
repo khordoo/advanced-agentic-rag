@@ -50,19 +50,21 @@ def run_experiment_task(
     task_fn,
     evaluators,
     experiment_name: str,
-    concurrency: int,
+    timeout: int,
+    max_retries: int,
     project_name: str,
 ) -> object:
     """Run a single Phoenix experiment.
 
-    ``retries=0`` — re-runs would create duplicate Experiments.
+    ``max_retries`` and ``timeout`` are forwarded to Phoenix's experiment runner.
     """
     setup_logging()
     log = _get_logger()
     log.info(
-        "Running experiment '%s' (concurrency=%d, project=%s)",
+        "Running experiment '%s' (timeout=%d, retries=%d, project=%s)",
         experiment_name,
-        concurrency,
+        timeout,
+        max_retries,
         project_name,
     )
 
@@ -75,6 +77,8 @@ def run_experiment_task(
         evaluators=evaluators,
         experiment_name=experiment_name,
         experiment_metadata={"project_name": project_name},
+        timeout=timeout,
+        retries=max_retries,
     )
 
     log.info("Experiment '%s' completed", experiment_name)

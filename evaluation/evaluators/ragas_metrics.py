@@ -106,8 +106,11 @@ def build_ragas_evaluators(
     )
     ragas_llm = LangchainLLMWrapper(judge_llm)
 
-    max_workers = int(config.get("LLM_MAX_PARALLEL_REQUEST", 3))
-    run_config = RunConfig(timeout=60, max_retries=3, max_workers=max_workers)
+    run_config = RunConfig(
+        timeout=eval_config.timeout,
+        max_retries=eval_config.max_retries,
+        max_workers=eval_config.max_workers,
+    )
     embedding_model = create_embedding_model()
     ragas_emb = LangchainEmbeddingsWrapper(
         _RagasFastEmbedAdapter(embedding_model),

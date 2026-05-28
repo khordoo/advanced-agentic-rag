@@ -87,7 +87,7 @@ async def _generate_all(config: dict, eval_config) -> list[dict]:
         provider=eval_config.judge_provider,
         config=config,
     )
-    semaphore = asyncio.Semaphore(eval_config.concurrency)
+    semaphore = asyncio.Semaphore(eval_config.max_workers)
 
     tasks = []
     for parent_id, md_doc in document_store.items():

@@ -253,7 +253,9 @@ The hook is non-blocking — eval failures are logged but never break ingestion.
 | `EVAL_PHOENIX_ENDPOINT` | _(auto)_ | Override Phoenix endpoint |
 | `EVAL_JUDGE_PROVIDER` | `aws` | LLM provider for judges |
 | `EVAL_JUDGE_MODEL` | _(provider default)_ | Override judge model |
-| `EVAL_CONCURRENCY` | `4` | Max parallel examples |
+| `EVAL_TIMEOUT` | `60` | Maximum time to wait for a single metric evaluation |
+| `EVAL_MAX_RETRIES` | `3` | Maximum retries for a failed metric evaluation |
+| `EVAL_MAX_WORKERS` | `4` | Maximum concurrent evaluation tasks |
 | `EVAL_MAX_EXAMPLES` | _(all)_ | Hard cap to bound judge cost |
 | `EVAL_RAGAS_METRICS` | `faithfulness,answer_relevancy,...` | RAGAS metrics to run |
 | `EVAL_PHOENIX_EVALUATORS` | `hallucination,qa_correctness,relevance` | Phoenix judges to run |

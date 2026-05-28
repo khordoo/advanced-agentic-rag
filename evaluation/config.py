@@ -14,7 +14,7 @@ import logging
 from functools import lru_cache
 from typing import Annotated
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
@@ -76,10 +76,25 @@ class EvalConfig(BaseSettings):
     )
 
     # ── Execution tuning ─────────────────────────────────────────────
+    timeout: int = Field(
+        default=60,
+        ge=1,
+        description="Maximum time in seconds to wait for a single metric evaluation.",
+    )
+    max_retries: int = Field(
+        default=3,
+        ge=0,
+        description="Maximum retries for a failed metric evaluation.",
+    )
+    max_workers: int = Field(
+        default=4,
+        ge=1,
+        description="Maximum concurrent evaluation tasks.",
+    )
     concurrency: int = Field(
         default=4,
         ge=1,
-        description="Max parallel examples during Phoenix experiment execution.",
+        description="Deprecated alias for max_workers.",
     )
     trace_lookback_minutes: int = Field(
         default=60,
@@ -140,6 +155,17 @@ class EvalConfig(BaseSettings):
         if isinstance(value, str) and not value.strip():
             return None
         return value
+
+    @model_validator(mode="after")
+    def _sync_eval_worker_settings(self) -> "EvalConfig":
+        fields_set = getattr(self, "__pydantic_fields_set__", set())
+
+        if "max_workers" in fields_set:
+            self.concurrency = self.max_workers
+        elif "concurrency" in fields_set:
+            self.max_workers = self.concurrency
+
+        return self
 
     @field_validator("ragas_metrics", "phoenix_evaluators", mode="before")
     @classmethod

@@ -196,6 +196,36 @@ class TestEvalConfigParsing:
 
         assert config.auto_run_after_ingestion is True
 
+    @patch.dict(
+        os.environ,
+        {
+            "EVAL_TIMEOUT": "120",
+            "EVAL_MAX_RETRIES": "1",
+            "EVAL_MAX_WORKERS": "4",
+        },
+        clear=False,
+    )
+    def test_eval_tuning_env_parses(self):
+        """Evaluation tuning values parse into typed config values."""
+        from evaluation.config import EvalConfig
+
+        config = EvalConfig(_env_file=None)
+
+        assert config.timeout == 120
+        assert config.max_retries == 1
+        assert config.max_workers == 4
+        assert config.concurrency == 4
+
+    @patch.dict(os.environ, {"EVAL_CONCURRENCY": "7"}, clear=False)
+    def test_legacy_concurrency_env_maps_to_max_workers(self):
+        """Legacy EVAL_CONCURRENCY remains a compatibility alias."""
+        from evaluation.config import EvalConfig
+
+        config = EvalConfig(_env_file=None)
+
+        assert config.max_workers == 7
+        assert config.concurrency == 7
+
 
 class TestEvalRuntimeChecks:
     """Verify eval dependency checks fail with actionable messages."""
@@ -356,6 +386,47 @@ class TestEvalDatasetUpload:
         df = client.datasets.create_dataset.call_args.kwargs["dataframe"]
         assert len(df) == 1
         assert df["input"].tolist() == ["What is A?"]
+
+
+class TestRagasTuning:
+    """Verify RAGAS picks up evaluation tuning from EvalConfig."""
+
+    def test_build_ragas_evaluators_uses_eval_config_tuning(self):
+        from evaluation.config import EvalConfig
+        from evaluation.evaluators import ragas_metrics
+
+        captured = {}
+
+        class FakeRunConfig:
+            def __init__(self, **kwargs):
+                captured.update(kwargs)
+
+        class FakeEmbeddingsWrapper:
+            def __init__(self, adapter, run_config=None):
+                self.adapter = adapter
+                self.run_config = run_config
+
+        config = EvalConfig(_env_file=None)
+        config.ragas_metrics = []
+        config.timeout = 120
+        config.max_retries = 1
+        config.max_workers = 4
+
+        fake_embedding_model = SimpleNamespace(
+            model_name="fake",
+            embed_query=lambda text: [0.0],
+            embed_documents=lambda texts: [[0.0] for _ in texts],
+        )
+
+        with patch("rag_core.agents.AgentFactory.create", return_value=SimpleNamespace()):
+            with patch("rag_core.embeddings.create_embedding_model", return_value=fake_embedding_model):
+                with patch("ragas.run_config.RunConfig", FakeRunConfig):
+                    with patch("ragas.llms.LangchainLLMWrapper", lambda llm: llm):
+                        with patch("ragas.embeddings.LangchainEmbeddingsWrapper", FakeEmbeddingsWrapper):
+                            result = ragas_metrics.build_ragas_evaluators({}, config)
+
+        assert result == []
+        assert captured == {"timeout": 120, "max_retries": 1, "max_workers": 4}
 
 
 class TestThresholdsLogic:
