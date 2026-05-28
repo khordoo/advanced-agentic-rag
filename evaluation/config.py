@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from functools import lru_cache
 from typing import Annotated
 
@@ -160,7 +161,12 @@ class EvalConfig(BaseSettings):
     def _sync_eval_worker_settings(self) -> "EvalConfig":
         fields_set = getattr(self, "__pydantic_fields_set__", set())
 
-        if "max_workers" in fields_set:
+        if (
+            "EVAL_CONCURRENCY" in os.environ
+            and "EVAL_MAX_WORKERS" not in os.environ
+        ) or (self.concurrency != 4 and self.max_workers == 4):
+            self.max_workers = self.concurrency
+        elif "max_workers" in fields_set:
             self.concurrency = self.max_workers
         elif "concurrency" in fields_set:
             self.max_workers = self.concurrency

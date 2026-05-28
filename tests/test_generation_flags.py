@@ -193,6 +193,50 @@ def test_self_correcting_agent_invokes_verifier_when_enabled():
     assert verifier_model.invoke_calls == 1
 
 
+def test_self_correcting_agent_marks_failed_verification_span(monkeypatch):
+    reasoning_model = _DummyModel()
+    verifier_model = _DummyModel(
+        response_content=json.dumps({"grounded": False, "reason": "unsupported claim"})
+    )
+    fast_model = _DummyModel()
+    nodes = GraphNodes(
+        reasoning_llm=reasoning_model,
+        verifier_llm=verifier_model,
+        fast_llm=fast_model,
+        tools=[_make_tool()],
+        settings=GenerationSettings(enable_grounding_verifier=True),
+    )
+
+    class _RecordingSpan:
+        def __init__(self) -> None:
+            self.attributes = {}
+
+        def is_recording(self):
+            return True
+
+        def set_attribute(self, key, value):
+            self.attributes[key] = value
+
+    span = _RecordingSpan()
+    monkeypatch.setattr(
+        "rag_core.core.telemetry.trace.get_current_span",
+        lambda: span,
+    )
+
+    result = nodes.execute_self_correcting_agent(
+        {
+            "messages": [HumanMessage(content="q"), AIMessage(content="candidate answer")],
+            "source_docs": [Document(page_content="doc", metadata={})],
+            "token_budget": 0,
+            "intent_route": "domain_expert",
+            "self_correction_attempts": 0,
+        }
+    )
+
+    assert result["verifier_response"].grounded is False
+    assert span.attributes == {"custom.verification_status": "failed"}
+
+
 def test_generation_settings_enforce_safe_minimums():
     with pytest.raises(ValidationError):
         GenerationSettings(max_agent_iterations=4)

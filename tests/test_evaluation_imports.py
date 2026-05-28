@@ -10,8 +10,9 @@ No Phoenix server, no heavy ML deps required.
 
 from __future__ import annotations
 
-import os
 import importlib
+import json
+import os
 import sys
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -65,6 +66,35 @@ class TestEvaluationImports:
 
         assert hasattr(evaluation.evaluators.thresholds, "PassFailReport")
         assert hasattr(evaluation.evaluators.thresholds, "evaluate_thresholds")
+
+    def test_import_custom_judges(self):
+        """Custom judges import without Phoenix or Ragas."""
+        import evaluation.evaluators.custom_judges
+
+        assert hasattr(
+            evaluation.evaluators.custom_judges,
+            "SourceReferenceFormatJudge",
+        )
+
+    def test_import_eval_registry(self):
+        """The CE registry imports without optional eval dependencies."""
+        import evaluation.eval_registry
+
+        assert hasattr(evaluation.eval_registry, "GROUND_TRUTH_EVALUATORS")
+        assert hasattr(evaluation.eval_registry, "DRIFT_EVALUATORS")
+
+    def test_import_prefect_ce_flows(self):
+        """CE Prefect flows import cleanly."""
+        import evaluation.orchestration.prefect_flows
+
+        assert hasattr(
+            evaluation.orchestration.prefect_flows,
+            "run_ground_truth_evaluation",
+        )
+        assert hasattr(
+            evaluation.orchestration.prefect_flows,
+            "run_nightly_drift_detection",
+        )
 
 
 class TestEvalRuntimeGatingContract:
@@ -512,3 +542,144 @@ class TestAdapterLogic:
 
         assert sample["user_input"] == "What is X?"
         assert sample["reference"] == "X is Y."
+
+
+class TestContinuousEvaluationRegistry:
+    """Verify the CE registry uses the ground-truth/drift semantic boundary."""
+
+    def test_ground_truth_registry_contains_reference_metrics(self):
+        from evaluation.eval_registry import GROUND_TRUTH_EVALUATORS
+
+        names = [item.name for item in GROUND_TRUTH_EVALUATORS]
+
+        assert names == [
+            "context_precision",
+            "context_recall",
+            "faithfulness",
+            "answer_relevancy",
+            "reference_format_judge",
+        ]
+
+    def test_drift_registry_excludes_reference_dependent_metrics(self):
+        from evaluation.eval_registry import DRIFT_EVALUATORS
+
+        names = [item.name for item in DRIFT_EVALUATORS]
+
+        assert names == [
+            "faithfulness",
+            "answer_relevancy",
+            "reference_format_judge",
+        ]
+        assert "context_precision" not in names
+        assert "context_recall" not in names
+
+
+class TestSourceReferenceFormatJudge:
+    """Verify deterministic citation-contract scoring."""
+
+    def test_accepts_json_ascii_citation_with_matching_metadata(self):
+        from evaluation.evaluators.custom_judges import SourceReferenceFormatJudge
+
+        payload = {
+            "answer": "The answer is 42. [1]",
+            "citations": [{"document_index": 1, "asset_key": "doc"}],
+        }
+
+        result = SourceReferenceFormatJudge().evaluate(json.dumps(payload))
+
+        assert result["score"] == 1.0
+        assert result["label"] == "formatted_and_matched_correctly"
+
+    def test_accepts_json_fullwidth_citation_with_matching_metadata(self):
+        from evaluation.evaluators.custom_judges import SourceReferenceFormatJudge
+
+        payload = {
+            "answer": "Revenue rose. 【1】",
+            "citations": [{"document_index": 1, "asset_key": "doc"}],
+        }
+
+        result = SourceReferenceFormatJudge().evaluate(json.dumps(payload))
+
+        assert result["score"] == 1.0
+        assert result["label"] == "formatted_and_matched_correctly"
+
+    def test_accepts_json_without_inline_citations(self):
+        from evaluation.evaluators.custom_judges import SourceReferenceFormatJudge
+
+        payload = {"answer": "Revenue rose.", "citations": []}
+
+        result = SourceReferenceFormatJudge().evaluate(json.dumps(payload))
+
+        assert result["score"] == 1.0
+        assert result["label"] == "no_citations_needed"
+
+    def test_rejects_json_inline_citation_without_structured_citations(self):
+        from evaluation.evaluators.custom_judges import SourceReferenceFormatJudge
+
+        payload = {"answer": "Revenue rose. [1]", "citations": []}
+
+        result = SourceReferenceFormatJudge().evaluate(json.dumps(payload))
+
+        assert result["score"] == 0.0
+        assert result["label"] == "missing_structured_citations"
+
+    def test_rejects_json_unmatched_structured_citations(self):
+        from evaluation.evaluators.custom_judges import SourceReferenceFormatJudge
+
+        payload = {
+            "answer": "Revenue rose. [2]",
+            "citations": [{"document_index": 1, "asset_key": "doc"}],
+        }
+
+        result = SourceReferenceFormatJudge().evaluate(json.dumps(payload))
+
+        assert result["score"] == 0.0
+        assert result["label"] == "unmatched_citations_[2]"
+
+    def test_plain_text_without_citations_passes(self):
+        from evaluation.evaluators.custom_judges import SourceReferenceFormatJudge
+
+        result = SourceReferenceFormatJudge().evaluate("Revenue rose.")
+
+        assert result["score"] == 1.0
+        assert result["label"] == "no_citations_needed"
+
+    def test_plain_text_with_inline_citation_fails_without_metadata(self):
+        from evaluation.evaluators.custom_judges import SourceReferenceFormatJudge
+
+        result = SourceReferenceFormatJudge().evaluate("Revenue rose. [1]")
+
+        assert result["score"] == 0.0
+        assert result["label"] == "missing_structured_citations"
+
+
+class TestContinuousEvaluationFlowHelpers:
+    """Verify CE flow helper behavior without Phoenix or Ragas calls."""
+
+    def test_safe_evaluate_row_does_not_raise_for_evaluator_failure(self):
+        from evaluation.orchestration.prefect_flows import _safe_evaluate_row
+
+        def broken_evaluator(**kwargs):
+            raise RuntimeError("judge failed")
+
+        broken_evaluator.name = "broken_judge"
+
+        result = _safe_evaluate_row(
+            evaluator=broken_evaluator,
+            question="What is revenue?",
+            contexts=["context"],
+            answer="answer",
+            ground_truth="truth",
+        )
+
+        assert result["name"] == "broken_judge"
+        assert result["score"] == 0.0
+        assert result["label"] == "error"
+        assert "judge failed" in result["error"]
+
+    def test_failed_verification_filter_targets_otel_attribute(self):
+        from evaluation.orchestration.prefect_flows import _FAILED_VERIFICATION_FILTER
+
+        assert _FAILED_VERIFICATION_FILTER == (
+            "attributes['custom.verification_status'] == 'failed'"
+        )

@@ -27,6 +27,7 @@ from rag_core.core.config import (
     get_generation_settings,
     setup_logging,
 )
+from rag_core.core.telemetry import mark_failed_verification_attempt
 from rag_core.genetation.parsers import extract_text_from_message, parse_agent_response
 from rag_core.genetation.state import RagState
 from rag_core.prompts.loader import AgentPrompt
@@ -180,6 +181,7 @@ class GraphNodes:
             }
         else:
             logger.warning("Hallucination detected. Reason: %s", reason)
+            mark_failed_verification_attempt()
             feedback_msg = (
                 f"Your previous answer was rejected by the verifier. "
                 f"Reason: {reason}. Please rewrite your final response using ONLY the provided documents."
