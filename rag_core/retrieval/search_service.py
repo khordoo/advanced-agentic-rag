@@ -8,6 +8,7 @@ from rag_core.core.config import (
     get_retrieval_settings,
 )
 from rag_core.reranking.base import BaseReranker
+from rag_core.reranking.factory import get_reranker
 from rag_core.retrieval.base import BaseRetriever
 from rag_core.retrieval.factory import create_retriever
 
@@ -58,17 +59,17 @@ class RAGSearchService:
         if not should_rerank or not documents:
             return documents
 
-        if self.reranker is None:
-            from rag_core.reranking.fastembed_reranker import FastEmbedReranker
-            active_reranker = FastEmbedReranker(settings=self._reranker_settings)
-        else:
-            active_reranker = self.reranker
-        top_k = rerank_top_k if rerank_top_k is not None else self._reranker_settings.top_k
+        active_reranker = (
+            self.reranker
+            if self.reranker is not None
+            else get_reranker(settings=self._reranker_settings)
+        )
+        top_k = (
+            rerank_top_k if rerank_top_k is not None else self._reranker_settings.top_k
+        )
         reranked = active_reranker.rerank(query, documents, top_k=top_k)
-
         for i, doc in enumerate(reranked, start=1):
             doc.metadata["rerank_rank"] = i
             rerank_score = doc.metadata.get("rerank_score")
             doc.metadata["score"] = rerank_score
-
         return reranked

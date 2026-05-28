@@ -493,6 +493,12 @@ def get_generation_settings() -> GenerationSettings:
 
 
 @lru_cache()
+def get_reranker_settings() -> RerankerSettings:
+    logger.info("Reading .env file and caching reranker settings...")
+    return RerankerSettings()
+
+
+@lru_cache()
 def get_retrieval_settings() -> RetrievalSettings:
     logger.info("Reading .env file and caching Retrieval pipeline settings...")
     return RetrievalSettings()

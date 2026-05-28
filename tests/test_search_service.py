@@ -1,8 +1,6 @@
-import builtins
 from unittest.mock import patch
 
 from langchain_core.documents import Document
-import pytest
 
 from rag_core.core.config import RetrievalSettings, RerankerSettings
 from rag_core.retrieval.search_service import RAGSearchService
@@ -105,3 +103,22 @@ def test_search_service_explicit_rerank_false_overrides_enabled_setting() -> Non
 
     assert docs[0].metadata["retrieval_score"] == 0.6
     assert "rerank_rank" not in docs[0].metadata
+
+
+def test_search_service_uses_reranker_factory_when_not_injected() -> None:
+    retriever = _FakeRetriever()
+    reranker_settings = RerankerSettings(top_k=2, _env_file=None)
+    service = RAGSearchService(
+        retriever=retriever,
+        retrieval_settings=RetrievalSettings(backend="qdrant", _env_file=None),
+        reranker=None,
+        reranker_settings=reranker_settings,
+    )
+
+    with patch("rag_core.retrieval.search_service.get_reranker") as mock_factory:
+        mock_factory.return_value = _FakeReranker()
+        docs = service.search("q")
+
+    mock_factory.assert_called_once_with(settings=reranker_settings)
+    assert docs[0].metadata["rerank_rank"] == 1
+    assert docs[0].metadata["score"] == docs[0].metadata["rerank_score"]
