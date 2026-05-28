@@ -49,9 +49,11 @@ def end_to_end_flow(
         eval_config = get_eval_config()
         if eval_config.auto_run_after_ingestion:
             logger.info("Post-ingestion eval hook triggered — running ground truth eval")
-            from evaluation.orchestration.flows import eval_golden_flow  # lazy
+            from evaluation.orchestration.prefect_flows import (  # lazy
+                run_ground_truth_evaluation,
+            )
 
-            eval_golden_flow()
+            run_ground_truth_evaluation()
     except Exception as exc:
         # Eval failures NEVER break ingestion
         logger.warning("Post-ingestion eval hook failed (non-fatal): %s", exc)

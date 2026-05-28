@@ -40,7 +40,10 @@ class EvalConfig(BaseSettings):
     )
     auto_run_after_ingestion: bool = Field(
         default=False,
-        description="Run eval_golden_flow at the end of ingestion (non-blocking).",
+        description=(
+            "Run run_ground_truth_evaluation at the end of ingestion "
+            "(non-blocking)."
+        ),
     )
 
     # ── Dataset ──────────────────────────────────────────────────────
@@ -125,7 +128,7 @@ class EvalConfig(BaseSettings):
     )
     phoenix_evaluators: Annotated[list[str], NoDecode] = Field(
         default=["hallucination", "qa_correctness", "relevance"],
-        description="Phoenix reference-free evaluator names.",
+        description="Legacy Phoenix reference-free evaluator names.",
     )
 
     # ── Thresholds (pass/fail gate) ──────────────────────────────────

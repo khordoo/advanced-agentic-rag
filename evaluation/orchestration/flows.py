@@ -10,12 +10,15 @@ Pattern mirrors ``orchestration/ingestion/flows.py``.
 from __future__ import annotations
 
 import logging
-import time
 
 from prefect import flow, get_run_logger
 from prefect.exceptions import MissingContextError
 
 from evaluation.config import get_eval_config
+from evaluation.orchestration.prefect_flows import (
+    run_ground_truth_evaluation,
+    run_nightly_drift_detection,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +59,7 @@ def _assert_eval_runtime_ready() -> None:
 
 
 # ---------------------------------------------------------------------------
-# A) Scheduled offline eval (golden dataset)
+# A/B) Compatibility wrappers for canonical CE flows
 # ---------------------------------------------------------------------------
 
 
@@ -66,139 +69,18 @@ def eval_golden_flow(
     experiment_name: str | None = None,
     evaluator_names: list[str] | None = None,
 ) -> dict:
-    """Run a full evaluation experiment against the golden dataset.
+    """Deprecated wrapper for :func:`run_ground_truth_evaluation`.
 
-    Returns a summary dict on success.
+    The registry-backed CE flow is canonical. This wrapper remains only to
+    preserve existing imports and Prefect history.
     """
-    eval_config = get_eval_config()
-    log = _get_logger()
-
-    from rag_core.core.readiness import ApplicationReadinessChecker
-
-    _assert_eval_runtime_ready()
-
-    # ── Guard: Ensure ingestion has run ──────────────────────────────
-    try:
-        ApplicationReadinessChecker().ensure_ready()
-    except Exception:
-        log.error(
-            "\n\n" + "=" * 70 + "\n"
-            "🚨 EVALUATION PRE-FLIGHT CHECK FAILED\n\n"
-            "Your knowledge base is empty or uninitialized. You cannot evaluate\n"
-            "the RAG pipeline because there are no documents to retrieve.\n\n"
-            "Please run this command first:\n"
-            "  make ingest\n\n"
-            "Once your documents are loaded, you can run 'make eval' again.\n"
-            + "=" * 70 + "\n"
+    if dataset_name or evaluator_names:
+        _get_logger().warning(
+            "eval_golden_flow is deprecated; dataset_name/evaluator_names are ignored. "
+            "Use run_ground_truth_evaluation instead."
         )
-        import sys
-        sys.tracebacklimit = 0
-        raise RuntimeError("Evaluation aborted: Knowledge base is empty. Please run 'make ingest' first.") from None
 
-    # ── Heavy imports (after guard) ──────────────────────────────────
-    from functools import partial
-
-    from rag_core.core.config import load_config
-    from rag_core.core.telemetry import init_observability
-    from rag_core.genetation.graph import RagGraphFactory
-    from rag_core.prompts.loader import AgentPrompt
-
-    from app.services.rag_service import RagService
-
-    from evaluation.evaluators.ragas_metrics import build_ragas_evaluators
-    from evaluation.evaluators.phoenix_judges import build_phoenix_evaluators
-    from evaluation.orchestration.tasks import (
-        apply_thresholds_task,
-        emit_artifact_task,
-        resolve_dataset_task,
-        run_experiment_task,
-    )
-    from evaluation.phoenix_bootstrap import get_phoenix_client
-
-    # ── Initialise observability for eval project ────────────────────
-    init_observability(eval_config.phoenix_project)
-
-    config = load_config()
-
-    # ── Build RagService + evaluators ONCE ───────────────────────────
-    log.info("Constructing RagService for evaluation …")
-    graph = RagGraphFactory.build_default()
-    agent_prompt = AgentPrompt.from_package("primary_rag_agent")
-    rag_service = RagService(
-        graph=graph,
-        system_instructions=agent_prompt.get_system_instructions(),
-        model_id="eval-runner",
-    )
-
-    from evaluation.pipeline.task import run_rag_for_example
-
-    task_fn = partial(run_rag_for_example, rag_service=rag_service)
-
-    log.info("Building evaluators …")
-    evaluators = []
-    evaluators.extend(build_ragas_evaluators(config, eval_config))
-    evaluators.extend(build_phoenix_evaluators(config, eval_config))
-
-    # ── Override dataset / experiment names if provided ───────────────
-    ds_name = dataset_name or eval_config.dataset_name
-    exp_name = experiment_name or f"golden-eval-{int(time.time())}"
-
-    # Override eval_config dataset_name for resolve_dataset_task
-    eval_config_override = eval_config.model_copy(
-        update={"dataset_name": ds_name}
-    )
-
-    # ── Execute pipeline stages ──────────────────────────────────────
-    dataset_handle = resolve_dataset_task(eval_config_override)
-
-    # Resolve the actual Phoenix dataset object for run_experiment
-    client = get_phoenix_client()
-    dataset = client.datasets.get_dataset(dataset=dataset_handle)
-
-    experiment = run_experiment_task(
-        dataset=dataset,
-        task_fn=task_fn,
-        evaluators=evaluators,
-        experiment_name=exp_name,
-        timeout=eval_config.timeout,
-        max_retries=eval_config.max_retries,
-        project_name=eval_config.phoenix_project,
-    )
-
-    # ── Compute aggregates ───────────────────────────────────────────
-    aggregates = {}
-    try:
-        if hasattr(experiment, "get_results"):
-            results_df = experiment.get_results()
-            for col in results_df.select_dtypes(include=["number"]).columns:
-                aggregates[col] = float(results_df[col].mean())
-    except Exception as exc:
-        log.warning("Could not compute aggregates: %s", exc)
-
-    # ── Apply thresholds ─────────────────────────────────────────────
-    pass_fail = apply_thresholds_task(experiment, eval_config, aggregates)
-
-    # ── Emit artifacts ───────────────────────────────────────────────
-    emit_artifact_task(experiment, pass_fail, eval_config, aggregates)
-
-    # ── Fail flow if thresholds breached ─────────────────────────────
-    if pass_fail.failed and eval_config.thresholds:
-        breach_str = "; ".join(
-            f"{m}={a:.4f} < {r:.4f}" for m, a, r in pass_fail.breaches
-        )
-        raise RuntimeError(f"Threshold breached: {breach_str}")
-
-    log.info("Golden evaluation completed ✅ (experiment=%s)", exp_name)
-    return {
-        "experiment_name": exp_name,
-        "aggregates": aggregates,
-        "passed": not pass_fail.failed,
-    }
-
-
-# ---------------------------------------------------------------------------
-# B) Online trace-based eval
-# ---------------------------------------------------------------------------
+    return run_ground_truth_evaluation.fn(experiment_name=experiment_name)
 
 
 @flow(name="rag-eval-trace-flow", log_prints=True)
@@ -206,26 +88,14 @@ def eval_trace_flow(
     time_window_minutes: int | None = None,
     evaluator_names: list[str] | None = None,
 ) -> dict:
-    """Run reference-free evaluators on recent production traces.
+    """Deprecated wrapper for :func:`run_nightly_drift_detection`."""
+    if evaluator_names:
+        _get_logger().warning(
+            "eval_trace_flow is deprecated; evaluator_names is ignored. "
+            "Use run_nightly_drift_detection instead."
+        )
 
-    Pulls spans from the Phoenix production project within the time window,
-    runs phoenix.evals judges, and annotates the live spans.
-    """
-    eval_config = get_eval_config()
-    log = _get_logger()
-
-    _assert_eval_runtime_ready()
-
-    # ── Placeholder for trace-based eval ─────────────────────────────
-    # Full implementation depends on Phoenix span query API.
-    window = time_window_minutes or eval_config.trace_lookback_minutes
-    log.info(
-        "Trace-based evaluation requested (lookback=%d min) — "
-        "implementation pending Phoenix span query API integration",
-        window,
-    )
-
-    return {"status": "not_implemented", "lookback_minutes": window}
+    return run_nightly_drift_detection.fn(lookback_minutes=time_window_minutes)
 
 
 # ---------------------------------------------------------------------------

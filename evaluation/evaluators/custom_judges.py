@@ -28,6 +28,16 @@ class SourceReferenceFormatJudge:
 
     name = "reference_format_judge"
 
+    def __init__(self) -> None:
+        self.name = "reference_format_judge"
+        self.__name__ = self.name
+        self.__qualname__ = self.name
+
+    def __repr__(self) -> str:
+        return self.name
+
+    __str__ = __repr__
+
     def evaluate(self, answer: str, **kwargs: Any) -> dict[str, Any]:
         """Return a binary score dict for the citation contract in *answer*."""
         answer_text = answer or ""
@@ -92,7 +102,20 @@ class SourceReferenceFormatJudge:
         """
         answer = ""
         if isinstance(output, dict):
-            answer = str(output.get("answer") or output.get("response") or "")
+            if isinstance(output.get("agent_output"), dict):
+                answer = json.dumps(output["agent_output"], ensure_ascii=False)
+            elif isinstance(output.get("raw_response"), str):
+                answer = output["raw_response"]
+            elif "citations" in output:
+                answer = json.dumps(
+                    {
+                        "answer": output.get("answer") or output.get("response") or "",
+                        "citations": output.get("citations") or [],
+                    },
+                    ensure_ascii=False,
+                )
+            else:
+                answer = str(output.get("answer") or output.get("response") or "")
         return self.evaluate(answer=answer)
 
 

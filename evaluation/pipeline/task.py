@@ -10,6 +10,7 @@ Top-level imports: stdlib only.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 
 from evaluation.pipeline.adapter import get_example_value
@@ -40,7 +41,7 @@ async def _run_rag_for_example_async(example: dict, *, rag_service) -> dict:
     Returns
     -------
     dict
-        ``{response, retrieved_contexts}`` on success, or
+        ``{response, retrieved_contexts, agent_output}`` on success, or
         ``{response: "", retrieved_contexts: [], error: str}`` on failure.
 
     Per-example error isolation: catches ``Exception`` and returns a
@@ -80,6 +81,8 @@ async def _run_rag_for_example_async(example: dict, *, rag_service) -> dict:
         return {
             "response": response,
             "retrieved_contexts": retrieved_contexts,
+            "agent_output": result.agent_output,
+            "raw_response": json.dumps(result.agent_output, ensure_ascii=False),
         }
 
     except Exception as exc:

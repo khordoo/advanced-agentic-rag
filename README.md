@@ -137,7 +137,7 @@ uv cache clean
 
 ## Evaluation Pipeline
 
-The evaluation subsystem runs RAGAS metrics + Phoenix reference-free LLM judges against a ground truth QA dataset, storing results as Phoenix Experiments with full trace correlation.
+The evaluation subsystem runs registry-backed RAGAS metrics plus deterministic project judges against a ground truth QA dataset, storing results as Phoenix Experiments with full trace correlation.
 
 > [!IMPORTANT]
 > **Evaluation is runtime-gated by default.** A fresh clone registers eval 
@@ -150,7 +150,7 @@ The evaluation subsystem runs RAGAS metrics + Phoenix reference-free LLM judges 
   ground_truth_dataset.csv ──→ Phoenix Dataset ("rag-ground-truth-v1")
                         │
                         ▼
-          eval_golden_flow (Prefect @flow)
+      run_ground_truth_evaluation (Prefect @flow)
                         │
         ┌───────────────┼───────────────┐
         ▼               ▼               ▼
@@ -158,8 +158,8 @@ The evaluation subsystem runs RAGAS metrics + Phoenix reference-free LLM judges 
                         │
               ┌─────────┴─────────┐
               ▼                   ▼
-     RAGAS Evaluators      Phoenix Judges
-  (Faithfulness, etc.)  (Hallucination, etc.)
+     RAGAS Evaluators     Project Judges
+  (Faithfulness, etc.)  (Citation format)
               │                   │
               └─────────┬─────────┘
                         ▼
@@ -168,9 +168,9 @@ The evaluation subsystem runs RAGAS metrics + Phoenix reference-free LLM judges 
 ```
 
 1. The ground truth QA set (`evaluation/datasets/ground_truth_dataset.csv`) is uploaded to Phoenix as a versioned Dataset (idempotent by content hash).
-2. `eval_golden_flow` constructs a `RAGPipeline` once, runs it per example via `phoenix.experiments.run_experiment`, and evaluates with both RAGAS metrics and Phoenix reference-free judges.
+2. `run_ground_truth_evaluation` constructs a `RAGPipeline` once, runs it per example via `phoenix.experiments.run_experiment`, and evaluates with `GROUND_TRUTH_EVALUATORS`.
 3. Results are stored as a Phoenix Experiment (visible in the Phoenix UI with per-example traces) and summarised as a Prefect markdown artifact.
-4. Optional threshold gates can fail the flow if metrics drop below configured minimums.
+4. Scores are logged to Phoenix and summarized as a Prefect artifact. The registry-backed CE flows do not fail only because a metric is low.
 
 ### Quick Start: Run Evaluation
 
@@ -192,8 +192,11 @@ make eval
 docker compose --project-directory . --env-file .env -f docker/docker-compose.yaml \
   run --rm --entrypoint "uv" ingestion-worker \
   run --no-sync python -c \
-  "from evaluation.orchestration.flows import eval_golden_flow; \
-   eval_golden_flow(experiment_name='my-first-eval')"
+  "from evaluation.orchestration.prefect_flows import run_ground_truth_evaluation; \
+   run_ground_truth_evaluation(experiment_name='my-first-eval')"
+
+# Optional: run trace-based drift detection on demand
+make eval-drift
 
 # 4. Verify in Phoenix UI (http://localhost:6006):
 #    - Project "advanced-rag-eval" exists
@@ -215,8 +218,8 @@ the worker separately with the `rerank` extra and run `make eval EVAL_RERANK_ENA
 
 | Mode | Flow | Trigger | Ground Truth | Description |
 |------|------|---------|-------------|-------------|
-| **Ground truth** | `eval_golden_flow` | `EVAL_SCHEDULE_CRON` or manual | ✅ Required | Runs RAGAS + Phoenix judges against `ground_truth_dataset.csv` |
-| **Trace-based** | `eval_trace_flow` | `EVAL_TRACE_SCHEDULE_CRON` | ❌ Not needed | Runs reference-free judges on recent production spans |
+| **Ground truth** | `run_ground_truth_evaluation` | `EVAL_SCHEDULE_CRON` or manual | ✅ Required | Runs `GROUND_TRUTH_EVALUATORS` against `ground_truth_dataset.csv` |
+| **Trace-based** | `run_nightly_drift_detection` | `EVAL_TRACE_SCHEDULE_CRON`, `make eval-drift`, or manual | ❌ Not needed | Runs `DRIFT_EVALUATORS` on failed-verification Phoenix spans |
 | **Synthetic QA** | `synthetic_qa_flow` | Manual | N/A | Generates QA pairs from document store → Phoenix Dataset |
 
 ### Threshold Gates
@@ -228,7 +231,9 @@ Set `EVAL_THRESHOLDS` to a JSON dict to enforce minimum scores:
 EVAL_THRESHOLDS='{"faithfulness": 0.9, "context_recall": 0.85}'
 ```
 
-When a threshold is breached, the flow raises `RuntimeError` and the Prefect markdown artifact highlights the breaches. Leave empty for warn-only mode (never fails).
+The registry-backed CE flows log scores to Phoenix and do not raise only because
+a metric is low. `EVAL_THRESHOLDS` remains available for legacy threshold reports
+and older evaluation paths.
 
 ### Post-Ingestion Hook
 
@@ -258,7 +263,7 @@ The hook is non-blocking — eval failures are logged but never break ingestion.
 | `EVAL_MAX_WORKERS` | `4` | Maximum concurrent evaluation tasks |
 | `EVAL_MAX_EXAMPLES` | _(all)_ | Hard cap to bound judge cost |
 | `EVAL_RAGAS_METRICS` | `faithfulness,answer_relevancy,...` | RAGAS metrics to run |
-| `EVAL_PHOENIX_EVALUATORS` | `hallucination,qa_correctness,relevance` | Phoenix judges to run |
+| `EVAL_PHOENIX_EVALUATORS` | `hallucination,qa_correctness,relevance` | Legacy Phoenix judges setting; not used by the registry-backed CE ground-truth flow |
 | `EVAL_THRESHOLDS` | _(empty)_ | JSON dict of metric → min score |
 | `EVAL_CSV_ARTIFACT_ENABLED` | `false` | Emit CSV Prefect artifact |
 | `EVAL_TRACE_LOOKBACK_MINUTES` | `60` | Time window for trace eval |
@@ -282,12 +287,15 @@ evaluation/
 │   └── adapter.py               # Phoenix ↔ RAG ↔ RAGAS shape conversion
 ├── evaluators/
 │   ├── ragas_metrics.py         # RAGAS metric → Phoenix evaluator factory
-│   ├── phoenix_judges.py        # Reference-free LLM-as-judge evaluators
+│   ├── custom_judges.py         # Deterministic project-specific judges
+│   ├── phoenix_judges.py        # Legacy reference-free LLM-as-judge evaluators
 │   └── thresholds.py            # Pass/fail policy (PassFailReport)
+├── eval_registry.py             # GROUND_TRUTH_EVALUATORS + DRIFT_EVALUATORS
 ├── reporting/
 │   └── artifacts.py             # Prefect markdown + CSV artifacts
 └── orchestration/
-    ├── flows.py                 # @flow: eval_golden, eval_trace, synthetic_qa
+    ├── prefect_flows.py         # Canonical CE flows
+    ├── flows.py                 # Legacy wrappers + synthetic_qa
     ├── tasks.py                 # @task wrappers (one per stage)
     └── deployments.py           # Eval deployment specs
 ```

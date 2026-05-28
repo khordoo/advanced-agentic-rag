@@ -10,6 +10,7 @@ No Phoenix server, no heavy ML deps required.
 
 from __future__ import annotations
 
+import asyncio
 import importlib
 import json
 import os
@@ -113,10 +114,10 @@ class TestEvalRuntimeGatingContract:
 
         get_eval_config.cache_clear()
         try:
-            from evaluation.orchestration import flows
+            from evaluation.orchestration import flows, prefect_flows
 
             with patch.object(
-                flows,
+                prefect_flows,
                 "_assert_eval_runtime_ready",
                 side_effect=EvaluationRuntimeError("runtime check called"),
             ):
@@ -140,21 +141,29 @@ class TestEvalRuntimeGatingContract:
                 "evaluate-traces",
                 "generate-synthetic-qa",
             ]
+            assert specs[0][0].fn.__name__ == "run_ground_truth_evaluation"
+            assert specs[1][0].fn.__name__ == "run_nightly_drift_detection"
         finally:
             get_eval_config.cache_clear()
 
     @patch.dict(os.environ, {"EVAL_ENABLED": "false"}, clear=False)
-    def test_trace_flow_runs_when_runtime_ready(self):
-        """Trace flow no longer returns None due to legacy EVAL_ENABLED=false."""
+    def test_trace_flow_delegates_to_drift_detection(self):
+        """Legacy trace wrapper delegates to the canonical CE drift flow."""
         from evaluation.config import get_eval_config
 
         get_eval_config.cache_clear()
         try:
             from evaluation.orchestration import flows
+            from evaluation.orchestration import prefect_flows
 
-            with patch.object(flows, "_assert_eval_runtime_ready"):
+            with patch.object(
+                prefect_flows.run_nightly_drift_detection,
+                "fn",
+                return_value={"status": "delegated"},
+            ) as delegated:
                 result = flows.eval_trace_flow.fn()
-            assert result == {"status": "not_implemented", "lookback_minutes": 60}
+            assert result == {"status": "delegated"}
+            delegated.assert_called_once_with(lookback_minutes=None)
         finally:
             get_eval_config.cache_clear()
 
@@ -528,6 +537,37 @@ class TestAdapterLogic:
         assert "[[" not in sample["response"]
         assert len(sample["retrieved_contexts"]) == 2
 
+
+class TestEvaluationRagTask:
+    """Verify RAG task output preserves structured citation metadata."""
+
+    def test_run_rag_for_example_returns_agent_output_for_custom_judges(self):
+        from langchain_core.documents import Document
+
+        from evaluation.pipeline.task import _run_rag_for_example_async
+
+        class FakeRagService:
+            async def generate_chat_completion(self, chat_req, include_source_docs=False):
+                return SimpleNamespace(
+                    agent_output={
+                        "answer": "Revenue rose. 【1】",
+                        "citations": [{"document_index": 1, "asset_key": "doc"}],
+                    },
+                    source_docs=[Document(page_content="context")],
+                )
+
+        output = asyncio.run(
+            _run_rag_for_example_async(
+                {"input": "What happened?"},
+                rag_service=FakeRagService(),
+            )
+        )
+
+        assert output["response"] == "Revenue rose. 【1】"
+        assert output["retrieved_contexts"] == ["context"]
+        assert output["agent_output"]["citations"][0]["document_index"] == 1
+        assert json.loads(output["raw_response"])["citations"][0]["document_index"] == 1
+
     def test_to_ragas_sample_accepts_phoenix_dataset_example_object(self):
         """Phoenix v16 dataset example objects expose input/output attrs."""
         from evaluation.pipeline.adapter import to_ragas_sample
@@ -576,6 +616,17 @@ class TestContinuousEvaluationRegistry:
 
 class TestSourceReferenceFormatJudge:
     """Verify deterministic citation-contract scoring."""
+
+    def test_exposes_clean_phoenix_callable_name(self):
+        from evaluation.evaluators.custom_judges import SourceReferenceFormatJudge
+
+        judge = SourceReferenceFormatJudge()
+
+        assert judge.name == "reference_format_judge"
+        assert judge.__name__ == "reference_format_judge"
+        assert judge.__qualname__ == "reference_format_judge"
+        assert repr(judge) == "reference_format_judge"
+        assert str(judge) == "reference_format_judge"
 
     def test_accepts_json_ascii_citation_with_matching_metadata(self):
         from evaluation.evaluators.custom_judges import SourceReferenceFormatJudge
@@ -651,6 +702,44 @@ class TestSourceReferenceFormatJudge:
 
         assert result["score"] == 0.0
         assert result["label"] == "missing_structured_citations"
+
+    def test_call_prefers_structured_agent_output_over_plain_response(self):
+        from evaluation.evaluators.custom_judges import SourceReferenceFormatJudge
+
+        result = SourceReferenceFormatJudge()(
+            input={"input": "question"},
+            output={
+                "response": "Revenue rose. 【1】",
+                "retrieved_contexts": ["context"],
+                "agent_output": {
+                    "answer": "Revenue rose. 【1】",
+                    "citations": [{"document_index": 1, "asset_key": "doc"}],
+                },
+            },
+            expected={},
+            metadata={},
+        )
+
+        assert result["score"] == 1.0
+        assert result["label"] == "formatted_and_matched_correctly"
+
+    def test_call_uses_raw_response_when_agent_output_is_unavailable(self):
+        from evaluation.evaluators.custom_judges import SourceReferenceFormatJudge
+
+        payload = {
+            "answer": "Revenue rose. 【1】",
+            "citations": [{"document_index": 1, "asset_key": "doc"}],
+        }
+
+        result = SourceReferenceFormatJudge()(
+            output={
+                "response": "Revenue rose. 【1】",
+                "raw_response": json.dumps(payload),
+            }
+        )
+
+        assert result["score"] == 1.0
+        assert result["label"] == "formatted_and_matched_correctly"
 
 
 class TestContinuousEvaluationFlowHelpers:

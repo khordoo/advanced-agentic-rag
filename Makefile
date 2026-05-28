@@ -92,8 +92,17 @@ eval:
 	@docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) run --rm --entrypoint "uv" ingestion-worker run --no-sync python -c "from evaluation.runtime import assert_eval_runtime_ready; assert_eval_runtime_ready()"
 	@echo "🚀 Environment verified. Running Evaluation..."
 	@echo "💡 Tip: You can also trigger this pipeline visually from the Prefect UI at http://localhost:4200 (Deployment: evaluate-ground-truth)"
-	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) run --rm -e RERANK_ENABLED=$(EVAL_RERANK_ENABLED) --entrypoint "uv" ingestion-worker run --no-sync python -c "from evaluation.orchestration.flows import eval_golden_flow; eval_golden_flow()"
+	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) run --rm -e RERANK_ENABLED=$(EVAL_RERANK_ENABLED) --entrypoint "uv" ingestion-worker run --no-sync python -c "from evaluation.orchestration.prefect_flows import run_ground_truth_evaluation; run_ground_truth_evaluation()"
 
+eval-drift:
+	@echo "🔁 Building eval-capable worker image..."
+	@docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) build --build-arg UV_SYNC_EXTRAS="--extra ingestion --extra doc-processing --extra eval" ingestion-worker
+	@docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) up -d --force-recreate --wait ingestion-worker
+	@echo "🔍 Checking worker environment for evaluation dependencies..."
+	@docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) run --rm --entrypoint "uv" ingestion-worker run --no-sync python -c "from evaluation.runtime import assert_eval_runtime_ready; assert_eval_runtime_ready()"
+	@echo "🚀 Environment verified. Running Drift Evaluation..."
+	@echo "💡 Tip: You can also trigger this pipeline visually from the Prefect UI at http://localhost:4200 (Deployment: evaluate-traces)"
+	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) run --rm -e RERANK_ENABLED=$(EVAL_RERANK_ENABLED) --entrypoint "uv" ingestion-worker run --no-sync python -c "from evaluation.orchestration.prefect_flows import run_nightly_drift_detection; run_nightly_drift_detection()"
 
 register-eval-deployment:
 	@echo "Registering all Prefect deployments, including eval deployments..."

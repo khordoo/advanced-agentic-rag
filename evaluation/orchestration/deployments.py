@@ -13,10 +13,10 @@ from __future__ import annotations
 import logging
 
 from evaluation.config import EvalConfig
-from evaluation.orchestration.flows import (
-    eval_golden_flow,
-    eval_trace_flow,
-    synthetic_qa_flow,
+from evaluation.orchestration.flows import synthetic_qa_flow
+from evaluation.orchestration.prefect_flows import (
+    run_ground_truth_evaluation,
+    run_nightly_drift_detection,
 )
 
 logger = logging.getLogger(__name__)
@@ -29,14 +29,14 @@ def build_eval_deployment_specs(eval_config: EvalConfig) -> list[tuple]:
     """
     specs: list[tuple] = [
         (
-            eval_golden_flow,
+            run_ground_truth_evaluation,
             "evaluate-ground-truth",
             ["evaluation", "ground-truth", "oss"],
             "Evaluate RAG answers against the ground truth dataset.",
             eval_config.schedule_cron,
         ),
         (
-            eval_trace_flow,
+            run_nightly_drift_detection,
             "evaluate-traces",
             ["evaluation", "trace", "oss"],
             "Evaluate recent production traces with reference-free judges.",
