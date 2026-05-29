@@ -39,6 +39,11 @@ RUN set -eux; \
     rm -rf /var/lib/apt/lists/*; \
     fi
 
+# Warm up RapidOCR to bake ONNX models into the image layer (if installed)
+RUN /app/.venv/bin/python -c "import rapidocr_onnxruntime" 2>/dev/null \
+    && /app/.venv/bin/python -c "from rapidocr_onnxruntime import RapidOCR; RapidOCR()" \
+    || true
+
 COPY rag_core/ rag_core/
 COPY orchestration/ orchestration/
 COPY evaluation/ evaluation/
