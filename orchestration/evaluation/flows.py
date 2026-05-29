@@ -33,29 +33,9 @@ def _get_logger() -> logging.Logger:
 
 def _assert_eval_runtime_ready() -> None:
     """Validate optional eval/runtime dependencies at flow execution time."""
-    from evaluation.runtime import assert_eval_runtime_ready, EvaluationRuntimeError
+    from evaluation.runtime import assert_eval_runtime_ready
 
-    try:
-        assert_eval_runtime_ready()
-    except EvaluationRuntimeError:
-        log = _get_logger()
-        import sys
-
-        sys.tracebacklimit = 0
-
-        error_msg = (
-            "\n\n" + "=" * 70 + "\n"
-            "🚨 MISSING EVALUATION DEPENDENCIES\n\n"
-            "The current worker image does not have evaluation libraries installed\n"
-            "(ragas, phoenix-evals, etc.).\n\n"
-            "To unlock evaluations, run this command in your terminal once:\n"
-            "  make eval\n\n"
-            "This will install the eval extras and trigger the pipeline.\n"
-            + "=" * 70 + "\n"
-        )
-
-        log.error(error_msg)
-        raise RuntimeError("Missing evaluation dependencies.") from None
+    assert_eval_runtime_ready()
 
 
 # ---------------------------------------------------------------------------

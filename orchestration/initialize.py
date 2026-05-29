@@ -1,6 +1,6 @@
 """Pre-flight orchestration setup: work-pool provisioning and deployment registration.
 
-This module is executed by the ingestion-worker container entrypoint
+This module is executed by the rag-worker container entrypoint
 **before** the Prefect worker process starts.  Every operation is idempotent
 so re-running it on container restart or stack recreation is a no-op.
 

@@ -8,7 +8,7 @@ from orchestration.config import PrefectConfig
 
 PREFECT_ENV_KEYS = (
     "PREFECT_API_URL",
-    "PREFECT_INGESTION_WORK_POOL",
+    "PREFECT_WORK_POOL",
     "PREFECT_DEPLOYMENT_NAME",
     "PREFECT_INIT_MAX_WAIT",
 )
@@ -36,7 +36,7 @@ def test_prefect_config_reads_prefect_env_aliases(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("PREFECT_API_URL", "http://prefect-server:4200/api")
-    monkeypatch.setenv("PREFECT_INGESTION_WORK_POOL", "custom-pool")
+    monkeypatch.setenv("PREFECT_WORK_POOL", "custom-pool")
     monkeypatch.setenv("PREFECT_DEPLOYMENT_NAME", "custom-deployment")
     monkeypatch.setenv("PREFECT_INIT_MAX_WAIT", "42")
 

@@ -43,8 +43,8 @@ def assert_eval_runtime_ready() -> None:
     missing_csv = ", ".join(missing)
     message = (
         "Evaluation runtime check failed. Missing optional dependencies: "
-        f"{missing_csv}. Evaluation flows require the [eval] extras. "
-        "Run `make eval` to install them and trigger the pipeline."
+        f"{missing_csv}. This should not happen with the standard worker image. "
+        "Ensure the worker was built with --extra eval."
     )
     logger.critical(message)
     raise EvaluationRuntimeError(message)

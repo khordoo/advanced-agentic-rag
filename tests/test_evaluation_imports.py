@@ -283,7 +283,7 @@ class TestEvalRuntimeChecks:
             module.ChatVertexAI()
 
     def test_runtime_check_reports_missing_eval_dependency(self):
-        """Missing eval deps point users at make eval."""
+        """Missing eval deps produce actionable error message."""
         from evaluation.runtime import EvaluationRuntimeError
         from evaluation.runtime import assert_eval_runtime_ready
 
@@ -303,8 +303,8 @@ class TestEvalRuntimeChecks:
 
         message = str(exc_info.value)
         assert "ragas" in message
-        assert "make eval" in message
-        assert "Evaluation flows require the [eval] extras" in message
+        assert "standard worker image" in message
+        assert "--extra eval" in message
 
 
 class TestEvalDatasetUpload:

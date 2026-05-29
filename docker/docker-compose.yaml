@@ -119,13 +119,13 @@ services:
     depends_on:
       core-db: { condition: service_healthy }
 
-  ingestion-worker:
+  rag-worker:
     build:
       context: .
       dockerfile: docker/Dockerfile.worker
       args:
-        UV_SYNC_EXTRAS: ${INGESTION_WORKER_UV_SYNC_EXTRAS:---extra ingestion --extra doc-processing}
-    container_name: ingestion-worker
+        UV_SYNC_EXTRAS: ${PREFECT_WORKER_UV_SYNC_EXTRAS:---extra ingestion --extra doc-processing --extra eval}
+    container_name: rag-worker
     restart: always
     env_file:
       - .env
@@ -133,7 +133,7 @@ services:
       POSTGRES_HOST: ${POSTGRES_HOST:-core-db}
       QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
       PREFECT_API_URL: ${PREFECT_API_URL:-http://prefect-server:4200/api}
-      PREFECT_INGESTION_WORK_POOL: ${PREFECT_INGESTION_WORK_POOL:-rag-work-pool}
+      PREFECT_WORK_POOL: ${PREFECT_WORK_POOL:-rag-work-pool}
       PREFECT_LOGGING_EXTRA_LOGGERS: ${PREFECT_LOGGING_EXTRA_LOGGERS:-rag_core}
       PREFECT_WORKER_LIMIT: ${PREFECT_WORKER_LIMIT:-2}
     volumes:

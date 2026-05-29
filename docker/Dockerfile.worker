@@ -27,7 +27,7 @@ RUN apt-get update \
     libfontconfig1 \
     && rm -rf /var/lib/apt/lists/*
 
-ARG UV_SYNC_EXTRAS="--extra ingestion --extra doc-processing"
+ARG UV_SYNC_EXTRAS="--extra ingestion --extra doc-processing --extra eval"
 RUN set -eux; \
     if echo " ${UV_SYNC_EXTRAS} " | grep -q -- "--extra eval"; then \
     apt-get update; \

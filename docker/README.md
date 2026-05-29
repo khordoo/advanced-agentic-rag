@@ -24,7 +24,7 @@ FastEmbed models into a shared Docker volume before the API and worker start.
 | **Qdrant** | `6333` (REST), `6334` (gRPC) | Vector DB with hybrid search (BM25 + vector) |
 | **Phoenix** | `6006` | OpenTelemetry/OpenInference tracing UI |
 | **PostgreSQL (core-db)** | `5432` | Shared DB host (RAG + Prefect metadata) |
-| **Ingestion Worker** | internal | Prefect process worker for ingestion flows |
+| **RAG Worker** | internal | Prefect process worker for ingestion and evaluation flows |
 | **Model Warmer** | internal | Preloads FastEmbed models into the shared cache volume |
 
 After startup, open:
@@ -36,7 +36,7 @@ After startup, open:
 
 ## Auto-Provisioning (Zero Manual Steps)
 
-The ingestion worker container is fully self-bootstrapping. On every startup, its
+The RAG worker container is fully self-bootstrapping. On every startup, its
 entrypoint script (`docker/entrypoint-worker.sh`) runs the pre-flight initialization
 module (`orchestration/initialize.py`), which:
 
@@ -55,6 +55,15 @@ is always safe and never produces duplicate resources.
 > **Database migrations** are applied automatically as a fail-fast preflight task
 > inside the ingestion flow itself (`run_database_migrations_task`), ensuring the
 > relational schema is always current before any document processing begins.
+
+## Startup Modes
+
+The stack supports two startup modes via Makefile:
+
+| Command | Services | Use Case |
+|---------|----------|----------|
+| `make up-core` | DB, Qdrant, Phoenix, Prefect, Worker, API | Headless dev: ingestion, eval, CLI |
+| `make up` | Everything above + Open-WebUI | Full stack with chat UI |
 
 ## Run Ingestion Flow
 

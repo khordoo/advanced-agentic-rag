@@ -1,6 +1,5 @@
 """Evaluation module for the Advanced RAG pipeline.
 
-All heavy dependencies (ragas, phoenix, phoenix.evals) are imported
-lazily inside function bodies and validated at execution time —
-``import evaluation`` is always safe.
+Evaluation dependencies (ragas, phoenix, phoenix.evals) are included in
+the standard worker image via the ``[eval]`` extra.
 """

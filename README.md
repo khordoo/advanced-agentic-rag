@@ -88,10 +88,10 @@ make migrate-new MSG="describe schema change"
 make migrate-status
 ```
 
-## Ingestion Worker Behavior
+## Worker Behavior
 
 The canonical ingestion entrypoint is `rag_core.ingestion.pipeline`. Discovery
-queues source files in Postgres, then the ingestion worker claims queued assets
+queues source files in Postgres, then the worker claims queued assets
 and processes them until no claimable work remains.
 
 By default, `max_jobs` is `None`, which means the worker drains the queue and
@@ -139,10 +139,9 @@ uv cache clean
 
 The evaluation subsystem runs registry-backed RAGAS metrics plus deterministic project judges against a ground truth QA dataset, storing results as Phoenix Experiments with full trace correlation.
 
-> [!IMPORTANT]
-> **Evaluation is runtime-gated by default.** A fresh clone registers eval 
-> deployments but only installs evaluation libraries (ragas, phoenix) when 
-> `make eval` is run, keeping the base images lightweight.
+> [!NOTE]
+> The worker image includes evaluation libraries (ragas, phoenix) by default.
+> `make eval` runs directly against the running worker — no rebuild needed.
 
 ### How It Works
 
@@ -180,8 +179,7 @@ make up
 
 # 2. Upload ground truth dataset (idempotent)
 docker compose --project-directory . --env-file .env -f docker/docker-compose.yaml \
-  run --rm --entrypoint "uv" ingestion-worker \
-  run --no-sync python -c \
+  exec rag-worker .venv/bin/python -c \
   "from evaluation.datasets.loaders import ensure_dataset_uploaded; \
    from evaluation.config import get_eval_config; \
    print(ensure_dataset_uploaded(get_eval_config()))"
@@ -190,8 +188,7 @@ docker compose --project-directory . --env-file .env -f docker/docker-compose.ya
 make eval
 # Or with a custom experiment name:
 docker compose --project-directory . --env-file .env -f docker/docker-compose.yaml \
-  run --rm --entrypoint "uv" ingestion-worker \
-  run --no-sync python -c \
+  exec rag-worker .venv/bin/python -c \
   "from orchestration.evaluation.prefect_flows import run_ground_truth_evaluation; \
    run_ground_truth_evaluation(experiment_name='my-first-eval')"
 
@@ -208,11 +205,10 @@ make eval-drift
 make register-eval-deployment
 ```
 
-`make eval` automatically detects missing dependencies and performs an idempotent
-auto-upgrade of the ingestion-worker image (preserving ingestion and doc-processing
-extras, then adding evaluation). It runs with `RERANK_ENABLED=false` by default
-to keep CUDA and reranking out of the worker/eval path. For reranked evals, build
-the worker separately with the `rerank` extra and run `make eval EVAL_RERANK_ENABLED=true`.
+`make eval` runs ground truth evaluation using the unified worker image. It
+starts only backend infrastructure (`make up-core` — no Open-WebUI) and
+exec's into the running worker container. For reranked evals, run
+`make eval EVAL_RERANK_ENABLED=true`.
 
 ### Evaluation Modes
 

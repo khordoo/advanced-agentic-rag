@@ -1,4 +1,4 @@
-.PHONY: up down reset deep-clean logs stat cli ui migrate-up migrate-down migrate-new migrate-status migrate-statusd ingest register-ingestion-deployment register-ingestion-deployments run-ingestion-flow test eval register-eval-deployment
+.PHONY: up-core up down reset deep-clean logs stat cli ui migrate-up migrate-down migrate-new migrate-status migrate-statusd ingest test eval eval-drift register-eval-deployment
 
 ENV_FILE:= .env
 COMPOSE_FILE:=docker/docker-compose.yaml
@@ -18,8 +18,13 @@ ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
 # 2. Prevent 'make' from complaining that the container name isn't a valid command
 $(eval $(ARGS):;@:)
 
-up:
-	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) up -d --wait
+up-core:
+	@echo "🚀 Starting backend infrastructure (DB, Qdrant, Phoenix, Prefect, Worker, API)..."
+	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) up -d --wait rag_api rag-worker prefect-server phoenix
+
+up: up-core
+	@echo "🖥️  Starting Open-WebUI..."
+	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) up -d --wait web_ui
 
 down:
 	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) down
@@ -44,11 +49,11 @@ logs:
 stat:
 	docker stats
 
-cli: up
+cli: up-core
 	@echo "🚀 Launching interactive RAG CLI..."
 	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) run --rm rag_cli
 
-ui: up
+ui: up-core
 	@echo "🚀 Launching local UI using RAG_LOCAL_UI_PORT from $(ENV_FILE) (default: 8501)..."
 	@echo "Note: Streamlit mode uses a dev-only examples/ mount for hot reloading."
 	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) run --rm --service-ports rag_ui
@@ -72,38 +77,28 @@ migrate-status:
 
 migrate-statusd: migrate-status
 
-ingest: migrate-up
+ingest: up-core migrate-up
 	@echo "Triggering Prefect Ingestion Flow inside Docker..."
 	@echo "💡 Tip: You can also trigger this pipeline visually from the Prefect UI at http://localhost:4200 (Deployment: ingest-documents)"
 	@if [ -n "$(MAX_JOBS)" ]; then \
-		docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) run --rm --entrypoint "uv" ingestion-worker run --no-sync python -m orchestration.ingestion.flows end_to_end --max-jobs $(MAX_JOBS); \
+		docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) exec rag-worker .venv/bin/python -m orchestration.ingestion.flows end_to_end --max-jobs $(MAX_JOBS); \
 	else \
-		docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) run --rm --entrypoint "uv" ingestion-worker run --no-sync python -m orchestration.ingestion.flows end_to_end; \
+		docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) exec rag-worker .venv/bin/python -m orchestration.ingestion.flows end_to_end; \
 	fi
 
 test:
 	uv run pytest tests/
 
-eval:
-	@echo "🔁 Building eval-capable worker image..."
-	@docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) build --build-arg UV_SYNC_EXTRAS="--extra ingestion --extra doc-processing --extra eval" ingestion-worker
-	@docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) up -d --force-recreate --wait ingestion-worker
-	@echo "🔍 Checking worker environment for evaluation dependencies..."
-	@docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) run --rm --entrypoint "uv" ingestion-worker run --no-sync python -c "from evaluation.runtime import assert_eval_runtime_ready; assert_eval_runtime_ready()"
-	@echo "🚀 Environment verified. Running Evaluation..."
+eval: up-core
+	@echo "🚀 Running Ground Truth Evaluation..."
 	@echo "💡 Tip: You can also trigger this pipeline visually from the Prefect UI at http://localhost:4200 (Deployment: evaluate-ground-truth)"
-	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) run --rm -e RERANK_ENABLED=$(EVAL_RERANK_ENABLED) --entrypoint "uv" ingestion-worker run --no-sync python -c "from orchestration.evaluation.prefect_flows import run_ground_truth_evaluation; run_ground_truth_evaluation()"
+	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) exec -e RERANK_ENABLED=$(EVAL_RERANK_ENABLED) rag-worker .venv/bin/python -c "from orchestration.evaluation.prefect_flows import run_ground_truth_evaluation; run_ground_truth_evaluation()"
 
-eval-drift:
-	@echo "🔁 Building eval-capable worker image..."
-	@docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) build --build-arg UV_SYNC_EXTRAS="--extra ingestion --extra doc-processing --extra eval" ingestion-worker
-	@docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) up -d --force-recreate --wait ingestion-worker
-	@echo "🔍 Checking worker environment for evaluation dependencies..."
-	@docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) run --rm --entrypoint "uv" ingestion-worker run --no-sync python -c "from evaluation.runtime import assert_eval_runtime_ready; assert_eval_runtime_ready()"
-	@echo "🚀 Environment verified. Running Drift Evaluation..."
+eval-drift: up-core
+	@echo "🚀 Running Drift Evaluation..."
 	@echo "💡 Tip: You can also trigger this pipeline visually from the Prefect UI at http://localhost:4200 (Deployment: evaluate-traces)"
-	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) run --rm -e RERANK_ENABLED=$(EVAL_RERANK_ENABLED) --entrypoint "uv" ingestion-worker run --no-sync python -c "from orchestration.evaluation.prefect_flows import run_nightly_drift_detection; run_nightly_drift_detection()"
+	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) exec -e RERANK_ENABLED=$(EVAL_RERANK_ENABLED) rag-worker .venv/bin/python -c "from orchestration.evaluation.prefect_flows import run_nightly_drift_detection; run_nightly_drift_detection()"
 
-register-eval-deployment:
+register-eval-deployment: up-core
 	@echo "Registering all Prefect deployments, including eval deployments..."
-	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) run --rm --entrypoint "uv" ingestion-worker run --no-sync python -m orchestration.initialize
+	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) exec rag-worker .venv/bin/python -m orchestration.initialize
