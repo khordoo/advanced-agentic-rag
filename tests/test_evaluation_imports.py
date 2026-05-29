@@ -32,27 +32,27 @@ class TestEvaluationImports:
         assert hasattr(evaluation.config, "get_eval_config")
 
     def test_import_flows(self):
-        """evaluation.orchestration.flows imports cleanly."""
-        import evaluation.orchestration.flows
+        """orchestration.evaluation.flows imports cleanly."""
+        import orchestration.evaluation.flows
 
-        assert hasattr(evaluation.orchestration.flows, "eval_golden_flow")
-        assert hasattr(evaluation.orchestration.flows, "eval_trace_flow")
-        assert hasattr(evaluation.orchestration.flows, "synthetic_qa_flow")
+        assert hasattr(orchestration.evaluation.flows, "eval_golden_flow")
+        assert hasattr(orchestration.evaluation.flows, "eval_trace_flow")
+        assert hasattr(orchestration.evaluation.flows, "synthetic_qa_flow")
 
     def test_import_deployments(self):
-        """evaluation.orchestration.deployments imports cleanly."""
-        import evaluation.orchestration.deployments
+        """orchestration.evaluation.deployments imports cleanly."""
+        import orchestration.evaluation.deployments
 
         assert hasattr(
-            evaluation.orchestration.deployments, "build_eval_deployment_specs"
+            orchestration.evaluation.deployments, "build_eval_deployment_specs"
         )
 
     def test_import_tasks(self):
-        """evaluation.orchestration.tasks imports cleanly."""
-        import evaluation.orchestration.tasks
+        """orchestration.evaluation.tasks imports cleanly."""
+        import orchestration.evaluation.tasks
 
-        assert hasattr(evaluation.orchestration.tasks, "resolve_dataset_task")
-        assert hasattr(evaluation.orchestration.tasks, "run_experiment_task")
+        assert hasattr(orchestration.evaluation.tasks, "resolve_dataset_task")
+        assert hasattr(orchestration.evaluation.tasks, "run_experiment_task")
 
     def test_import_adapter(self):
         """evaluation.pipeline.adapter imports cleanly (stdlib re only)."""
@@ -86,14 +86,14 @@ class TestEvaluationImports:
 
     def test_import_prefect_ce_flows(self):
         """CE Prefect flows import cleanly."""
-        import evaluation.orchestration.prefect_flows
+        import orchestration.evaluation.prefect_flows
 
         assert hasattr(
-            evaluation.orchestration.prefect_flows,
+            orchestration.evaluation.prefect_flows,
             "run_ground_truth_evaluation",
         )
         assert hasattr(
-            evaluation.orchestration.prefect_flows,
+            orchestration.evaluation.prefect_flows,
             "run_nightly_drift_detection",
         )
 
@@ -114,7 +114,7 @@ class TestEvalRuntimeGatingContract:
 
         get_eval_config.cache_clear()
         try:
-            from evaluation.orchestration import flows, prefect_flows
+            from orchestration.evaluation import flows, prefect_flows
 
             with patch.object(
                 prefect_flows,
@@ -130,7 +130,7 @@ class TestEvalRuntimeGatingContract:
     def test_deployment_specs_return_all_eval_deployments(self):
         """build_eval_deployment_specs always returns the eval deployment set."""
         from evaluation.config import EvalConfig, get_eval_config
-        from evaluation.orchestration.deployments import build_eval_deployment_specs
+        from orchestration.evaluation.deployments import build_eval_deployment_specs
 
         get_eval_config.cache_clear()
         try:
@@ -153,8 +153,8 @@ class TestEvalRuntimeGatingContract:
 
         get_eval_config.cache_clear()
         try:
-            from evaluation.orchestration import flows
-            from evaluation.orchestration import prefect_flows
+            from orchestration.evaluation import flows
+            from orchestration.evaluation import prefect_flows
 
             with patch.object(
                 prefect_flows.run_nightly_drift_detection,
@@ -746,7 +746,7 @@ class TestContinuousEvaluationFlowHelpers:
     """Verify CE flow helper behavior without Phoenix or Ragas calls."""
 
     def test_safe_evaluate_row_does_not_raise_for_evaluator_failure(self):
-        from evaluation.orchestration.prefect_flows import _safe_evaluate_row
+        from orchestration.evaluation.prefect_flows import _safe_evaluate_row
 
         def broken_evaluator(**kwargs):
             raise RuntimeError("judge failed")
@@ -767,7 +767,7 @@ class TestContinuousEvaluationFlowHelpers:
         assert "judge failed" in result["error"]
 
     def test_failed_verification_filter_targets_otel_attribute(self):
-        from evaluation.orchestration.prefect_flows import _FAILED_VERIFICATION_FILTER
+        from orchestration.evaluation.prefect_flows import _FAILED_VERIFICATION_FILTER
 
         assert _FAILED_VERIFICATION_FILTER == (
             "attributes['custom.verification_status'] == 'failed'"

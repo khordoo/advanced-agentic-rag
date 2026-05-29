@@ -49,7 +49,7 @@ def end_to_end_flow(
         eval_config = get_eval_config()
         if eval_config.auto_run_after_ingestion:
             logger.info("Post-ingestion eval hook triggered — running ground truth eval")
-            from evaluation.orchestration.prefect_flows import (  # lazy
+            from orchestration.evaluation.prefect_flows import (  # lazy
                 run_ground_truth_evaluation,
             )
 

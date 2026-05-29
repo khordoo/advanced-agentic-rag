@@ -340,7 +340,7 @@ def run_ground_truth_evaluation(
 
     _assert_eval_runtime_ready()
 
-    from evaluation.orchestration.tasks import (
+    from orchestration.evaluation.tasks import (
         emit_artifact_task,
         resolve_dataset_task,
         run_experiment_task,

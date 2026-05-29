@@ -192,7 +192,7 @@ make eval
 docker compose --project-directory . --env-file .env -f docker/docker-compose.yaml \
   run --rm --entrypoint "uv" ingestion-worker \
   run --no-sync python -c \
-  "from evaluation.orchestration.prefect_flows import run_ground_truth_evaluation; \
+  "from orchestration.evaluation.prefect_flows import run_ground_truth_evaluation; \
    run_ground_truth_evaluation(experiment_name='my-first-eval')"
 
 # Optional: run trace-based drift detection on demand

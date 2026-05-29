@@ -103,9 +103,9 @@ def test_makefile_host_targets_translate_docker_service_names() -> None:
         'assert_eval_runtime_ready()"'
         in makefile
     )
-    assert "from evaluation.orchestration.prefect_flows import run_ground_truth_evaluation" in makefile
-    assert "from evaluation.orchestration.prefect_flows import run_nightly_drift_detection" in makefile
-    assert "from evaluation.orchestration.flows import eval_golden_flow" not in makefile
+    assert "from orchestration.evaluation.prefect_flows import run_ground_truth_evaluation" in makefile
+    assert "from orchestration.evaluation.prefect_flows import run_nightly_drift_detection" in makefile
+    assert "from orchestration.evaluation.flows import eval_golden_flow" not in makefile
     assert '--entrypoint python ingestion-worker -c "import ragas"' not in makefile
     assert "--extra ingestion --extra doc-processing --extra eval --extra rerank" not in makefile
     assert "$(HOST_ENV) $(ALEMBIC_BASE) -c $(ALEMBIC_CONFIG)" in makefile

@@ -52,7 +52,7 @@ def test_end_to_end_flow_uses_auto_run_after_ingestion_hook(
         lambda: SimpleNamespace(auto_run_after_ingestion=True),
     )
     monkeypatch.setattr(
-        "evaluation.orchestration.prefect_flows.run_ground_truth_evaluation",
+        "orchestration.evaluation.prefect_flows.run_ground_truth_evaluation",
         lambda: calls.append("eval"),
     )
 

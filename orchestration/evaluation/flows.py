@@ -15,7 +15,7 @@ from prefect import flow, get_run_logger
 from prefect.exceptions import MissingContextError
 
 from evaluation.config import get_eval_config
-from evaluation.orchestration.prefect_flows import (
+from orchestration.evaluation.prefect_flows import (
     run_ground_truth_evaluation,
     run_nightly_drift_detection,
 )

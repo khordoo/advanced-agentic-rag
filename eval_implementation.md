@@ -248,7 +248,7 @@ gating and `EVAL_AUTO_RUN_AFTER_INGESTION`.
  - Lazy: prefect.artifacts, pandas (CSV only).
  - Markdown sections: Phoenix UI link, aggregate metric table, threshold pass/fail column, first 5 failed examples.
 
- evaluation/orchestration/flows.py
+ orchestration/evaluation/flows.py
 
  - Purpose: Prefect @flow definitions.
  - Public: eval_golden_flow, eval_trace_flow, synthetic_qa_flow.
@@ -256,17 +256,17 @@ gating and `EVAL_AUTO_RUN_AFTER_INGESTION`.
  - Lazy (inside flow bodies, after the enabled guard): RAGPipeline, evaluator factories, phoenix bootstrap, everything heavy.
  - Pattern mirrors orchestration/ingestion/flows.py: _get_logger() helper with MissingContextError fallback.
 
- evaluation/orchestration/tasks.py
+ orchestration/evaluation/tasks.py
 
  - Purpose: thin @task wrappers — one per stage. Each starts with setup_logging() per ingestion convention.
  - Public: resolve_dataset_task, run_experiment_task, apply_thresholds_task, emit_artifact_task.
  - Decorator pattern: @task(name="eval-<stage>", retries=1, retry_delay_seconds=5). run_experiment_task uses retries=0 (re-runs would create duplicate Experiments).
 
- evaluation/orchestration/deployments.py
+ orchestration/evaluation/deployments.py
 
  - Purpose: declarative deployment specs for the eval flows. Consumed by orchestration/initialize.py.
  - Public: build_eval_deployment_specs(eval_config: EvalConfig) -> list[tuple]. Returns [] if not eval_config.enabled — this is the kill switch.
- - Top-level: evaluation.config + flow objects from evaluation.orchestration.flows. Both safe without [eval] extra.
+ - Top-level: evaluation.config + flow objects from orchestration.evaluation.flows. Both safe without [eval] extra.
 
  3.3 Disposition of existing files
 
@@ -329,11 +329,11 @@ gating and `EVAL_AUTO_RUN_AFTER_INGESTION`.
 
  orchestration/initialize.py currently has a module-level _DEPLOYMENT_SPECS list. The eval rewrite extends register_deployments() (intent — execution agent implements):
 
- - Import at top of orchestration/initialize.py: from evaluation.orchestration.deployments import build_eval_deployment_specs and from evaluation.config import get_eval_config. Safe to import without [eval] extra installed.
+ - Import at top of orchestration/initialize.py: from orchestration.evaluation.deployments import build_eval_deployment_specs and from evaluation.config import get_eval_config. Safe to import without [eval] extra installed.
  - Inside register_deployments(), after the existing loop:
    - eval_specs = build_eval_deployment_specs(get_eval_config())
    - If empty (because EVAL_ENABLED=false): log Eval deployments disabled (EVAL_ENABLED=false) — skipping and return.
-   - If non-empty: iterate and register using the same client.create_flow_from_name + client.create_deployment pattern. Entrypoint format: evaluation/orchestration/flows.py:eval_golden_flow (similar for others).
+   - If non-empty: iterate and register using the same client.create_flow_from_name + client.create_deployment pattern. Entrypoint format: orchestration/evaluation/flows.py:eval_golden_flow (similar for others).
  - Schedule: if eval_config.schedule_cron set, attach CronSchedule via client.create_deployment(schedules=[...]).
 
  Result: fresh clone with EVAL_ENABLED unset registers exactly the existing two ingestion deployments — Day-1 UX preserved.
@@ -380,14 +380,14 @@ gating and `EVAL_AUTO_RUN_AFTER_INGESTION`.
  9. Add evaluation/reporting/artifacts.py. emit_experiment_artifact(experiment, pass_fail, eval_config) via prefect.artifacts.create_markdown_artifact(...). Markdown contents: Phoenix UI link (via phoenix_experiment_url),
  aggregate metric table, threshold pass/fail column, first 5 failed examples. Optional emit_csv_artifact(experiment, eval_config) only if csv_artifact_enabled (prefer prefect.artifacts.create_table_artifact or link artifact
  pointing to Phoenix export URL — no filesystem dump).
- 10. Add evaluation/orchestration/tasks.py. Define:
+ 10. Add orchestration/evaluation/tasks.py. Define:
    - @task(name="eval-resolve-dataset", retries=1, retry_delay_seconds=5) resolve_dataset_task(eval_config) → calls ensure_dataset_uploaded.
    - @task(name="eval-run-experiment", retries=0) run_experiment_task(dataset, task_fn, evaluators, experiment_name, concurrency, project_name) → single call to phoenix.experiments.run_experiment. retries=0 to avoid duplicate
  Experiments.
    - @task(name="eval-apply-thresholds") apply_thresholds_task(experiment, eval_config) -> PassFailReport.
    - @task(name="eval-emit-artifact") emit_artifact_task(experiment, pass_fail, eval_config).
    - Each task starts: setup_logging() + _get_logger() with MissingContextError fallback.
- 11. Add evaluation/orchestration/flows.py. Define:
+ 11. Add orchestration/evaluation/flows.py. Define:
    - @flow(name="rag-eval-golden-flow", log_prints=True) def eval_golden_flow(dataset_name: str | None = None, experiment_name: str | None = None, evaluator_names: list[str] | None = None) -> dict | None:
        - Top: eval_config = get_eval_config(); if not eval_config.enabled: _get_logger().info("EVAL_ENABLED=false, skipping"); return None.
      - Then init_observability(eval_config.phoenix_project).
@@ -397,10 +397,10 @@ gating and `EVAL_AUTO_RUN_AFTER_INGESTION`.
      - If pass_fail.failed: raise RuntimeError(...).
    - @flow(name="rag-eval-trace-flow", log_prints=True) def eval_trace_flow(...).
    - @flow(name="rag-synthetic-qa-flow", log_prints=True) def synthetic_qa_flow(...).
- 12. Add evaluation/orchestration/deployments.py. Define build_eval_deployment_specs(eval_config) -> list[tuple] returning specs analogous to _DEPLOYMENT_SPECS in orchestration/initialize.py. Returns [] when not
+ 12. Add orchestration/evaluation/deployments.py. Define build_eval_deployment_specs(eval_config) -> list[tuple] returning specs analogous to _DEPLOYMENT_SPECS in orchestration/initialize.py. Returns [] when not
  eval_config.enabled. Schedule attached via CronSchedule if eval_config.schedule_cron.
  13. Modify orchestration/initialize.py. Inside register_deployments(), after existing loop, call build_eval_deployment_specs(get_eval_config()). If non-empty, iterate and register using same client.create_flow_from_name +
- client.create_deployment pattern. Entrypoint format: evaluation/orchestration/flows.py:<func_name>. If empty, single info log line. Do NOT add eval specs to module-level _DEPLOYMENT_SPECS literal — they are dynamic.
+ client.create_deployment pattern. Entrypoint format: orchestration/evaluation/flows.py:<func_name>. If empty, single info log line. Do NOT add eval specs to module-level _DEPLOYMENT_SPECS literal — they are dynamic.
  14. Modify orchestration/ingestion/flows.py (only if EVAL_POST_INGESTION_HOOK honored). End of end_to_end_flow, after end_to_end_ingestion_task: lazy-import eval_golden_flow, call inside try/except if
  get_eval_config().post_ingestion_hook. Failures log, never raise.
  15. Delete legacy files.
@@ -439,12 +439,12 @@ gating and `EVAL_AUTO_RUN_AFTER_INGESTION`.
  17. Move ragas>=0.4.3 out of [dependency-groups] dev (or keep in dev for tests, but eval is canonical runtime install). Confirm openinference-instrumentation-langchain already in base deps. Pin arize-phoenix>=4.0,<5.0 against
  run_experiment API drift.
  18. Add CI smoke test (no Phoenix required). Create tests/test_evaluation_imports.py:
-   - Import evaluation.config, evaluation.orchestration.flows, evaluation.orchestration.deployments and assert success without ragas / phoenix installed.
+   - Import evaluation.config, orchestration.evaluation.flows, orchestration.evaluation.deployments and assert success without ragas / phoenix installed.
    - Call eval_golden_flow() with monkeypatched EVAL_ENABLED=false → assert returns None, no raise (Day-1 contract).
    - Call build_eval_deployment_specs(EvalConfig(enabled=False)) → assert [].
  19. Update Makefile. Add:
  eval:
-     docker compose ... ingestion-worker uv run --no-sync python -c "from evaluation.orchestration.flows import eval_golden_flow; eval_golden_flow()"
+     docker compose ... ingestion-worker uv run --no-sync python -c "from orchestration.evaluation.flows import eval_golden_flow; eval_golden_flow()"
  register-eval-deployment:
      # requires EVAL_ENABLED=true
  20. Verification commands — see §6.
@@ -475,7 +475,7 @@ gating and `EVAL_AUTO_RUN_AFTER_INGESTION`.
 
  # 2. Trigger an experiment (one-shot, not via deployment)
  docker compose run --rm ingestion-worker uv run --no-sync python -c \
-   "from evaluation.orchestration.flows import eval_golden_flow; \
+   "from orchestration.evaluation.flows import eval_golden_flow; \
     eval_golden_flow(experiment_name='manual-smoke-1')"
 
  # 3. Verify Phoenix UI (http://localhost:6006):
@@ -543,11 +543,11 @@ gating and `EVAL_AUTO_RUN_AFTER_INGESTION`.
  ├─────────────────────────────────────────────────────────────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────────────────────┤
  │ /Users/mahmoodkhordoo/Developer/playgorund/rag-chunking/evaluation/reporting/artifacts.py       │ NEW                                                                                   │
  ├─────────────────────────────────────────────────────────────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────────────────────┤
- │ /Users/mahmoodkhordoo/Developer/playgorund/rag-chunking/evaluation/orchestration/flows.py       │ NEW                                                                                   │
+ │ /Users/mahmoodkhordoo/Developer/playgorund/rag-chunking/orchestration/evaluation/flows.py       │ NEW                                                                                   │
  ├─────────────────────────────────────────────────────────────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────────────────────┤
- │ /Users/mahmoodkhordoo/Developer/playgorund/rag-chunking/evaluation/orchestration/tasks.py       │ NEW                                                                                   │
+ │ /Users/mahmoodkhordoo/Developer/playgorund/rag-chunking/orchestration/evaluation/tasks.py       │ NEW                                                                                   │
  ├─────────────────────────────────────────────────────────────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────────────────────┤
- │ /Users/mahmoodkhordoo/Developer/playgorund/rag-chunking/evaluation/orchestration/deployments.py │ NEW                                                                                   │
+ │ /Users/mahmoodkhordoo/Developer/playgorund/rag-chunking/orchestration/evaluation/deployments.py │ NEW                                                                                   │
  ├─────────────────────────────────────────────────────────────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────────────────────┤
  │ /Users/mahmoodkhordoo/Developer/playgorund/rag-chunking/orchestration/initialize.py             │ MODIFY (extend register_deployments)                                                  │
  ├─────────────────────────────────────────────────────────────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────────────────────┤

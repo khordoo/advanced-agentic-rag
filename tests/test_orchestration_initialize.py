@@ -168,6 +168,7 @@ def test_register_deployments_registers_eval_cron_without_status(
                 ["evaluation"],
                 "eval description",
                 "0 1 * * *",
+                "orchestration/evaluation/prefect_flows.py",
             )
         ],
     )
@@ -183,7 +184,7 @@ def test_register_deployments_registers_eval_cron_without_status(
     assert record["work_pool_name"] == "custom-pool"
     assert record["tags"] == ["evaluation"]
     assert record["description"] == "eval description"
-    assert record["entrypoint"] == "evaluation/orchestration/flows.py:eval_flow"
+    assert record["entrypoint"] == "orchestration/evaluation/prefect_flows.py:eval_flow"
     assert record["path"] == "/app"
     assert len(record["schedules"]) == 1
     assert record["schedules"][0].schedule.cron == "0 1 * * *"

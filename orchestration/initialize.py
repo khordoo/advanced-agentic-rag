@@ -23,7 +23,7 @@ from orchestration.ingestion.flows import end_to_end_flow, factory_reset_flow
 
 # Safe to import without [eval] extra — no heavy deps at module level
 from evaluation.config import get_eval_config
-from evaluation.orchestration.deployments import build_eval_deployment_specs
+from orchestration.evaluation.deployments import build_eval_deployment_specs
 
 logger = logging.getLogger("orchestration.initialize")
 logging.basicConfig(
@@ -215,13 +215,20 @@ async def register_deployments() -> None:
 
     # B) Evaluation
     for spec in eval_specs:
-        flow_obj, deployment_name, tags, description, schedule_cron = spec
+        (
+            flow_obj,
+            deployment_name,
+            tags,
+            description,
+            schedule_cron,
+            flow_module_path,
+        ) = spec
         deployment_id = await _register_deployment_spec(
             flow_obj=flow_obj,
             deployment_name=deployment_name,
             tags=tags,
             description=description,
-            flow_module_path="evaluation/orchestration/flows.py",
+            flow_module_path=flow_module_path,
             schedule_cron=schedule_cron,
         )
         logger.info(
