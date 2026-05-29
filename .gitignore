@@ -23,6 +23,7 @@ artifacts/
 data/*
 !data/source_documents/
 data/source_documents/*
+!data/source_documents/report.pdf
 !data/source_documents/README.md
 !data/source_documents/finance/
 data/source_documents/finance/*
