@@ -1,4 +1,4 @@
-.PHONY: up-core up down reset deep-clean logs stat cli ui migrate-up migrate-down migrate-new migrate-status migrate-statusd ingest test eval eval-drift register-eval-deployment
+.PHONY: up-core up down reset reload deep-clean logs stat cli ui migrate-up migrate-down migrate-new migrate-status migrate-statusd ingest test eval eval-drift register-eval-deployment
 
 ENV_FILE:= .env
 COMPOSE_FILE:=docker/docker-compose.yaml
@@ -36,6 +36,10 @@ reset:
 	docker image prune -f
 	@echo "🚀 Rebuilding and starting up (using fast cache)..."
 	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) up --build -d --wait
+
+reload:
+	@echo "♻️ Recreating containers to apply new .env values..."
+	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) up -d --force-recreate
 
 deep-clean:
 	@echo "🗑️ Clearing all Docker caches to reclaim hard drive space..."

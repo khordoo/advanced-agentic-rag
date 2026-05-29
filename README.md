@@ -69,6 +69,14 @@ Provider names are intentionally strict. If you add a new embedding backend,
 update the enum and factory wiring described in
 [`docs/configuration/README.md`](docs/configuration/README.md#adding-an-embedding-provider).
 
+## Applying Configuration Changes
+
+If you modify your `.env` file (e.g., changing API keys or switching providers), run the following to recreate containers with the new variables without losing data:
+
+```bash
+make reload
+```
+
 ## Database Migrations
 
 Use `make` shortcuts for Alembic commands (config is wired to `db/alembic.ini`).
