@@ -332,18 +332,25 @@ class GraphNodes:
 
     @staticmethod
     def _remap_inline_citation_indexes(answer: str, index_map: dict[int, int]) -> str:
-        """Rewrite exact [N] citations using safe regex replacement."""
+        """Rewrite exact citations using safe regex replacement, handling unicode brackets."""
         if not index_map:
-            return answer
+            # Even if there's no map, we should still standardize unicode brackets to ASCII
+            return re.sub(r"【(\d+)】", r"[\1]", answer)
 
         def _replace(match: re.Match[str]) -> str:
             old_idx = int(match.group(1))
             new_idx = index_map.get(old_idx)
             if new_idx is None:
-                return match.group(0)
+                # The LLM hallucinated a number that has no matching source.
+                # Standardize the brackets to ASCII so the UI at least parses it predictably,
+                # but leave the orphaned number so the CE Judge can properly FAIL it.
+                return f"[{old_idx}]"
+
             return f"[{new_idx}]"
 
-        remapped = re.sub(r"\[(\d+)\]", _replace, answer)
+        # Match BOTH [1] and 【1】
+        remapped = re.sub(r"(?:\[|【)(\d+)(?:\]|】)", _replace, answer)
+
         # Collapse adjacent duplicates like [1][1], [1] [1], or [1], [1].
         remapped = re.sub(r"(\[(\d+)\])(?:[\s,]*\[\2\])+", r"\1", remapped)
         return remapped
