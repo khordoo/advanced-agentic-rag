@@ -597,6 +597,7 @@ class TestContinuousEvaluationRegistry:
             "context_recall",
             "faithfulness",
             "answer_relevancy",
+            "answer_correctness",
             "reference_format_judge",
         ]
 

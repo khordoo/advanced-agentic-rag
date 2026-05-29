@@ -33,6 +33,7 @@ GROUND_TRUTH_EVALUATORS: list[RagasMetricSpec | EvaluatorProtocol] = [
     RagasMetricSpec("context_recall"),
     RagasMetricSpec("faithfulness"),
     RagasMetricSpec("answer_relevancy"),
+    RagasMetricSpec("answer_correctness"),
     SourceReferenceFormatJudge(),
 ]
 
