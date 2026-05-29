@@ -48,6 +48,46 @@ def test_source_without_page():
     print("  PASSED\n")
 
 
+def test_bold_sources_footer():
+    md = (
+        "Operating costs increased by 200 basis points [1].\n\n"
+        "**Sources**\n"
+        "[1] source_documents_report_ef7a4579.pdf (Page 4)"
+    )
+    result = parse_markdown_response(md)
+
+    assert result.answer == "Operating costs increased by 200 basis points [1]."
+    assert len(result.citations) == 1
+    assert result.citations[0].document_index == 1
+    assert result.citations[0].asset_key == "source_documents_report_ef7a4579.pdf"
+    assert result.citations[0].page_number == 4
+
+
+def test_plain_sources_footer_requires_citation_line():
+    md = "Answer text [1].\n\nSources\n[1] report.pdf (Page 2)"
+    result = parse_markdown_response(md)
+
+    assert result.answer == "Answer text [1]."
+    assert len(result.citations) == 1
+    assert result.citations[0].page_number == 2
+
+
+def test_sources_word_in_prose_does_not_truncate():
+    md = "The company relies on multiple revenue sources for growth."
+    result = parse_markdown_response(md)
+
+    assert result.answer == md
+    assert result.citations == []
+
+
+def test_sources_header_without_citation_line_does_not_truncate():
+    md = "The company relies on multiple revenue sources.\n\nSources\nnot a source line"
+    result = parse_markdown_response(md)
+
+    assert result.answer == md
+    assert result.citations == []
+
+
 def test_json_fallback():
     json_str = '{"answer": "test answer", "citations": []}'
     result = parse_agent_response(json_str)
@@ -56,6 +96,35 @@ def test_json_fallback():
     assert result.answer == "test answer"
     assert result.citations == []
     print("  PASSED\n")
+
+
+def test_json_answer_with_embedded_bold_sources_footer_is_normalized():
+    json_str = (
+        '{"answer": "- **Basis-point change:** **200 bps** [1]\\n\\n'
+        '**Sources**\\n[1] source_documents_report_ef7a4579.pdf (Page 4)", '
+        '"citations": []}'
+    )
+    result = parse_agent_response(json_str)
+
+    assert result.answer == "- **Basis-point change:** **200 bps** [1]"
+    assert len(result.citations) == 1
+    assert result.citations[0].document_index == 1
+    assert result.citations[0].asset_key == "source_documents_report_ef7a4579.pdf"
+    assert result.citations[0].page_number == 4
+
+
+def test_json_with_structured_citations_is_not_reparsed():
+    json_str = (
+        '{"answer": "Answer [1]\\n\\n**Sources**\\n[1] footer.pdf (Page 9)", '
+        '"citations": [{"document_index": 1, "asset_key": "structured.pdf", '
+        '"asset_name": "", "source_url": "", "page_number": 3}]}'
+    )
+    result = parse_agent_response(json_str)
+
+    assert result.answer.endswith("footer.pdf (Page 9)")
+    assert len(result.citations) == 1
+    assert result.citations[0].asset_key == "structured.pdf"
+    assert result.citations[0].page_number == 3
 
 
 def test_code_fenced_markdown():

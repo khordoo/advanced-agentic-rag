@@ -610,6 +610,57 @@ def test_post_processing_matches_citations_by_exact_asset_key():
     assert payload["citations"][1]["source_url"] == ""
 
 
+def test_post_processing_normalizes_json_answer_with_embedded_sources_footer():
+    model = _DummyModel()
+    nodes = GraphNodes(
+        reasoning_llm=model,
+        verifier_llm=model,
+        fast_llm=model,
+        tools=[_make_tool()],
+        settings=GenerationSettings(),
+    )
+
+    result = nodes.execute_post_processing(
+        {
+            "messages": [
+                AIMessage(
+                    content=json.dumps(
+                        {
+                            "answer": (
+                                "- **Basis-point change:** **200 bps** [1]\n\n"
+                                "**Sources**\n"
+                                "[1] asset-42 (Page 4)"
+                            ),
+                            "citations": [],
+                        }
+                    )
+                )
+            ],
+            "source_docs": [
+                Document(
+                    page_content="doc",
+                    metadata={
+                        "asset_key": "asset-42",
+                        "asset_name": "Annual Report.pdf",
+                        "source": "/docs/Annual Report.pdf",
+                    },
+                )
+            ],
+            "token_budget": 0,
+            "intent_route": "domain_expert",
+        }
+    )
+
+    payload = json.loads(result["messages"][0].content)
+    assert payload["answer"] == "- **Basis-point change:** **200 bps** [1]"
+    assert len(payload["citations"]) == 1
+    assert payload["citations"][0]["document_index"] == 1
+    assert payload["citations"][0]["asset_key"] == "asset-42"
+    assert payload["citations"][0]["asset_name"] == "Annual Report.pdf"
+    assert payload["citations"][0]["source_url"] == "/docs/Annual Report.pdf"
+    assert payload["citations"][0]["page_number"] == 4
+
+
 def test_post_processing_dedupes_same_asset_same_page_and_remaps_inline_refs():
     model = _DummyModel()
     nodes = GraphNodes(
