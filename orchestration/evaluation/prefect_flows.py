@@ -53,6 +53,41 @@ def _assert_eval_runtime_ready() -> None:
     assert_eval_runtime_ready()
 
 
+def _check_eval_knowledge_base_ready(flow_label: str) -> object | None:
+    """Return a failed Prefect state when eval is requested before ingestion."""
+    from prefect.states import Failed
+    from rag_core.core.readiness import ApplicationReadinessChecker, SetupRequiredError
+
+    log = _get_logger()
+    try:
+        ApplicationReadinessChecker().ensure_ready()
+        return None
+    except SetupRequiredError as exc:
+        log.error(
+            "\n\n"
+            + "=" * 70
+            + "\n"
+            + f"{flow_label} PRE-FLIGHT CHECK FAILED\n\n"
+            + "The knowledge base is empty or not ready, so evaluation cannot run.\n"
+            + "You need to ingest documents first.\n\n"
+            + "Run this command:\n"
+            + "  make ingest\n\n"
+            + "Or use the Prefect dashboard:\n"
+            + "  http://localhost:4200\n"
+            + "  Deployment: ingest-documents\n\n"
+            + "Reason:\n"
+            + f"  {exc.message}\n"
+            + "=" * 70
+            + "\n"
+        )
+        return Failed(
+            message=(
+                "Evaluation aborted: knowledge base is empty or not ready. "
+                "Run 'make ingest' first."
+            )
+        )
+
+
 def _metric_names(evaluators: Iterable[object]) -> list[str]:
     """Extract Ragas metric names from registry entries."""
     return [item.name for item in evaluators if isinstance(item, RagasMetricSpec)]
@@ -70,6 +105,7 @@ def _custom_judges(evaluators: Iterable[object]) -> list[SourceReferenceFormatJu
 def _build_rag_service() -> object:
     """Construct the production RAG service once per flow run."""
     from app.services.rag_service import RagService
+    from rag_core.core.readiness import ApplicationReadinessChecker
     from rag_core.genetation.graph import RagGraphFactory
     from rag_core.prompts.loader import AgentPrompt
 
@@ -79,6 +115,7 @@ def _build_rag_service() -> object:
         graph=graph,
         system_instructions=agent_prompt.get_system_instructions(),
         model_id="eval-runner",
+        readiness_checker=ApplicationReadinessChecker(),
     )
 
 
@@ -339,6 +376,9 @@ def run_ground_truth_evaluation(
     eval_config = get_eval_config()
 
     _assert_eval_runtime_ready()
+    failed_state = _check_eval_knowledge_base_ready("EVAL")
+    if failed_state is not None:
+        return failed_state
 
     from orchestration.evaluation.tasks import (
         emit_artifact_task,
@@ -405,6 +445,9 @@ def run_nightly_drift_detection(
     eval_config = get_eval_config()
 
     _assert_eval_runtime_ready()
+    failed_state = _check_eval_knowledge_base_ready("EVAL DRIFT")
+    if failed_state is not None:
+        return failed_state
 
     from evaluation.phoenix_bootstrap import get_phoenix_client
 

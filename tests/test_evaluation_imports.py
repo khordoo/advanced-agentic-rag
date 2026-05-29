@@ -168,6 +168,168 @@ class TestEvalRuntimeGatingContract:
             get_eval_config.cache_clear()
 
 
+class TestEvalKnowledgeBasePreflight:
+    """Eval flows fail fast when ingestion has not populated the knowledge base."""
+
+    def test_ground_truth_eval_aborts_before_expensive_work_when_kb_not_ready(self):
+        from rag_core.core.readiness import SetupRequiredError
+        from orchestration.evaluation import prefect_flows
+
+        class _FailingReadinessChecker:
+            def ensure_ready(self) -> None:
+                raise SetupRequiredError(
+                    reason="knowledge_base_empty",
+                    message="No documents have been ingested yet. Run `make ingest`.",
+                )
+
+        with (
+            patch.object(prefect_flows, "_assert_eval_runtime_ready"),
+            patch(
+                "rag_core.core.readiness.ApplicationReadinessChecker",
+                return_value=_FailingReadinessChecker(),
+            ),
+            patch.object(
+                prefect_flows,
+                "_load_ground_truth_rows",
+                side_effect=AssertionError("dataset loading should not run"),
+            ),
+        ):
+            state = prefect_flows.run_ground_truth_evaluation.fn()
+
+        assert state.is_failed()
+        assert "make ingest" in state.message
+
+    def test_drift_eval_aborts_before_phoenix_query_when_kb_not_ready(self):
+        from rag_core.core.readiness import SetupRequiredError
+        from orchestration.evaluation import prefect_flows
+
+        class _FailingReadinessChecker:
+            def ensure_ready(self) -> None:
+                raise SetupRequiredError(
+                    reason="knowledge_base_empty",
+                    message="No documents have been ingested yet. Run `make ingest`.",
+                )
+
+        with (
+            patch.object(prefect_flows, "_assert_eval_runtime_ready"),
+            patch(
+                "rag_core.core.readiness.ApplicationReadinessChecker",
+                return_value=_FailingReadinessChecker(),
+            ),
+            patch(
+                "evaluation.phoenix_bootstrap.get_phoenix_client",
+                side_effect=AssertionError("Phoenix should not be queried"),
+            ),
+        ):
+            state = prefect_flows.run_nightly_drift_detection.fn()
+
+        assert state.is_failed()
+        assert "make ingest" in state.message
+
+    def test_eval_cli_bridge_exits_one_for_failed_state(self):
+        from orchestration.evaluation import run_eval
+
+        class _FailedState:
+            def is_failed(self):
+                return True
+
+        with patch.object(
+            run_eval,
+            "run_ground_truth_evaluation",
+            return_value=_FailedState(),
+        ) as flow_call:
+            with pytest.raises(SystemExit) as exc_info:
+                run_eval.main()
+
+        flow_call.assert_called_once_with(return_state=True)
+        assert exc_info.value.code == 1
+
+    def test_eval_cli_bridge_returns_for_success_state(self):
+        from orchestration.evaluation import run_eval
+
+        class _CompletedState:
+            def is_failed(self):
+                return False
+
+        with patch.object(
+            run_eval,
+            "run_ground_truth_evaluation",
+            return_value=_CompletedState(),
+        ) as flow_call:
+            run_eval.main()
+
+        flow_call.assert_called_once_with(return_state=True)
+
+    def test_drift_cli_bridge_exits_one_for_failed_state(self):
+        from orchestration.evaluation import run_drift
+
+        class _FailedState:
+            def is_failed(self):
+                return True
+
+        with patch.object(
+            run_drift,
+            "run_nightly_drift_detection",
+            return_value=_FailedState(),
+        ) as flow_call:
+            with pytest.raises(SystemExit) as exc_info:
+                run_drift.main()
+
+        flow_call.assert_called_once_with(return_state=True)
+        assert exc_info.value.code == 1
+
+    def test_synthetic_cli_bridge_exits_one_for_failed_state(self):
+        from orchestration.evaluation import run_synthetic
+
+        class _FailedState:
+            def is_failed(self):
+                return True
+
+        with patch.object(
+            run_synthetic,
+            "synthetic_qa_flow",
+            return_value=_FailedState(),
+        ) as flow_call:
+            with pytest.raises(SystemExit) as exc_info:
+                run_synthetic.main()
+
+        flow_call.assert_called_once_with(return_state=True)
+        assert exc_info.value.code == 1
+
+    def test_synthetic_cli_bridge_returns_for_success_state(self):
+        from orchestration.evaluation import run_synthetic
+
+        class _CompletedState:
+            def is_failed(self):
+                return False
+
+        with patch.object(
+            run_synthetic,
+            "synthetic_qa_flow",
+            return_value=_CompletedState(),
+        ) as flow_call:
+            run_synthetic.main()
+
+        flow_call.assert_called_once_with(return_state=True)
+
+    def test_run_rag_for_example_reraises_setup_required(self):
+        from evaluation.pipeline.task import run_rag_for_example
+        from rag_core.core.readiness import SetupRequiredError
+
+        class _NotReadyRagService:
+            async def generate_chat_completion(self, *_args, **_kwargs):
+                raise SetupRequiredError(
+                    reason="knowledge_base_empty",
+                    message="No documents have been ingested yet. Run `make ingest`.",
+                )
+
+        with pytest.raises(SetupRequiredError):
+            run_rag_for_example(
+                {"input": "What is revenue?"},
+                rag_service=_NotReadyRagService(),
+            )
+
+
 class TestEvalConfigParsing:
     """Verify user-friendly .env formats parse into typed config values."""
 

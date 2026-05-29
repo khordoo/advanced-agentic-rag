@@ -1,4 +1,4 @@
-.PHONY: up-core up down reset reload deep-clean logs stat cli ui migrate-up migrate-down migrate-new migrate-status migrate-statusd ingest test eval eval-drift register-eval-deployment
+.PHONY: up-core up down reset reload deep-clean logs stat cli ui migrate-up migrate-down migrate-new migrate-status migrate-statusd ingest test eval eval-drift eval-synthetic register-eval-deployment
 
 ENV_FILE:= .env
 COMPOSE_FILE:=docker/docker-compose.yaml
@@ -96,12 +96,17 @@ test:
 eval: up-core
 	@echo "🚀 Running Ground Truth Evaluation..."
 	@printf "\033[36m💡 Tip: You can also trigger this pipeline visually from the Prefect UI at http://localhost:4200 (Deployment: evaluate-ground-truth)\033[0m\n"
-	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) exec -e RERANK_ENABLED=$(EVAL_RERANK_ENABLED) rag-worker .venv/bin/python -c "from orchestration.evaluation.prefect_flows import run_ground_truth_evaluation; run_ground_truth_evaluation()"
+	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) exec -e RERANK_ENABLED=$(EVAL_RERANK_ENABLED) rag-worker .venv/bin/python -m orchestration.evaluation.run_eval
 
 eval-drift: up-core
 	@echo "🚀 Running Drift Evaluation..."
 	@printf "\033[36m💡 Tip: You can also trigger this pipeline visually from the Prefect UI at http://localhost:4200 (Deployment: evaluate-traces)\033[0m\n"
-	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) exec -e RERANK_ENABLED=$(EVAL_RERANK_ENABLED) rag-worker .venv/bin/python -c "from orchestration.evaluation.prefect_flows import run_nightly_drift_detection; run_nightly_drift_detection()"
+	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) exec -e RERANK_ENABLED=$(EVAL_RERANK_ENABLED) rag-worker .venv/bin/python -m orchestration.evaluation.run_drift
+
+eval-synthetic: up-core
+	@echo "🚀 Generating Synthetic QA Dataset..."
+	@printf "\033[36m💡 Tip: You can also trigger this pipeline visually from the Prefect UI at http://localhost:4200 (Deployment: generate-synthetic-qa)\033[0m\n"
+	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) exec rag-worker .venv/bin/python -m orchestration.evaluation.run_synthetic
 
 register-eval-deployment: up-core
 	@echo "Registering all Prefect deployments, including eval deployments..."

@@ -115,7 +115,7 @@ class ApplicationReadinessChecker:
                 reason="knowledge_base_empty",
                 message=(
                     "No documents have been ingested yet. Run `make ingest` or start "
-                    "the `local-ingestion-runner` deployment from Prefect, then try again."
+                    "the `ingest-documents` deployment from Prefect, then try again."
                 ),
             )
 
@@ -136,7 +136,7 @@ class ApplicationReadinessChecker:
                     reason="knowledge_base_empty",
                     message=(
                         "No documents have been ingested yet. Run `make ingest` or start "
-                        "the `local-ingestion-runner` deployment from Prefect, then try again."
+                        "the `ingest-documents` deployment from Prefect, then try again."
                     ),
                 ) from exc
             raise SetupRequiredError(
@@ -152,6 +152,6 @@ class ApplicationReadinessChecker:
                 reason="knowledge_base_empty",
                 message=(
                     "No documents have been ingested yet. Run `make ingest` or start "
-                    "the `local-ingestion-runner` deployment from Prefect, then try again."
+                    "the `ingest-documents` deployment from Prefect, then try again."
                 ),
             )

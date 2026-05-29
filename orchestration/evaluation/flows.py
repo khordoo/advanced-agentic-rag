@@ -16,6 +16,7 @@ from prefect.exceptions import MissingContextError
 
 from evaluation.config import get_eval_config
 from orchestration.evaluation.prefect_flows import (
+    _check_eval_knowledge_base_ready,
     run_ground_truth_evaluation,
     run_nightly_drift_detection,
 )
@@ -96,28 +97,13 @@ def synthetic_qa_flow(
     import asyncio
 
     from rag_core.core.config import load_config
-    from rag_core.core.readiness import ApplicationReadinessChecker
     from rag_core.core.telemetry import init_observability
 
     from evaluation.generation.synthetic import generate_synthetic_dataset
 
-    # ── Guard: Ensure ingestion has run ──────────────────────────────
-    try:
-        ApplicationReadinessChecker().ensure_ready()
-    except Exception:
-        log.error(
-            "\n\n" + "=" * 70 + "\n"
-            "🚨 SYNTHETIC QA PRE-FLIGHT CHECK FAILED\n\n"
-            "Your knowledge base is empty or uninitialized. You cannot generate\n"
-            "synthetic QA pairs because there are no documents to read from.\n\n"
-            "Please run this command first:\n"
-            "  make ingest\n\n"
-            "Once your documents are loaded, you can run generation again.\n"
-            + "=" * 70 + "\n"
-        )
-        import sys
-        sys.tracebacklimit = 0
-        raise RuntimeError("Generation aborted: Knowledge base is empty. Please run 'make ingest' first.") from None
+    failed_state = _check_eval_knowledge_base_ready("SYNTHETIC QA")
+    if failed_state is not None:
+        return failed_state
 
     init_observability(eval_config.phoenix_project)
     config = load_config()

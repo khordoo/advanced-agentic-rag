@@ -86,6 +86,10 @@ async def _run_rag_for_example_async(example: dict, *, rag_service) -> dict:
         }
 
     except Exception as exc:
+        from rag_core.core.readiness import SetupRequiredError
+
+        if isinstance(exc, SetupRequiredError):
+            raise
         logger.error(
             "Error processing example (question=%s…): %s",
             question[:80],
