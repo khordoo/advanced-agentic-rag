@@ -12,17 +12,17 @@ from __future__ import annotations
 
 import logging
 import asyncio
-from typing import Any, Callable
+from typing import Callable
 
 logger = logging.getLogger(__name__)
 
-# Canonical metric name → RAGAS class + optional kwargs
-_METRIC_MAP: dict[str, tuple[str, dict[str, Any]]] = {
-    "faithfulness": ("Faithfulness", {}),
-    "answer_relevancy": ("AnswerRelevancy", {}),
-    "context_recall": ("ContextRecall", {}),
-    "context_precision": ("ContextPrecision", {}),
-    "answer_correctness": ("AnswerCorrectness", {"weights": [0.8, 0.2]}),
+# Canonical metric name → RAGAS class name
+_METRIC_MAP: dict[str, str] = {
+    "faithfulness": "Faithfulness",
+    "answer_relevancy": "AnswerRelevancy",
+    "context_recall": "ContextRecall",
+    "context_precision": "ContextPrecision",
+    "answer_correctness": "AnswerCorrectness",
 }
 
 
@@ -124,9 +124,13 @@ def build_ragas_evaluators(
             logger.warning("Unknown RAGAS metric '%s' — skipping", metric_name)
             continue
 
-        class_name, kwargs = _METRIC_MAP[metric_name]
+        class_name = _METRIC_MAP[metric_name]
         metric_cls = _class_map[class_name]
-        metric_instance = metric_cls(**kwargs) if kwargs else metric_cls()
+
+        if metric_name == "answer_correctness":
+            metric_instance = metric_cls(weights=eval_config.answer_correctness_weights)
+        else:
+            metric_instance = metric_cls()
 
         # Capture metric in closure
         def _make_evaluator(metric, name):

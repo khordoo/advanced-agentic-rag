@@ -83,7 +83,7 @@ migrate-statusd: migrate-status
 
 ingest: up-core migrate-up
 	@echo "Triggering Prefect Ingestion Flow inside Docker..."
-	@echo "💡 Tip: You can also trigger this pipeline visually from the Prefect UI at http://localhost:4200 (Deployment: ingest-documents)"
+	@printf "\033[36m💡 Tip: You can also trigger this pipeline visually from the Prefect UI at http://localhost:4200 (Deployment: ingest-documents)\033[0m\n"
 	@if [ -n "$(MAX_JOBS)" ]; then \
 		docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) exec rag-worker .venv/bin/python -m orchestration.ingestion.flows end_to_end --max-jobs $(MAX_JOBS); \
 	else \
@@ -95,12 +95,12 @@ test:
 
 eval: up-core
 	@echo "🚀 Running Ground Truth Evaluation..."
-	@echo "💡 Tip: You can also trigger this pipeline visually from the Prefect UI at http://localhost:4200 (Deployment: evaluate-ground-truth)"
+	@printf "\033[36m💡 Tip: You can also trigger this pipeline visually from the Prefect UI at http://localhost:4200 (Deployment: evaluate-ground-truth)\033[0m\n"
 	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) exec -e RERANK_ENABLED=$(EVAL_RERANK_ENABLED) rag-worker .venv/bin/python -c "from orchestration.evaluation.prefect_flows import run_ground_truth_evaluation; run_ground_truth_evaluation()"
 
 eval-drift: up-core
 	@echo "🚀 Running Drift Evaluation..."
-	@echo "💡 Tip: You can also trigger this pipeline visually from the Prefect UI at http://localhost:4200 (Deployment: evaluate-traces)"
+	@printf "\033[36m💡 Tip: You can also trigger this pipeline visually from the Prefect UI at http://localhost:4200 (Deployment: evaluate-traces)\033[0m\n"
 	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) exec -e RERANK_ENABLED=$(EVAL_RERANK_ENABLED) rag-worker .venv/bin/python -c "from orchestration.evaluation.prefect_flows import run_nightly_drift_detection; run_nightly_drift_detection()"
 
 register-eval-deployment: up-core

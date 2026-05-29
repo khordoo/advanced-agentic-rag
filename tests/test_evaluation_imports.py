@@ -266,6 +266,72 @@ class TestEvalConfigParsing:
         assert config.concurrency == 7
 
 
+class TestFactualityWeight:
+    """Verify the EVAL_FACTUALITY_WEIGHT config for AnswerCorrectness tuning."""
+
+    def test_factuality_weight_default(self):
+        """Default factuality weight matches RAGAS upstream default (0.75)."""
+        from evaluation.config import EvalConfig
+
+        config = EvalConfig(_env_file=None)
+
+        assert config.factuality_weight == 0.75
+        assert config.semantic_weight == pytest.approx(0.25)
+
+    @patch.dict(os.environ, {"EVAL_FACTUALITY_WEIGHT": "0.85"}, clear=False)
+    def test_factuality_weight_from_env(self):
+        """EVAL_FACTUALITY_WEIGHT env var is parsed into a float."""
+        from evaluation.config import EvalConfig
+
+        config = EvalConfig(_env_file=None)
+
+        assert config.factuality_weight == pytest.approx(0.85)
+        assert config.semantic_weight == pytest.approx(0.15)
+
+    @patch.dict(os.environ, {"EVAL_FACTUALITY_WEIGHT": "0.0"}, clear=False)
+    def test_factuality_weight_zero_all_semantic(self):
+        """Setting factuality_weight=0.0 gives full weight to semantics."""
+        from evaluation.config import EvalConfig
+
+        config = EvalConfig(_env_file=None)
+
+        assert config.factuality_weight == 0.0
+        assert config.semantic_weight == pytest.approx(1.0)
+
+    @patch.dict(os.environ, {"EVAL_FACTUALITY_WEIGHT": "1.0"}, clear=False)
+    def test_factuality_weight_one_all_factual(self):
+        """Setting factuality_weight=1.0 gives full weight to factuality."""
+        from evaluation.config import EvalConfig
+
+        config = EvalConfig(_env_file=None)
+
+        assert config.factuality_weight == 1.0
+        assert config.semantic_weight == pytest.approx(0.0)
+
+    def test_factuality_weight_rejects_above_one(self):
+        """factuality_weight > 1.0 is rejected by Pydantic ge/le constraint."""
+        from pydantic import ValidationError
+        from evaluation.config import EvalConfig
+
+        with pytest.raises(ValidationError):
+            EvalConfig(_env_file=None, factuality_weight=1.5)
+
+    def test_factuality_weight_rejects_negative(self):
+        """factuality_weight < 0.0 is rejected by Pydantic ge/le constraint."""
+        from pydantic import ValidationError
+        from evaluation.config import EvalConfig
+
+        with pytest.raises(ValidationError):
+            EvalConfig(_env_file=None, factuality_weight=-0.1)
+
+    def test_weights_always_sum_to_one(self):
+        """factuality_weight + semantic_weight always sums to 1.0."""
+        from evaluation.config import EvalConfig
+
+        for value in [0.0, 0.1, 0.25, 0.5, 0.75, 0.9, 1.0]:
+            config = EvalConfig(_env_file=None, factuality_weight=value)
+            assert config.factuality_weight + config.semantic_weight == pytest.approx(1.0)
+
 class TestEvalRuntimeChecks:
     """Verify eval dependency checks fail with actionable messages."""
 

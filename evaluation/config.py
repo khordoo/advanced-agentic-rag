@@ -131,6 +131,28 @@ class EvalConfig(BaseSettings):
         description="Legacy Phoenix reference-free evaluator names.",
     )
 
+    # ── Answer correctness tuning ────────────────────────────────────
+    factuality_weight: float = Field(
+        default=0.75,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Weight for factual correctness in RAGAS AnswerCorrectness "
+            "(0.0–1.0). Semantic similarity weight is automatically "
+            "1.0 − this value. RAGAS default is 0.75."
+        ),
+    )
+
+    @property
+    def semantic_weight(self) -> float:
+        """Derived semantic similarity weight (always sums to 1.0)."""
+        return 1.0 - self.factuality_weight
+
+    @property
+    def answer_correctness_weights(self) -> list[float]:
+        """Weights list for RAGAS ``AnswerCorrectness(weights=...)``."""
+        return [self.factuality_weight, self.semantic_weight]
+
     # ── Thresholds (pass/fail gate) ──────────────────────────────────
     thresholds: Annotated[dict[str, float], NoDecode] = Field(
         default_factory=dict,
