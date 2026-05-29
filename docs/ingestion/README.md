@@ -78,7 +78,7 @@ claims assets through database leases.
 - Worker application logs are also mirrored to container stdout:
 
 ```bash
-docker logs ingestion-worker -f
+docker logs rag-worker -f
 ```
 
 - Per-asset failures are persisted in `source_assets.error_message` with stage and path context.

@@ -55,6 +55,47 @@ _SOURCE_LINE_WITH_PAGE = re.compile(
     r"\[(\d+)\]\s+(.+?)\s+\(Page\s+(\d+)\)", re.IGNORECASE
 )
 _SOURCE_LINE_NO_PAGE = re.compile(r"\[(\d+)\]\s+(.+?)(?:\s*$)", re.MULTILINE)
+_SOURCES_FOOTER_RE = re.compile(
+    r"""
+    (?P<header>
+        ^|\n+
+    )
+    [ \t]*
+    (?:
+        \#{1,6}[ \t]*Sources
+        |
+        \*\*[ \t]*Sources[ \t]*\*\*
+        |
+        Sources
+    )
+    [ \t]*
+    (?:
+        :?
+    )
+    [ \t]*
+    \n+
+    (?=\s*\[\d+\]\s+)
+    (?P<sources>[\s\S]*)
+    \Z
+    """,
+    re.IGNORECASE | re.MULTILINE | re.VERBOSE,
+)
+
+
+def _split_sources_footer(text: str) -> tuple[str, str] | None:
+    """Return ``(answer, sources_block)`` for a footer-shaped Sources section.
+
+    The header must start on its own line and be followed by at least one
+    numeric citation line. This avoids truncating normal prose such as
+    "revenue sources".
+    """
+    match = _SOURCES_FOOTER_RE.search(text)
+    if not match:
+        return None
+
+    answer_text = text[: match.start()].strip()
+    sources_block = match.group("sources").strip()
+    return answer_text, sources_block
 
 
 def parse_markdown_response(raw: str) -> RagFinalResponseSchema:
@@ -78,17 +119,13 @@ def parse_markdown_response(raw: str) -> RagFinalResponseSchema:
         cleaned = re.sub(r"\n?```$", "", cleaned)
         cleaned = cleaned.strip()
 
-    # Split on the LAST occurrence of "### Sources" (case-insensitive)
-    # Using the last one guards against the LLM echoing the example section.
-    parts = re.split(r"###\s+Sources", cleaned, flags=re.IGNORECASE)
-
-    if len(parts) <= 1:
-        # No ### Sources section found — return full text, no citations
+    footer = _split_sources_footer(cleaned)
+    if footer is None:
+        # No safe Sources footer found — return full text, no citations
         logger.debug("No ### Sources section found in response, returning raw answer.")
         return RagFinalResponseSchema(answer=cleaned.strip(), citations=[])
 
-    answer_text = "### Sources".join(parts[:-1]).strip()
-    sources_block = parts[-1]
+    answer_text, sources_block = footer
 
     # Parse citations from the sources block
     citations: list[Citation] = []
@@ -144,7 +181,10 @@ def parse_agent_response(raw: str | list | dict) -> RagFinalResponseSchema:
         try:
             data = extract_clean_json(normalized)
             logger.debug("Parsed response as JSON.")
-            return RagFinalResponseSchema(**data)
+            parsed = RagFinalResponseSchema(**data)
+            if not parsed.citations and _split_sources_footer(parsed.answer):
+                return parse_markdown_response(parsed.answer)
+            return parsed
         except Exception as e:
             logger.debug("JSON-like input but parsing failed: %s, trying Markdown.", e)
 

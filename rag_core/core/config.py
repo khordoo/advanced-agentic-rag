@@ -9,18 +9,13 @@ from pathlib import Path
 from typing import Literal
 
 from dotenv import dotenv_values, load_dotenv
-from pydantic import AliasChoices, Field, computed_field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pythonjsonlogger.json import JsonFormatter
 
 from rag_core.embeddings.types import EmbeddingProvider
 
 logger = logging.getLogger(__name__)
-
-try:
-    import torch
-except ModuleNotFoundError:  # pragma: no cover - optional dependency
-    torch = None
 
 # Keys that MUST exist in the environment / .env
 _REQUIRED_KEYS: list[str] = []
@@ -230,40 +225,27 @@ class RetrievalSettings(BaseSettings):
 
 
 class RerankerSettings(BaseSettings):
-    """Configuration settings for the Reranker.
-    We set top_k=10 since childs chunks will have duplicate parent chunks
-    and we want to return at least 5 unique parent chunks to the LLM agent
-    """
+    """Configuration settings for reranker providers."""
 
-    provider: str = "huggingface"
+    provider: str = "fastembed"
     enabled: bool = True
-    model_name: str = "BAAI/bge-reranker-v2-m3"  # "cross-encoder/ms-marco-MiniLM-L-6-v2"  # "BAAI/bge-reranker-v2-m3"
+    model_name: str = "BAAI/bge-reranker-base"
     top_k: int = Field(
         default=3,
         ge=1,
         le=50,
-        description="Number of documents to return afterrerank",
+        description="Number of documents to return after rerank",
     )
     device: Literal["cuda", "cpu", "mps", "auto"] = Field(
-        default="auto",
-        description="Device to use for reranking",
+        default="cpu",
+        description="Legacy setting retained for config compatibility. FastEmbed uses ONNX Runtime.",
         examples=["cuda", "cpu", "mps", "auto"],
     )
+    fastembed_cache_dir: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("FASTEMBED_CACHE_DIR", "fastembed_cache_dir"),
+    )
     model_config = SettingsConfigDict(env_prefix="RERANK_", env_file=".env", extra="ignore")
-
-    @computed_field
-    @property
-    def resolve_device(self) -> Literal["cuda", "cpu", "mps"]:
-        if self.device == "auto":
-            if torch is None:
-                return "cpu"
-            if torch.cuda.is_available():
-                return "cuda"
-            elif torch.backends.mps.is_available():
-                return "mps"
-            else:
-                return "cpu"
-        return self.device
 
 
 class QdrantSettings(BaseSettings):
@@ -511,6 +493,46 @@ def get_generation_settings() -> GenerationSettings:
 
 
 @lru_cache()
+def get_reranker_settings() -> RerankerSettings:
+    logger.info("Reading .env file and caching reranker settings...")
+    return RerankerSettings()
+
+
+@lru_cache()
 def get_retrieval_settings() -> RetrievalSettings:
     logger.info("Reading .env file and caching Retrieval pipeline settings...")
     return RetrievalSettings()
+
+
+def log_runtime_status() -> None:
+    """Log the key runtime configuration in one place."""
+    generation = get_generation_settings()
+    retrieval = get_retrieval_settings()
+    reranker = get_reranker_settings()
+
+    logger.info(
+        "Runtime status: retrieval backend=%s top_k=%d oversample=%d hybrid_alpha=%.2f",
+        retrieval.backend,
+        retrieval.top_k,
+        retrieval.oversample_factor,
+        retrieval.hybrid_alpha,
+    )
+    if reranker.enabled:
+        logger.info(
+            "Runtime status: reranker enabled provider=%s model=%s top_k=%d",
+            reranker.provider,
+            reranker.model_name,
+            reranker.top_k,
+        )
+    else:
+        logger.info("Runtime status: reranker disabled")
+
+    logger.info(
+        "Runtime status: generation provider=%s reasoning=%s verifier=%s fast=%s intent_routing=%s grounding_verifier=%s",
+        generation.model_provider,
+        generation.reasoning_model,
+        generation.verifier_model,
+        generation.fast_model,
+        generation.enable_intent_routing,
+        generation.enable_grounding_verifier,
+    )

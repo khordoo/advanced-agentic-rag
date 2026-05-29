@@ -47,7 +47,7 @@ system_template: |
   - Use short paragraphs. Never write a single massive block of text.
   - Add inline [N] citations next to the specific claims they support.
 
-  After your answer, add a blank line and then a "### Sources" section listing each cited source.
+  After your answer, add a blank line and then a "### Sources" section listing each cited source. You MUST use exactly "### Sources" (an H3 markdown header). Do NOT use "**Sources**", "## Sources", or any other variation.
   Each source line MUST follow this exact format:
   [N] asset_key (Page X)
 

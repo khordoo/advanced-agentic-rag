@@ -1,6 +1,6 @@
 #!/bin/bash
 # ──────────────────────────────────────────────────────────────────────────────
-# Ingestion Worker Container Entrypoint
+# RAG Worker Container Entrypoint
 # ──────────────────────────────────────────────────────────────────────────────
 # This script runs inside the worker container on every boot.
 # It performs two phases:
@@ -12,7 +12,7 @@
 # ──────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
-POOL_NAME="${PREFECT_INGESTION_WORK_POOL:-ingestion-pool}"
+POOL_NAME="${PREFECT_WORK_POOL:-rag-work-pool}"
 WORKER_LIMIT="${PREFECT_WORKER_LIMIT:-2}"
 
 echo "🚀 Running pre-flight orchestration setup …"

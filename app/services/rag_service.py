@@ -3,7 +3,7 @@ import logging
 from typing import Any
 
 from langgraph.graph.state import CompiledStateGraph
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.core.exceptions import UpstreamModelError
 from app.schemas.openai import ChatCompletionRequest
@@ -21,6 +21,7 @@ class GenerationResult(BaseModel):
     requested_model_id: str
     resolved_model_id: str
     agent_output: dict[str, Any]
+    source_docs: list[Any] = Field(default_factory=list)
 
 
 class RagService:
@@ -38,7 +39,11 @@ class RagService:
         self.drop_frontend_prompts = drop_frontend_prompts
         self.readiness_checker = readiness_checker
 
-    async def generate_chat_completion(self, chat_req: ChatCompletionRequest) -> GenerationResult:
+    async def generate_chat_completion(
+        self,
+        chat_req: ChatCompletionRequest,
+        include_source_docs: bool = False,
+    ) -> GenerationResult:
         """Runs graph inference and returns canonical output + resolved model metadata."""
         self._ensure_ready()
 
@@ -48,7 +53,10 @@ class RagService:
 
         try:
             res = await self.graph.ainvoke(
-                {"messages": langchain_msgs, "system_instructions": self.system_instructions}
+                {
+                    "messages": langchain_msgs,
+                    "system_instructions": self.system_instructions,
+                }
             )
             messages = res.get("messages")
             if not isinstance(messages, list) or not messages:
@@ -69,10 +77,13 @@ class RagService:
         except Exception as exc:
             raise UpstreamModelError("Upstream model invocation failed.") from exc
 
+        source_docs = res.get("source_docs", []) if include_source_docs else []
+
         return GenerationResult(
             requested_model_id=chat_req.model,
             resolved_model_id=self.model_id,
             agent_output=parsed_output,
+            source_docs=source_docs,
         )
 
     def create_event_stream(self, chat_req: ChatCompletionRequest):
@@ -87,7 +98,10 @@ class RagService:
             drop_system_messages=self.drop_frontend_prompts
         )
         return self.graph.astream_events(
-            {"messages": langchain_msgs, "system_instructions": self.system_instructions},
+            {
+                "messages": langchain_msgs,
+                "system_instructions": self.system_instructions,
+            },
             version="v2",
         )
 

@@ -1,10 +1,10 @@
 """Interactive CLI for communicating with the RAG agent graph."""
 
-import logging
-
 from langchain_core.messages import AIMessage, HumanMessage
 
-from rag_core.core.config import setup_logging
+import logging
+
+from rag_core.core.config import log_runtime_status, setup_logging
 from rag_core.core.readiness import ApplicationReadinessChecker, SetupRequiredError
 from rag_core.core.telemetry import init_observability
 from rag_core.genetation.graph import RagGraphFactory
@@ -88,4 +88,5 @@ def run_chat_loop():
 
 
 if __name__ == "__main__":
+    log_runtime_status()
     run_chat_loop()

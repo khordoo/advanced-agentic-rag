@@ -10,8 +10,9 @@ docker compose --project-directory . -f docker/docker-compose.yaml up -d
 docker compose --project-directory . -f docker/docker-compose.yaml ps
 ```
 
-Default worker builds include ingestion, PDF Docling processing, and the dense
-FastEmbed model cache. The reranker is only needed by the API image.
+Default worker and API images include runtime code and dependencies only. The
+`model-warmer` service downloads the dense, sparse, and `BAAI/bge-reranker-base`
+FastEmbed models into a shared Docker volume before the API and worker start.
 
 ## Services
 
@@ -23,7 +24,8 @@ FastEmbed model cache. The reranker is only needed by the API image.
 | **Qdrant** | `6333` (REST), `6334` (gRPC) | Vector DB with hybrid search (BM25 + vector) |
 | **Phoenix** | `6006` | OpenTelemetry/OpenInference tracing UI |
 | **PostgreSQL (core-db)** | `5432` | Shared DB host (RAG + Prefect metadata) |
-| **Ingestion Worker** | internal | Prefect process worker for ingestion flows |
+| **RAG Worker** | internal | Prefect process worker for ingestion and evaluation flows |
+| **Model Warmer** | internal | Preloads FastEmbed models into the shared cache volume |
 
 After startup, open:
 - Prefect dashboard: `http://localhost:4200`
@@ -34,15 +36,18 @@ After startup, open:
 
 ## Auto-Provisioning (Zero Manual Steps)
 
-The ingestion worker container is fully self-bootstrapping. On every startup, its
+The RAG worker container is fully self-bootstrapping. On every startup, its
 entrypoint script (`docker/entrypoint-worker.sh`) runs the pre-flight initialization
 module (`orchestration/initialize.py`), which:
 
 1. **Waits for the Prefect API** to become healthy (exponential backoff).
-2. **Creates the `ingestion-pool` work pool** (type: `process`) if it doesn't exist.
-3. **Registers both canonical deployments** to the Prefect server:
-   - `local-ingestion-runner` — safe end-to-end ingestion with migration preflight.
-   - `local-ingestion-runner-factory-reset` — destructive wipe (requires explicit confirmation parameter).
+2. **Creates the `rag-work-pool` work pool** (type: `process`) if it doesn't exist.
+3. **Registers all canonical deployments** to the Prefect server:
+   - `ingest-documents` — discover, process, and index source documents for retrieval.
+   - `reset-document-index` — destructive reset of indexed documents and ingestion state.
+   - `evaluate-ground-truth` — evaluate RAG answers against the ground truth dataset.
+   - `evaluate-traces` — evaluate recent production traces with reference-free judges.
+   - `generate-synthetic-qa` — generate synthetic QA examples from indexed documents.
 
 All operations are **idempotent** — restarting the stack or re-creating containers
 is always safe and never produces duplicate resources.
@@ -51,16 +56,25 @@ is always safe and never produces duplicate resources.
 > inside the ingestion flow itself (`run_database_migrations_task`), ensuring the
 > relational schema is always current before any document processing begins.
 
+## Startup Modes
+
+The stack supports two startup modes via Makefile:
+
+| Command | Services | Use Case |
+|---------|----------|----------|
+| `make up-core` | DB, Qdrant, Phoenix, Prefect, Worker, API | Headless dev: ingestion, eval, CLI |
+| `make up` | Everything above + Open-WebUI | Full stack with chat UI |
+
 ## Run Ingestion Flow
 
 Trigger ingestion from Prefect UI (recommended):
 
 1. Open `http://localhost:4200`
 2. Go to **Deployments**
-3. Open `local-ingestion-runner`
+3. Open `ingest-documents`
 4. Click **Quick Run** for immediate ingestion, or create a **Schedule** from the same deployment
 
-If `local-ingestion-runner` is not visible in Deployments:
+If `ingest-documents` is not visible in Deployments:
 
 ```bash
 make register-ingestion-deployments

@@ -193,6 +193,50 @@ def test_self_correcting_agent_invokes_verifier_when_enabled():
     assert verifier_model.invoke_calls == 1
 
 
+def test_self_correcting_agent_marks_failed_verification_span(monkeypatch):
+    reasoning_model = _DummyModel()
+    verifier_model = _DummyModel(
+        response_content=json.dumps({"grounded": False, "reason": "unsupported claim"})
+    )
+    fast_model = _DummyModel()
+    nodes = GraphNodes(
+        reasoning_llm=reasoning_model,
+        verifier_llm=verifier_model,
+        fast_llm=fast_model,
+        tools=[_make_tool()],
+        settings=GenerationSettings(enable_grounding_verifier=True),
+    )
+
+    class _RecordingSpan:
+        def __init__(self) -> None:
+            self.attributes = {}
+
+        def is_recording(self):
+            return True
+
+        def set_attribute(self, key, value):
+            self.attributes[key] = value
+
+    span = _RecordingSpan()
+    monkeypatch.setattr(
+        "rag_core.core.telemetry.trace.get_current_span",
+        lambda: span,
+    )
+
+    result = nodes.execute_self_correcting_agent(
+        {
+            "messages": [HumanMessage(content="q"), AIMessage(content="candidate answer")],
+            "source_docs": [Document(page_content="doc", metadata={})],
+            "token_budget": 0,
+            "intent_route": "domain_expert",
+            "self_correction_attempts": 0,
+        }
+    )
+
+    assert result["verifier_response"].grounded is False
+    assert span.attributes == {"custom.verification_status": "failed"}
+
+
 def test_generation_settings_enforce_safe_minimums():
     with pytest.raises(ValidationError):
         GenerationSettings(max_agent_iterations=4)
@@ -564,6 +608,57 @@ def test_post_processing_matches_citations_by_exact_asset_key():
     assert payload["citations"][1]["asset_key"] == "Annual Report.pdf"
     assert payload["citations"][1]["asset_name"] == ""
     assert payload["citations"][1]["source_url"] == ""
+
+
+def test_post_processing_normalizes_json_answer_with_embedded_sources_footer():
+    model = _DummyModel()
+    nodes = GraphNodes(
+        reasoning_llm=model,
+        verifier_llm=model,
+        fast_llm=model,
+        tools=[_make_tool()],
+        settings=GenerationSettings(),
+    )
+
+    result = nodes.execute_post_processing(
+        {
+            "messages": [
+                AIMessage(
+                    content=json.dumps(
+                        {
+                            "answer": (
+                                "- **Basis-point change:** **200 bps** [1]\n\n"
+                                "**Sources**\n"
+                                "[1] asset-42 (Page 4)"
+                            ),
+                            "citations": [],
+                        }
+                    )
+                )
+            ],
+            "source_docs": [
+                Document(
+                    page_content="doc",
+                    metadata={
+                        "asset_key": "asset-42",
+                        "asset_name": "Annual Report.pdf",
+                        "source": "/docs/Annual Report.pdf",
+                    },
+                )
+            ],
+            "token_budget": 0,
+            "intent_route": "domain_expert",
+        }
+    )
+
+    payload = json.loads(result["messages"][0].content)
+    assert payload["answer"] == "- **Basis-point change:** **200 bps** [1]"
+    assert len(payload["citations"]) == 1
+    assert payload["citations"][0]["document_index"] == 1
+    assert payload["citations"][0]["asset_key"] == "asset-42"
+    assert payload["citations"][0]["asset_name"] == "Annual Report.pdf"
+    assert payload["citations"][0]["source_url"] == "/docs/Annual Report.pdf"
+    assert payload["citations"][0]["page_number"] == 4
 
 
 def test_post_processing_dedupes_same_asset_same_page_and_remaps_inline_refs():

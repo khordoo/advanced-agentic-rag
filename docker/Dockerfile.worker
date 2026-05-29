@@ -12,34 +12,43 @@ COPY pyproject.toml uv.lock README.md ./
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        libxcb1 \
-        libgl1 \
-        libsm6 \
-        libice6 \
-        libx11-6 \
-        libxext6 \
-        libxrender1 \
-        libxfixes3 \
-        libxi6 \
-        libxrandr2 \
-        libglib2.0-0 \
-        libnss3 \
-        libfontconfig1 \
+    libxcb1 \
+    libgl1 \
+    libsm6 \
+    libice6 \
+    libx11-6 \
+    libxext6 \
+    libxrender1 \
+    libxfixes3 \
+    libxi6 \
+    libxrandr2 \
+    libglib2.0-0 \
+    libnss3 \
+    libfontconfig1 \
     && rm -rf /var/lib/apt/lists/*
 
-ARG UV_SYNC_EXTRAS="--extra ingestion --extra doc-processing"
-RUN uv sync --frozen --no-dev --no-install-project ${UV_SYNC_EXTRAS}
+ARG UV_SYNC_EXTRAS="--extra ingestion --extra doc-processing --extra eval"
+RUN set -eux; \
+    if echo " ${UV_SYNC_EXTRAS} " | grep -q -- "--extra eval"; then \
+    apt-get update; \
+    apt-get install -y --no-install-recommends build-essential; \
+    fi; \
+    uv sync --frozen --no-dev --no-install-project ${UV_SYNC_EXTRAS}; \
+    if echo " ${UV_SYNC_EXTRAS} " | grep -q -- "--extra eval"; then \
+    apt-get purge -y --auto-remove build-essential; \
+    rm -rf /var/lib/apt/lists/*; \
+    fi
 
-ARG EMBEDDING_MODEL_NAME="BAAI/bge-small-en-v1.5"
-ARG QDRANT_SPARSE_MODEL="Qdrant/bm42-all-minilm-l6-v2-attentions"
-ARG HF_TOKEN=""
-RUN .venv/bin/python -c "import os; from fastembed import TextEmbedding; TextEmbedding(model_name='${EMBEDDING_MODEL_NAME}', cache_dir=os.environ['FASTEMBED_CACHE_DIR'])"
-RUN .venv/bin/python -c "import os; from fastembed import SparseTextEmbedding; SparseTextEmbedding(model_name='${QDRANT_SPARSE_MODEL}', cache_dir=os.environ['FASTEMBED_CACHE_DIR'])"
+# Warm up RapidOCR to bake ONNX models into the image layer (if installed)
+RUN /app/.venv/bin/python -c "import rapidocr_onnxruntime" 2>/dev/null \
+    && /app/.venv/bin/python -c "from rapidocr_onnxruntime import RapidOCR; RapidOCR()" \
+    || true
 
 COPY rag_core/ rag_core/
 COPY orchestration/ orchestration/
+COPY evaluation/ evaluation/
 COPY db/ db/
-
+COPY app/ app/
 # Portable entrypoint: pre-flight init → exec worker
 COPY docker/entrypoint-worker.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

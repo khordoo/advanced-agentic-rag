@@ -8,7 +8,7 @@ from orchestration.config import PrefectConfig
 
 PREFECT_ENV_KEYS = (
     "PREFECT_API_URL",
-    "PREFECT_INGESTION_WORK_POOL",
+    "PREFECT_WORK_POOL",
     "PREFECT_DEPLOYMENT_NAME",
     "PREFECT_INIT_MAX_WAIT",
 )
@@ -24,9 +24,9 @@ def test_prefect_config_defaults_match_local_runtime() -> None:
     config = PrefectConfig(_env_file=None)
 
     assert config.api_url == "http://localhost:4200/api"
-    assert config.work_pool_name == "ingestion-pool"
+    assert config.work_pool_name == "rag-work-pool"
     assert config.work_pool_type == "process"
-    assert config.deployment_name == "local-ingestion-runner"
+    assert config.deployment_name == "ingest-documents"
     assert config.max_wait_seconds == 120
     assert config.initial_backoff == 1.0
     assert config.max_backoff == 10.0
@@ -36,7 +36,7 @@ def test_prefect_config_reads_prefect_env_aliases(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("PREFECT_API_URL", "http://prefect-server:4200/api")
-    monkeypatch.setenv("PREFECT_INGESTION_WORK_POOL", "custom-pool")
+    monkeypatch.setenv("PREFECT_WORK_POOL", "custom-pool")
     monkeypatch.setenv("PREFECT_DEPLOYMENT_NAME", "custom-deployment")
     monkeypatch.setenv("PREFECT_INIT_MAX_WAIT", "42")
 
