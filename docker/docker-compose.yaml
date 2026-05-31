@@ -1,6 +1,13 @@
+x-api-build: &api-build
+  context: .
+  dockerfile: docker/Dockerfile.api
+  args:
+    UV_SYNC_EXTRAS: ${RAG_API_UV_SYNC_EXTRAS:---extra api --extra ui}
+
 services:
   model-warmer:
     image: advanced-rag-api:local
+    build: *api-build
     container_name: model-warmer
     env_file:
       - .env
@@ -14,11 +21,7 @@ services:
 
   rag_api:
     image: advanced-rag-api:local
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.api
-      args:
-        UV_SYNC_EXTRAS: ${RAG_API_UV_SYNC_EXTRAS:---extra api --extra ui}
+    build: *api-build
     container_name: api
     ports:
       - "${RAG_API_PORT:-8000}:8000"
@@ -50,6 +53,7 @@ services:
 
   rag_cli:
     image: advanced-rag-api:local
+    build: *api-build
     profiles: [ "tools" ]
     container_name: cli
     stdin_open: true
@@ -75,6 +79,7 @@ services:
 
   rag_ui:
     image: advanced-rag-api:local
+    build: *api-build
     profiles: [ "tools" ]
     container_name: local-ui
     ports:
