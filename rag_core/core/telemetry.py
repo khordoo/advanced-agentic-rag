@@ -9,10 +9,16 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
 logger = logging.getLogger(__name__)
+tracer = trace.get_tracer(__name__)
 
 _instrumented = False
+FAILED_VERIFICATION_SPAN_NAME = "agent.verification.rejected"
 FAILED_VERIFICATION_ATTRIBUTE = "custom.verification_status"
 FAILED_VERIFICATION_VALUE = "failed"
+VERIFICATION_REASON_ATTRIBUTE = "custom.verification_reason"
+VERIFICATION_GROUNDED_ATTRIBUTE = "custom.verification_grounded"
+PHOENIX_PROJECT_RESOURCE_ATTRIBUTE = "openinference.project.name"
+PHOENIX_PROJECT_HEADER = "x-project-name"
 
 
 def init_observability(service_name: str = "advanced-rag") -> None:
@@ -29,16 +35,33 @@ def init_observability(service_name: str = "advanced-rag") -> None:
     endpoint = os.getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT") or os.getenv(
         "OTEL_EXPORTER_OTLP_ENDPOINT"
     )
+    phoenix_project = _resolve_phoenix_project_name()
 
     try:
         if endpoint:
             os.environ.setdefault("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", endpoint)
+            if phoenix_project:
+                _ensure_phoenix_project_header(phoenix_project)
             provider = TracerProvider(
-                resource=Resource.create({"service.name": service_name})
+                resource=Resource.create(
+                    {
+                        "service.name": service_name,
+                        **(
+                            {PHOENIX_PROJECT_RESOURCE_ATTRIBUTE: phoenix_project}
+                            if phoenix_project
+                            else {}
+                        ),
+                    }
+                )
             )
             provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
             trace.set_tracer_provider(provider)
-            logger.info("OTLP tracing enabled for service=%s endpoint=%s", service_name, endpoint)
+            logger.info(
+                "OTLP tracing enabled for service=%s endpoint=%s project=%s",
+                service_name,
+                endpoint,
+                phoenix_project or "default",
+            )
         else:
             logger.info("OTLP tracing endpoint is not configured; instrumentation is local only.")
 
@@ -48,18 +71,37 @@ def init_observability(service_name: str = "advanced-rag") -> None:
         logger.warning("OpenInference instrumentation failed: %s", exc)
 
 
-def mark_failed_verification_attempt() -> None:
-    """Annotate the active span so CE drift jobs can find verifier failures.
+def _resolve_phoenix_project_name() -> str | None:
+    """Resolve the Phoenix project for runtime traces."""
+    return os.getenv("PHOENIX_PROJECT_NAME") or os.getenv("EVAL_PHOENIX_PROJECT")
+
+
+def _ensure_phoenix_project_header(project_name: str) -> None:
+    """Route OTLP HTTP exports to a Phoenix project without clobbering headers."""
+    existing = os.getenv("OTEL_EXPORTER_OTLP_HEADERS")
+    header = f"{PHOENIX_PROJECT_HEADER}={project_name}"
+    if not existing:
+        os.environ["OTEL_EXPORTER_OTLP_HEADERS"] = header
+        return
+    if f"{PHOENIX_PROJECT_HEADER}=" in existing:
+        return
+    os.environ["OTEL_EXPORTER_OTLP_HEADERS"] = f"{existing},{header}"
+
+
+def mark_failed_verification_attempt(reason: str | None = None) -> None:
+    """Create a marker span so CE drift jobs can find verifier rejections.
 
     Telemetry must never affect generation, so unexpected OpenTelemetry
     failures are logged at debug level and swallowed.
     """
     try:
-        current_span = trace.get_current_span()
-        if current_span.is_recording():
-            current_span.set_attribute(
+        with tracer.start_as_current_span(FAILED_VERIFICATION_SPAN_NAME) as span:
+            span.set_attribute(
                 FAILED_VERIFICATION_ATTRIBUTE,
                 FAILED_VERIFICATION_VALUE,
             )
+            span.set_attribute(VERIFICATION_GROUNDED_ATTRIBUTE, False)
+            if reason:
+                span.set_attribute(VERIFICATION_REASON_ATTRIBUTE, reason)
     except Exception as exc:
         logger.debug("Failed to mark verifier failure span: %s", exc)

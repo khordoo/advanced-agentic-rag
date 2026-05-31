@@ -995,9 +995,7 @@ class TestContinuousEvaluationFlowHelpers:
         assert result["label"] == "error"
         assert "judge failed" in result["error"]
 
-    def test_failed_verification_filter_targets_otel_attribute(self):
+    def test_failed_verification_filter_targets_marker_span_name(self):
         from orchestration.evaluation.prefect_flows import _FAILED_VERIFICATION_FILTER
 
-        assert _FAILED_VERIFICATION_FILTER == (
-            "attributes['custom.verification_status'] == 'failed'"
-        )
+        assert _FAILED_VERIFICATION_FILTER == "name == 'agent.verification.rejected'"

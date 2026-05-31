@@ -181,7 +181,7 @@ class GraphNodes:
             }
         else:
             logger.warning("Hallucination detected. Reason: %s", reason)
-            mark_failed_verification_attempt()
+            mark_failed_verification_attempt(reason)
             feedback_msg = (
                 f"Your previous answer was rejected by the verifier. "
                 f"Reason: {reason}. Please rewrite your final response using ONLY the provided documents."

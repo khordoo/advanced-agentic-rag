@@ -226,6 +226,65 @@ exec's into the running worker container. For reranked evals, run
 | **Trace-based** | `run_nightly_drift_detection` | `EVAL_TRACE_SCHEDULE_CRON`, `make eval-drift`, or manual | ❌ Not needed | Runs `DRIFT_EVALUATORS` on failed-verification Phoenix spans |
 | **Synthetic QA** | `synthetic_qa_flow` | Manual | N/A | Generates QA pairs from document store → Phoenix Dataset |
 
+### Trace-Based Drift Detection
+
+`run_nightly_drift_detection` evaluates recent runtime traces where the
+grounding verifier rejected an intermediate agent answer. It does not need a
+ground-truth dataset: the flow queries Phoenix for verifier rejection marker
+spans, reconstructs the question/context/answer from the trace, runs
+`DRIFT_EVALUATORS`, and writes CE annotations back to the matched spans.
+
+Runtime traces and evaluation results use the same Phoenix project by default:
+
+```bash
+EVAL_PHOENIX_PROJECT=advanced-rag-eval
+```
+
+When the self-correcting agent rejects a draft answer, it emits a dedicated
+marker span:
+
+```text
+agent.verification.rejected
+```
+
+The marker span includes these attributes for inspection:
+
+```text
+custom.verification_status = failed
+custom.verification_grounded = false
+custom.verification_reason = <verifier rejection reason>
+```
+
+Run drift detection on demand:
+
+```bash
+make eval-drift
+```
+
+The flow searches the last `EVAL_TRACE_LOOKBACK_MINUTES` minutes, defaulting to
+`60`. To evaluate a wider window from inside the worker:
+
+```bash
+docker compose --project-directory . --env-file .env -f docker/docker-compose.yaml \
+  exec rag-worker .venv/bin/python -c \
+  "from orchestration.evaluation.prefect_flows import run_nightly_drift_detection; \
+   print(run_nightly_drift_detection(lookback_minutes=240, limit=1000))"
+```
+
+Find the marker spans in Phoenix:
+
+1. Open Phoenix at `http://localhost:6006`.
+2. Select project `advanced-rag-eval` (or your `EVAL_PHOENIX_PROJECT` value).
+3. Open the tracing/spans view.
+4. Search with:
+
+```text
+name == 'agent.verification.rejected'
+```
+
+After `make eval-drift` runs, the matched spans receive `ce.*` annotations for
+the drift evaluator scores.
+
 ### Threshold Gates
 
 Set `EVAL_THRESHOLDS` to a JSON dict to enforce minimum scores:

@@ -26,15 +26,13 @@ from evaluation.eval_registry import (
 )
 from evaluation.evaluators.custom_judges import SourceReferenceFormatJudge
 from rag_core.core.telemetry import (
-    FAILED_VERIFICATION_ATTRIBUTE,
-    FAILED_VERIFICATION_VALUE,
+    FAILED_VERIFICATION_SPAN_NAME,
 )
 
 logger = logging.getLogger(__name__)
 
 _FAILED_VERIFICATION_FILTER = (
-    f"attributes['{FAILED_VERIFICATION_ATTRIBUTE}'] == "
-    f"'{FAILED_VERIFICATION_VALUE}'"
+    f"name == '{FAILED_VERIFICATION_SPAN_NAME}'"
 )
 
 
