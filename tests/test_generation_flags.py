@@ -253,6 +253,75 @@ def test_self_correcting_agent_marks_failed_verification_span(monkeypatch):
     assert tracer.span.attributes["custom.verification_status"] == "failed"
     assert tracer.span.attributes["custom.verification_grounded"] is False
     assert "unsupported" in tracer.span.attributes["custom.verification_reason"]
+    # Eval-ready fields
+    assert tracer.span.attributes["question"] == "q"
+    assert tracer.span.attributes["answer"] == "candidate answer"
+    assert tracer.span.attributes["contexts"] == ["doc"]
+
+
+def test_self_correcting_agent_skips_feedback_when_extracting_question(monkeypatch):
+    """When verifier feedback messages precede the answer, the marker span
+    should capture the *original* user question, not the feedback."""
+    reasoning_model = _DummyModel()
+    verifier_model = _DummyModel(
+        response_content=json.dumps({"grounded": False, "reason": "still wrong"})
+    )
+    fast_model = _DummyModel()
+    nodes = GraphNodes(
+        reasoning_llm=reasoning_model,
+        verifier_llm=verifier_model,
+        fast_llm=fast_model,
+        tools=[_make_tool()],
+        settings=GenerationSettings(enable_grounding_verifier=True),
+    )
+
+    class _RecordingSpan:
+        def __init__(self) -> None:
+            self.attributes = {}
+
+        def set_attribute(self, key, value):
+            self.attributes[key] = value
+
+    class _RecordingTracer:
+        def __init__(self) -> None:
+            self.span = _RecordingSpan()
+            self.span_name = None
+
+        def start_as_current_span(self, name):
+            self.span_name = name
+            return self
+
+        def __enter__(self):
+            return self.span
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    tracer = _RecordingTracer()
+    monkeypatch.setattr("rag_core.core.telemetry.tracer", tracer)
+
+    result = nodes.execute_self_correcting_agent(
+        {
+            "messages": [
+                HumanMessage(content="What was the revenue?"),
+                AIMessage(content="first attempt"),
+                HumanMessage(
+                    content=f"{GraphNodes.VERIFIER_REJECTION_PREFIX} Reason: bad."
+                ),
+                AIMessage(content="second attempt"),
+            ],
+            "source_docs": [Document(page_content="revenue data", metadata={})],
+            "token_budget": 0,
+            "intent_route": "domain_expert",
+            "self_correction_attempts": 1,
+        }
+    )
+
+    assert result["verifier_response"].grounded is False
+    # Must skip the feedback HumanMessage and find the original question
+    assert tracer.span.attributes["question"] == "What was the revenue?"
+    assert tracer.span.attributes["answer"] == "second attempt"
+    assert tracer.span.attributes["contexts"] == ["revenue data"]
 
 
 def test_generation_settings_enforce_safe_minimums():

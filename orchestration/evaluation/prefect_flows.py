@@ -253,14 +253,14 @@ def _extract_trace_example(row: object) -> dict[str, Any] | None:
     input_value = _decode_jsonish(
         _read_first(
             merged,
-            ["question", "input", "input.value", "llm.input_messages"],
+            ["question", "attributes.question", "input", "input.value", "llm.input_messages"],
             default="",
         )
     )
     output_value = _decode_jsonish(
         _read_first(
             merged,
-            ["answer", "response", "output.value", "llm.output_messages"],
+            ["answer", "attributes.answer", "response", "output.value", "llm.output_messages"],
             default="",
         )
     )
@@ -282,6 +282,7 @@ def _extract_trace_example(row: object) -> dict[str, Any] | None:
             merged,
             [
                 "contexts",
+                "attributes.contexts",
                 "retrieved_contexts",
                 "output.retrieved_contexts",
                 "retrieval.documents",

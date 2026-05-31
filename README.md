@@ -283,7 +283,17 @@ name == 'agent.verification.rejected'
 ```
 
 After `make eval-drift` runs, the matched spans receive `ce.*` annotations for
-the drift evaluator scores.
+the drift evaluator scores. These drift evaluations will be populated as annotations and can be queried in Phoenix like this:
+
+```text
+annotations['ce.faithfulness'].score == 0
+```
+or 
+```text
+annotations['ce.answer_relevancy'].score == 0
+```
+
+Also, since these are scheduled evaluations, their plot over time can be seen in the Phoenix **Metrics** tab.
 
 ### Threshold Gates
 

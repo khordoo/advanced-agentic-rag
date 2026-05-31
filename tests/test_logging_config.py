@@ -74,13 +74,21 @@ def test_mark_failed_verification_attempt_creates_marker_span(monkeypatch) -> No
     tracer = RecordingTracer()
     monkeypatch.setattr("rag_core.core.telemetry.tracer", tracer)
 
-    mark_failed_verification_attempt("unsupported claim")
+    mark_failed_verification_attempt(
+        "unsupported claim",
+        question="What is the revenue?",
+        answer="Revenue is $1B",
+        contexts=["doc-a", "doc-b"],
+    )
 
     assert tracer.span_name == FAILED_VERIFICATION_SPAN_NAME
     assert tracer.span.attributes == {
         FAILED_VERIFICATION_ATTRIBUTE: FAILED_VERIFICATION_VALUE,
         VERIFICATION_GROUNDED_ATTRIBUTE: False,
         VERIFICATION_REASON_ATTRIBUTE: "unsupported claim",
+        "question": "What is the revenue?",
+        "answer": "Revenue is $1B",
+        "contexts": ["doc-a", "doc-b"],
     }
 
 
@@ -116,6 +124,10 @@ def test_mark_failed_verification_attempt_allows_missing_reason(monkeypatch) -> 
         FAILED_VERIFICATION_ATTRIBUTE: FAILED_VERIFICATION_VALUE,
         VERIFICATION_GROUNDED_ATTRIBUTE: False,
     }
+    # question/answer/contexts must NOT appear when omitted
+    assert "question" not in tracer.span.attributes
+    assert "answer" not in tracer.span.attributes
+    assert "contexts" not in tracer.span.attributes
 
 
 def test_mark_failed_verification_attempt_never_raises(monkeypatch) -> None:
