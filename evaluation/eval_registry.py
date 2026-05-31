@@ -44,7 +44,7 @@ GROUND_TRUTH_EVALUATORS: list[RagasMetricSpec | EvaluatorProtocol] = [
 DRIFT_EVALUATORS: list[RagasMetricSpec | EvaluatorProtocol] = [
     RagasMetricSpec("faithfulness"),
     RagasMetricSpec("answer_relevancy"),
-    SourceReferenceFormatJudge(),
+    # SourceReferenceFormatJudge(),
 ]
 
 

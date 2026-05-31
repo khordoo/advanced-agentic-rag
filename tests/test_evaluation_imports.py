@@ -999,3 +999,68 @@ class TestContinuousEvaluationFlowHelpers:
         from orchestration.evaluation.prefect_flows import _FAILED_VERIFICATION_FILTER
 
         assert _FAILED_VERIFICATION_FILTER == "name == 'agent.verification.rejected'"
+
+    def test_extract_trace_example_reads_enriched_marker_span(self):
+        """Enriched marker spans embed question/answer/contexts as top-level
+        span attributes. _extract_trace_example must read them directly."""
+        from orchestration.evaluation.prefect_flows import _extract_trace_example
+
+        row = {
+            "context.span_id": "span-abc",
+            "context.trace_id": "trace-xyz",
+            "attributes": {
+                "question": "What was revenue?",
+                "answer": "Revenue was $1B",
+                "contexts": ["doc chunk 1", "doc chunk 2"],
+                "custom.verification_status": "failed",
+                "custom.verification_grounded": False,
+            },
+        }
+
+        example = _extract_trace_example(row)
+
+        assert example is not None
+        assert example["span_id"] == "span-abc"
+        assert example["trace_id"] == "trace-xyz"
+        assert example["question"] == "What was revenue?"
+        assert example["answer"] == "Revenue was $1B"
+        assert example["contexts"] == ["doc chunk 1", "doc chunk 2"]
+
+    def test_extract_trace_example_returns_none_for_empty_marker(self):
+        """Marker spans without question or answer should be skipped."""
+        from orchestration.evaluation.prefect_flows import _extract_trace_example
+
+        row = {
+            "attributes": {
+                "custom.verification_status": "failed",
+                "custom.verification_grounded": False,
+            },
+        }
+
+        assert _extract_trace_example(row) is None
+
+    def test_extract_trace_example_reads_flattened_phoenix_dataframe_keys(self):
+        """Phoenix DataFrames flatten span attributes as 'attributes.X' columns
+        rather than a nested dict. The extractor must handle this shape."""
+        from orchestration.evaluation.prefect_flows import _extract_trace_example
+
+        row = {
+            "context.span_id": "span-flat",
+            "context.trace_id": "trace-flat",
+            "name": "agent.verification.rejected",
+            "attributes.question": "How much was revenue?",
+            "attributes.answer": "Revenue was $2B",
+            "attributes.contexts": ["chunk A", "chunk B"],
+            "attributes.custom": {
+                "verification_status": "failed",
+                "verification_grounded": False,
+            },
+        }
+
+        example = _extract_trace_example(row)
+
+        assert example is not None
+        assert example["span_id"] == "span-flat"
+        assert example["question"] == "How much was revenue?"
+        assert example["answer"] == "Revenue was $2B"
+        assert example["contexts"] == ["chunk A", "chunk B"]

@@ -58,6 +58,8 @@ class NodeName(StrEnum):
 
 
 class GraphNodes:
+    VERIFIER_REJECTION_PREFIX = "Your previous answer was rejected by the verifier."
+
     def __init__(
         self,
         reasoning_llm: BaseChatModel,
@@ -181,9 +183,25 @@ class GraphNodes:
             }
         else:
             logger.warning("Hallucination detected. Reason: %s", reason)
-            mark_failed_verification_attempt(reason)
+
+            # Extract original user question (most recent HumanMessage that
+            # is *not* verifier feedback injected by a prior correction loop).
+            original_question = ""
+            for msg in reversed(state["messages"]):
+                if isinstance(msg, HumanMessage) and not str(msg.content).startswith(
+                    self.VERIFIER_REJECTION_PREFIX
+                ):
+                    original_question = str(msg.content)
+                    break
+
+            mark_failed_verification_attempt(
+                reason,
+                question=original_question or None,
+                answer=generated_answer,
+                contexts=[doc.page_content for doc in documents],
+            )
             feedback_msg = (
-                f"Your previous answer was rejected by the verifier. "
+                f"{self.VERIFIER_REJECTION_PREFIX} "
                 f"Reason: {reason}. Please rewrite your final response using ONLY the provided documents."
             )
 

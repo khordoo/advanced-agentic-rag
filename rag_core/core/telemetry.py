@@ -88,8 +88,19 @@ def _ensure_phoenix_project_header(project_name: str) -> None:
     os.environ["OTEL_EXPORTER_OTLP_HEADERS"] = f"{existing},{header}"
 
 
-def mark_failed_verification_attempt(reason: str | None = None) -> None:
+def mark_failed_verification_attempt(
+    reason: str | None = None,
+    *,
+    question: str | None = None,
+    answer: str | None = None,
+    contexts: list[str] | None = None,
+) -> None:
     """Create a marker span so CE drift jobs can find verifier rejections.
+
+    The ``question``, ``answer``, and ``contexts`` fields are set as
+    top-level span attributes so that ``_extract_trace_example()`` in the
+    drift-detection flow can turn marker spans directly into eval examples
+    without crawling the trace tree.
 
     Telemetry must never affect generation, so unexpected OpenTelemetry
     failures are logged at debug level and swallowed.
@@ -103,5 +114,11 @@ def mark_failed_verification_attempt(reason: str | None = None) -> None:
             span.set_attribute(VERIFICATION_GROUNDED_ATTRIBUTE, False)
             if reason:
                 span.set_attribute(VERIFICATION_REASON_ATTRIBUTE, reason)
+            if question:
+                span.set_attribute("question", question)
+            if answer:
+                span.set_attribute("answer", answer)
+            if contexts:
+                span.set_attribute("contexts", contexts)
     except Exception as exc:
         logger.debug("Failed to mark verifier failure span: %s", exc)
