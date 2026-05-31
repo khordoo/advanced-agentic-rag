@@ -3,13 +3,8 @@
 ENV_FILE:= .env
 COMPOSE_FILE:=docker/docker-compose.yaml
 ALEMBIC_CONFIG:=db/alembic.ini
-ALEMBIC_BASE:=$(if $(shell command -v uv 2>/dev/null),uv run alembic,$(if $(wildcard .venv/bin/alembic),.venv/bin/alembic,))
-HOST_POSTGRES_HOST?=localhost
-HOST_QDRANT_URL?=http://localhost:6333
-HOST_PREFECT_API_URL?=http://localhost:4200/api
-HOST_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT?=http://localhost:6006/v1/traces
-HOST_ENV:=POSTGRES_HOST=$(HOST_POSTGRES_HOST) QDRANT_URL=$(HOST_QDRANT_URL) PREFECT_API_URL=$(HOST_PREFECT_API_URL) OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=$(HOST_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT)
-ALEMBIC:=$(HOST_ENV) $(ALEMBIC_BASE) -c $(ALEMBIC_CONFIG)
+COMPOSE_RUN_API:=docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) run --rm --no-deps rag_api
+ALEMBIC:=$(COMPOSE_RUN_API) /app/.venv/bin/alembic -c $(ALEMBIC_CONFIG)
 EVAL_RERANK_ENABLED?=true
 
 # Container name
@@ -63,20 +58,20 @@ ui: up-core
 	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) run --rm --service-ports rag_ui
 
 migrate-up:
-	@test -n "$(ALEMBIC_BASE)" || (echo "Alembic not found. Install uv or create .venv with alembic."; exit 1)
+	@echo "🗄️ Running Alembic migrations inside Docker..."
 	$(ALEMBIC) upgrade $(if $(REV),$(REV),head)
 
 migrate-down:
-	@test -n "$(ALEMBIC_BASE)" || (echo "Alembic not found. Install uv or create .venv with alembic."; exit 1)
+	@echo "🗄️ Rolling back Alembic migrations inside Docker..."
 	$(ALEMBIC) downgrade $(if $(REV),$(REV),-1)
 
 migrate-new:
-	@test -n "$(ALEMBIC_BASE)" || (echo "Alembic not found. Install uv or create .venv with alembic."; exit 1)
 	@test -n "$(MSG)" || (echo "MSG is required. Usage: make migrate-new MSG=\"your message\""; exit 1)
+	@echo "🗄️ Creating Alembic migration inside Docker..."
 	$(ALEMBIC) revision --autogenerate -m "$(MSG)"
 
 migrate-status:
-	@test -n "$(ALEMBIC_BASE)" || (echo "Alembic not found. Install uv or create .venv with alembic."; exit 1)
+	@echo "🗄️ Showing Alembic migration history inside Docker..."
 	$(ALEMBIC) history --verbose
 
 migrate-statusd: migrate-status
