@@ -219,7 +219,7 @@ def test_self_correcting_agent_marks_failed_verification_span(monkeypatch):
             self.span = _RecordingSpan()
             self.span_name = None
 
-        def start_as_current_span(self, name):
+        def start_as_current_span(self, name, context=None):
             self.span_name = name
             return self
 
@@ -287,7 +287,7 @@ def test_self_correcting_agent_skips_feedback_when_extracting_question(monkeypat
             self.span = _RecordingSpan()
             self.span_name = None
 
-        def start_as_current_span(self, name):
+        def start_as_current_span(self, name, context=None):
             self.span_name = name
             return self
 

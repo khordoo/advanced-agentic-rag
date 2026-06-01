@@ -27,12 +27,16 @@ from evaluation.eval_registry import (
 from evaluation.evaluators.custom_judges import SourceReferenceFormatJudge
 from rag_core.core.telemetry import (
     FAILED_VERIFICATION_SPAN_NAME,
+    GENERATION_METRICS_SPAN_NAME,
 )
 
 logger = logging.getLogger(__name__)
 
 _FAILED_VERIFICATION_FILTER = (
     f"name == '{FAILED_VERIFICATION_SPAN_NAME}'"
+)
+_GENERATION_METRICS_FILTER = (
+    f"name == '{GENERATION_METRICS_SPAN_NAME}'"
 )
 
 
@@ -307,20 +311,23 @@ def _extract_trace_example(row: object) -> dict[str, Any] | None:
     }
 
 
-def _query_failed_verification_spans(
+def _query_generation_metrics_spans(
     *,
     client: object,
     project_name: str,
-    lookback_minutes: int,
+    start_time: datetime,
+    end_time: datetime,
     limit: int,
 ) -> list[dict[str, Any]]:
-    """Fetch Phoenix spans tagged as failed verifier attempts."""
+    """Fetch ``agent.generation.metrics`` spans from Phoenix.
+
+    Each returned example includes an ``intervention_count`` key extracted
+    from the ``custom.intervention_count`` span attribute so the caller can
+    stratify into high-risk vs baseline cohorts.
+    """
     from phoenix.client.types.spans import SpanQuery
 
-    end_time = datetime.now(UTC)
-    start_time = end_time - timedelta(minutes=lookback_minutes)
-    query = SpanQuery().where(_FAILED_VERIFICATION_FILTER)
-
+    query = SpanQuery().where(_GENERATION_METRICS_FILTER)
     spans_df = client.spans.get_spans_dataframe(
         query=query,
         start_time=start_time,
@@ -330,10 +337,30 @@ def _query_failed_verification_spans(
     )
 
     examples: list[dict[str, Any]] = []
+    if spans_df.empty:
+        return examples
+
     for _, row in spans_df.iterrows():
         example = _extract_trace_example(row)
-        if example:
-            examples.append(example)
+        if not example:
+            continue
+        row_dict = _row_to_dict(row)
+
+        # Phoenix stores custom span attributes as a nested dict under
+        # the key ``attributes.custom``, e.g.:
+        #   {"attributes.custom": {"intervention_count": 2}}
+        custom_block = row_dict.get("attributes.custom")
+        if isinstance(custom_block, dict):
+            raw = custom_block.get("intervention_count", 0)
+        else:
+            raw = 0
+
+        try:
+            example["intervention_count"] = int(raw)
+        except (TypeError, ValueError):
+            example["intervention_count"] = 0
+        examples.append(example)
+
     return examples
 
 
@@ -342,8 +369,13 @@ def _annotate_spans(
     client: object,
     examples: list[dict[str, Any]],
     results: list[dict[str, Any]],
+    cohort: str | None = None,
 ) -> int:
-    """Write CE scores back to Phoenix spans when span IDs are available."""
+    """Write CE scores back to Phoenix spans when span IDs are available.
+
+    When *cohort* is provided, an additional ``ce.cohort`` annotation is
+    written so dashboards can segment metrics by sampling bucket.
+    """
     inserted = 0
     for example, row_result in zip(examples, results, strict=False):
         span_id = example.get("span_id")
@@ -357,6 +389,17 @@ def _annotate_spans(
                 label=score.get("label"),
                 score=score.get("score"),
                 explanation=score.get("error"),
+                metadata={"flow": "run_nightly_drift_detection"},
+                sync=False,
+            )
+            inserted += 1
+        if cohort:
+            client.spans.add_span_annotation(
+                span_id=span_id,
+                annotation_name="ce.cohort",
+                annotator_kind="CODE",
+                label=cohort,
+                score=None,
                 metadata={"flow": "run_nightly_drift_detection"},
                 sync=False,
             )
@@ -434,12 +477,30 @@ def run_ground_truth_evaluation(
     }
 
 
+
 @flow(name="run-nightly-drift-detection", log_prints=True)
 def run_nightly_drift_detection(
     lookback_minutes: int | None = None,
-    limit: int = 1000,
 ) -> dict[str, Any]:
-    """Evaluate failed verifier traces with reference-free drift metrics."""
+    """Evaluate traces separating agent efficiency from system health.
+
+    Queries ``agent.generation.metrics`` spans (stamped by the
+    ``post_processing`` node) and stratifies into two cohorts:
+
+    * **High-Risk** — spans where the agent retried
+      (``custom.intervention_count > 0``)
+    * **Baseline** — clean first-try spans
+      (``custom.intervention_count == 0``)
+
+    Both cohorts are evaluated with ``ce.faithfulness`` and
+    ``ce.answer_relevancy``, and each span receives a ``ce.cohort``
+    annotation so Phoenix dashboards can chart them separately.
+
+    Agent efficiency is the sum of ``intervention_count`` across all
+    spans in the window — no LLM judge required.
+    """
+    import random
+
     log = _get_logger()
     eval_config = get_eval_config()
 
@@ -452,61 +513,107 @@ def run_nightly_drift_detection(
 
     client = get_phoenix_client()
     window = lookback_minutes or eval_config.trace_lookback_minutes
-    evaluators = _build_evaluators(DRIFT_EVALUATORS)
 
-    try:
-        examples = _query_failed_verification_spans(
-            client=client,
-            project_name=eval_config.phoenix_project,
-            lookback_minutes=window,
-            limit=limit,
-        )
-    except Exception as exc:
-        log.warning("Could not query Phoenix failed-verification spans: %s", exc)
-        return {
-            "status": "query_failed",
-            "lookback_minutes": window,
-            "error": str(exc),
-        }
+    # Step A: Strict Time Bounding
+    end_time = datetime.now(UTC)
+    start_time = end_time - timedelta(minutes=window)
 
-    results: list[dict[str, Any]] = []
-    for example in examples:
-        scores = [
-            _safe_evaluate_row(
-                evaluator=evaluator,
-                question=example["question"],
-                contexts=example["contexts"],
-                answer=example["answer"],
-            )
-            for evaluator in evaluators
-        ]
-        results.append(
-            {
-                "span_id": example.get("span_id"),
-                "trace_id": example.get("trace_id"),
-                "scores": scores,
-            }
-        )
-
+    project_name = eval_config.phoenix_project
     annotations = 0
-    try:
-        annotations = _annotate_spans(
-            client=client,
-            examples=examples,
-            results=results,
-        )
-    except Exception as exc:
-        log.warning("Could not annotate Phoenix spans with CE scores: %s", exc)
+
+    # Step B: Query all generation metrics spans in window
+    log.info("Step B: Querying generation metrics spans...")
+    fetch_limit = eval_config.retry_cohort_max_examples + eval_config.baseline_max_examples
+    all_spans = _query_generation_metrics_spans(
+        client=client,
+        project_name=project_name,
+        start_time=start_time,
+        end_time=end_time,
+        limit=max(fetch_limit * 5, 1000),
+    )
+
+    # Step C: Stratified sampling
+    high_risk_pool = [s for s in all_spans if s["intervention_count"] > 0]
+    baseline_pool = [s for s in all_spans if s["intervention_count"] == 0]
+
+    high_risk = high_risk_pool[: eval_config.retry_cohort_max_examples]
+    baseline = random.sample(
+        baseline_pool,
+        min(len(baseline_pool), eval_config.baseline_max_examples),
+    ) if baseline_pool else []
 
     log.info(
-        "Nightly drift detection completed (examples=%d, annotations=%d)",
-        len(examples),
+        "Stratified sampling: %d high-risk (of %d), %d baseline (of %d)",
+        len(high_risk),
+        len(high_risk_pool),
+        len(baseline),
+        len(baseline_pool),
+    )
+
+    # Step D: Agent efficiency metric (no LLM judge)
+    total_interventions = sum(s["intervention_count"] for s in all_spans)
+    log.info(
+        "Agent efficiency: %d total interventions across %d spans",
+        total_interventions,
+        len(all_spans),
+    )
+
+    # Step E: Run LLM judges on each cohort with ce.cohort tagging
+    evaluators = _build_evaluators(DRIFT_EVALUATORS)
+
+    def _evaluate_cohort(
+        cohort_examples: list[dict[str, Any]],
+        cohort_label: str,
+    ) -> list[dict[str, Any]]:
+        cohort_results: list[dict[str, Any]] = []
+        for example in cohort_examples:
+            scores = [
+                _safe_evaluate_row(
+                    evaluator=evaluator,
+                    question=example["question"],
+                    contexts=example["contexts"],
+                    answer=example["answer"],
+                )
+                for evaluator in evaluators
+            ]
+            cohort_results.append(
+                {
+                    "span_id": example.get("span_id"),
+                    "trace_id": example.get("trace_id"),
+                    "cohort": cohort_label,
+                    "scores": scores,
+                }
+            )
+        if cohort_examples:
+            nonlocal annotations
+            annotations += _annotate_spans(
+                client=client,
+                examples=cohort_examples,
+                results=cohort_results,
+                cohort=cohort_label,
+            )
+        return cohort_results
+
+    high_risk_results = _evaluate_cohort(high_risk, "high_risk")
+    baseline_results = _evaluate_cohort(baseline, "baseline")
+    all_results = high_risk_results + baseline_results
+
+    log.info(
+        "Nightly drift detection completed "
+        "(total_interventions=%d, high_risk_evaluated=%d, "
+        "baseline_evaluated=%d, total_annotations=%d)",
+        total_interventions,
+        len(high_risk),
+        len(baseline),
         annotations,
     )
     return {
         "status": "completed",
         "lookback_minutes": window,
-        "example_count": len(examples),
+        "total_spans": len(all_spans),
+        "total_interventions": total_interventions,
+        "high_risk_count": len(high_risk),
+        "baseline_count": len(baseline),
         "annotation_count": annotations,
-        "results": results,
+        "results": all_results,
     }

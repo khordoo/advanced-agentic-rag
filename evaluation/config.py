@@ -114,6 +114,16 @@ class EvalConfig(BaseSettings):
         ge=1,
         description="Hard cap on ground truth examples to bound judge cost.",
     )
+    retry_cohort_max_examples: int = Field(
+        default=100,
+        ge=1,
+        description="Max high-risk spans (intervention_count > 0) to evaluate per drift run.",
+    )
+    baseline_max_examples: int = Field(
+        default=20,
+        ge=1,
+        description="Max clean first-try spans to randomly sample per drift run.",
+    )
 
     # ── Evaluator selection ──────────────────────────────────────────
     ragas_metrics: Annotated[list[str], NoDecode] = Field(

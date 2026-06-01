@@ -61,7 +61,7 @@ def test_mark_failed_verification_attempt_creates_marker_span(monkeypatch) -> No
             self.span = RecordingSpan()
             self.span_name = None
 
-        def start_as_current_span(self, name: str):
+        def start_as_current_span(self, name: str, context=None):
             self.span_name = name
             return self
 
@@ -106,7 +106,7 @@ def test_mark_failed_verification_attempt_allows_missing_reason(monkeypatch) -> 
         def __init__(self) -> None:
             self.span = RecordingSpan()
 
-        def start_as_current_span(self, name: str):
+        def start_as_current_span(self, name: str, context=None):
             return self
 
         def __enter__(self):
