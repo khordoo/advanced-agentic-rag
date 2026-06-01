@@ -20,6 +20,9 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
 
+# Default directory for evaluation dataset CSVs (relative to project/container root).
+_DEFAULT_DATASET_DIR = "evaluation/datasets"
+
 
 class EvalConfig(BaseSettings):
     """Strongly typed configuration for evaluation runs.
@@ -41,20 +44,47 @@ class EvalConfig(BaseSettings):
     auto_run_after_ingestion: bool = Field(
         default=False,
         description=(
-            "Run run_ground_truth_evaluation at the end of ingestion "
-            "(non-blocking)."
+            "Run run_ground_truth_evaluation at the end of ingestion (non-blocking)."
         ),
     )
 
     # ── Dataset ──────────────────────────────────────────────────────
     dataset_name: str = Field(
-        default="rag-ground-truth-v1",
+        default="ground-truth-v1",
         description="Phoenix Dataset name for the ground truth evaluation set.",
     )
     dataset_csv_path: str = Field(
         default="evaluation/datasets/ground_truth_dataset.csv",
-        description="Path to the bundled ground truth CSV relative to project root.",
+        description=(
+            "Path to the bundled ground truth CSV relative to project root. "
+            "Accepts a short name like 'adversarial' which resolves to "
+            "evaluation/datasets/adversarial.csv automatically."
+        ),
     )
+
+    @field_validator("dataset_csv_path")
+    @classmethod
+    def _resolve_dataset_path(cls, v: str) -> str:
+        """Resolve short dataset names to full paths.
+
+        Accepts:
+        - Full absolute path: ``/app/evaluation/datasets/adversarial.csv``
+        - Relative path:      ``evaluation/datasets/adversarial.csv``
+        - Short name:         ``adversarial`` → ``evaluation/datasets/adversarial.csv``
+        - With/without .csv:  ``adversarial.csv`` or ``adversarial``
+        """
+        from pathlib import Path
+
+        p = Path(v)
+        # If it looks like a bare name (no directory separators), resolve it
+        if p.parent == Path("."):
+            if not p.suffix:
+                p = p.with_suffix(".csv")
+            p = Path(_DEFAULT_DATASET_DIR) / p
+        # If it's a relative path without .csv extension, add it
+        elif not p.suffix:
+            p = p.with_suffix(".csv")
+        return str(p)
 
     # ── Phoenix / Observability ──────────────────────────────────────
     phoenix_project: str = Field(
@@ -197,8 +227,7 @@ class EvalConfig(BaseSettings):
         fields_set = getattr(self, "__pydantic_fields_set__", set())
 
         if (
-            "EVAL_CONCURRENCY" in os.environ
-            and "EVAL_MAX_WORKERS" not in os.environ
+            "EVAL_CONCURRENCY" in os.environ and "EVAL_MAX_WORKERS" not in os.environ
         ) or (self.concurrency != 4 and self.max_workers == 4):
             self.max_workers = self.concurrency
         elif "max_workers" in fields_set:

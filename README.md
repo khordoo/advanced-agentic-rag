@@ -215,8 +215,32 @@ make register-eval-deployment
 
 `make eval` runs ground truth evaluation using the unified worker image. It
 starts only backend infrastructure (`make up-core` — no Open-WebUI) and
-exec's into the running worker container. For reranked evals, run
-`make eval EVAL_RERANK_ENABLED=true`.
+exec's into the running worker container.
+
+```bash
+# Default: evaluate against ground_truth_dataset.csv
+make eval
+
+# Custom dataset by short name — Python resolves "adversarial" to
+# evaluation/datasets/adversarial.csv automatically
+make eval DATASET=adversarial
+
+# Also works with full filename or path
+make eval DATASET=adversarial_dataset.csv
+make eval DATASET=evaluation/datasets/adversarial_dataset.csv
+
+# Override the Phoenix Dataset name (default: auto-derived from filename)
+make eval DATASET=adversarial NAME=adversarial-v2
+
+# With reranking enabled
+make eval EVAL_RERANK_ENABLED=true
+```
+
+> [!IMPORTANT]
+> Custom datasets are uploaded to Phoenix as **separate Datasets** (not overwriting the ground truth). The Phoenix dataset name is auto-derived from the CSV filename (`adversarial_dataset.csv` → `adversarial-dataset`). Override with `NAME=custom-name` if needed.
+
+> [!TIP]
+> Place custom CSV datasets in `evaluation/datasets/`. The CSV must have `question`, `ground_truth` columns matching the ground truth format. You can pass just the name — `.csv` extension and directory prefix are added automatically.
 
 ### Evaluation Modes
 
@@ -287,9 +311,18 @@ make eval-drift
 **With a cron schedule (automatic):**
 
 ```bash
-# In .env — run every night at 2 AM
+# 1. Set cron in .env — run every night at 2 AM
 EVAL_TRACE_SCHEDULE_CRON=0 2 * * *
+
+# 2. Recreate containers to pick up the new env value
+make reload
+
+# 3. Re-register deployments with the new cron schedule
+make register-eval-deployment
 ```
+
+> [!IMPORTANT]
+> Just setting `EVAL_TRACE_SCHEDULE_CRON` in `.env` is not enough — you must also run `make register-eval-deployment` to upsert the Prefect deployment with the new cron schedule. After that, the Prefect worker will execute drift detection automatically on schedule.
 
 **Custom lookback window:**
 
@@ -318,7 +351,7 @@ The flow searches the last `EVAL_TRACE_LOOKBACK_MINUTES` minutes (default `60`).
 
 After `make eval-drift` runs, open Phoenix at `http://localhost:6006`:
 
-1. **Annotations view** — each evaluated span has `ce.faithfulness`, `ce.answer_relevancy`, and `ce.cohort` annotations
+1. **Annotations view** — each evaluated span has `ce.faithfulness`, `ce.answer_relevancy`, `ce.cohort`, and `ce.intervention_count` annotations
 2. **Filter by cohort:**
    ```text
    annotations['ce.cohort'].label == 'high_risk'
@@ -327,7 +360,9 @@ After `make eval-drift` runs, open Phoenix at `http://localhost:6006`:
    ```text
    annotations['ce.faithfulness'].score < 0.5
    ```
-4. **Metrics tab** — plot `ce.faithfulness` and `ce.answer_relevancy` over time, segmented by `ce.cohort`
+4. **Metrics tab** — plot `ce.faithfulness`, `ce.answer_relevancy`, and `ce.intervention_count` over time, segmented by `ce.cohort`
+
+A **Prefect markdown artifact** (`drift-detection-summary`) is also created with a summary table showing total interventions, cohort breakdown, and average scores. View it in the Prefect UI under **Artifacts** or on the flow run page.
 
 #### Debugging Spans
 

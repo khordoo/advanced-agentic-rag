@@ -91,7 +91,19 @@ test:
 eval: up-core
 	@echo "🚀 Running Ground Truth Evaluation..."
 	@printf "\033[36m💡 Tip: You can also trigger this pipeline visually from the Prefect UI at http://localhost:4200 (Deployment: evaluate-ground-truth)\033[0m\n"
-	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) exec -e RERANK_ENABLED=$(EVAL_RERANK_ENABLED) rag-worker .venv/bin/python -m orchestration.evaluation.run_eval
+	@if [ -n "$(DATASET)" ]; then \
+		_name=$${NAME:-$$(basename "$(DATASET)" .csv | tr '_' '-')}; \
+		printf "\033[33m📂 Dataset: $(DATASET) → Phoenix name: $${_name}\033[0m\n"; \
+		docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) \
+			exec -e RERANK_ENABLED=$(EVAL_RERANK_ENABLED) \
+			-e EVAL_DATASET_CSV_PATH=$(DATASET) \
+			-e EVAL_DATASET_NAME=$${_name} \
+			rag-worker .venv/bin/python -m orchestration.evaluation.run_eval; \
+	else \
+		docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) \
+			exec -e RERANK_ENABLED=$(EVAL_RERANK_ENABLED) \
+			rag-worker .venv/bin/python -m orchestration.evaluation.run_eval; \
+	fi
 
 eval-drift: up-core
 	@echo "🚀 Running Drift Evaluation..."

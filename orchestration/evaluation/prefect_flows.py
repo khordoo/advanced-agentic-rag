@@ -183,6 +183,19 @@ def _safe_evaluate_row(
 def _load_ground_truth_rows(path: str, max_examples: int | None) -> list[dict[str, str]]:
     """Load and validate the static ground-truth CSV."""
     from evaluation.datasets.loaders import load_csv_rows
+    from pathlib import Path
+
+    # Resolve short names (e.g. "adversarial") to full paths.
+    # This is the same logic as EvalConfig._resolve_dataset_path but acts
+    # as a safety net when the caller bypasses the config validator.
+    p = Path(path)
+    if p.parent == Path("."):
+        if not p.suffix:
+            p = p.with_suffix(".csv")
+        p = Path("evaluation/datasets") / p
+    elif not p.suffix:
+        p = p.with_suffix(".csv")
+    path = str(p)
 
     rows = load_csv_rows(path)
     missing = [
@@ -404,6 +417,20 @@ def _annotate_spans(
                 sync=False,
             )
             inserted += 1
+        # Stamp intervention_count as a numeric annotation so it is
+        # chartable in the Phoenix Metrics tab.
+        ic = example.get("intervention_count")
+        if ic is not None:
+            client.spans.add_span_annotation(
+                span_id=span_id,
+                annotation_name="ce.intervention_count",
+                annotator_kind="CODE",
+                label=None,
+                score=float(ic),
+                metadata={"flow": "run_nightly_drift_detection"},
+                sync=False,
+            )
+            inserted += 1
     return inserted
 
 
@@ -452,7 +479,7 @@ def run_ground_truth_evaluation(
     client = get_phoenix_client()
     dataset = client.datasets.get_dataset(dataset=dataset_handle)
 
-    exp_name = experiment_name or f"ground-truth-evaluation-{int(time.time())}"
+    exp_name = experiment_name or f"{eval_config.dataset_name}-evaluation-{int(time.time())}"
     experiment = run_experiment_task(
         dataset=dataset,
         task_fn=task_fn,
@@ -597,6 +624,45 @@ def run_nightly_drift_detection(
     high_risk_results = _evaluate_cohort(high_risk, "high_risk")
     baseline_results = _evaluate_cohort(baseline, "baseline")
     all_results = high_risk_results + baseline_results
+
+    # ── Prefect markdown artifact ────────────────────────────────────
+    def _avg_score(results: list[dict], metric: str) -> str:
+        vals = [
+            s["score"]
+            for r in results
+            for s in r["scores"]
+            if s.get("name") == metric and s.get("score") is not None
+        ]
+        return f"{sum(vals) / len(vals):.2f}" if vals else "n/a"
+
+    artifact_md = (
+        f"## Drift Detection Summary\n\n"
+        f"| Metric | Value |\n"
+        f"|--------|-------|\n"
+        f"| Lookback window | {window} min |\n"
+        f"| Total spans queried | {len(all_spans)} |\n"
+        f"| Total interventions | **{total_interventions}** |\n"
+        f"| High-risk evaluated | {len(high_risk)} (of {len(high_risk_pool)}) |\n"
+        f"| Baseline evaluated | {len(baseline)} (of {len(baseline_pool)}) |\n"
+        f"| Annotations written | {annotations} |\n\n"
+        f"### Average Scores by Cohort\n\n"
+        f"| Cohort | Faithfulness | Answer Relevancy |\n"
+        f"|--------|-------------|-----------------|\n"
+        f"| **High-Risk** | {_avg_score(high_risk_results, 'faithfulness')} "
+        f"| {_avg_score(high_risk_results, 'answer_relevancy')} |\n"
+        f"| **Baseline** | {_avg_score(baseline_results, 'faithfulness')} "
+        f"| {_avg_score(baseline_results, 'answer_relevancy')} |\n"
+    )
+    try:
+        from prefect.artifacts import create_markdown_artifact
+
+        create_markdown_artifact(
+            key="drift-detection-summary",
+            markdown=artifact_md,
+            description="Nightly drift detection results with cohort breakdown",
+        )
+    except Exception as exc:
+        log.debug("Failed to create Prefect artifact: %s", exc)
 
     log.info(
         "Nightly drift detection completed "
