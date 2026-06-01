@@ -223,77 +223,122 @@ exec's into the running worker container. For reranked evals, run
 | Mode | Flow | Trigger | Ground Truth | Description |
 |------|------|---------|-------------|-------------|
 | **Ground truth** | `run_ground_truth_evaluation` | `EVAL_SCHEDULE_CRON` or manual | ✅ Required | Runs `GROUND_TRUTH_EVALUATORS` against `ground_truth_dataset.csv` |
-| **Trace-based** | `run_nightly_drift_detection` | `EVAL_TRACE_SCHEDULE_CRON`, `make eval-drift`, or manual | ❌ Not needed | Runs `DRIFT_EVALUATORS` on failed-verification Phoenix spans |
+| **Trace-based** | `run_nightly_drift_detection` | `EVAL_TRACE_SCHEDULE_CRON`, `make eval-drift`, or Prefect dashboard (`evaluate-traces`) | ❌ Not needed | Stratified evaluation of production final answers with cohort tagging |
 | **Synthetic QA** | `synthetic_qa_flow` | Manual | N/A | Generates QA pairs from document store → Phoenix Dataset |
 
 ### Trace-Based Drift Detection
 
-`run_nightly_drift_detection` evaluates recent runtime traces where the
-grounding verifier rejected an intermediate agent answer. It does not need a
-ground-truth dataset: the flow queries Phoenix for verifier rejection marker
-spans, reconstructs the question/context/answer from the trace, runs
-`DRIFT_EVALUATORS`, and writes CE annotations back to the matched spans.
+`run_nightly_drift_detection` evaluates **final user-facing answers** from production traces, not intermediate rejected drafts. It produces three distinct signals:
 
-Runtime traces and evaluation results use the same Phoenix project by default:
+| Signal | What It Measures | How |
+|--------|-----------------|-----|
+| **System Health** | Did the user get a good answer? | LLM judges (`ce.faithfulness`, `ce.answer_relevancy`) on final answers |
+| **Agent Efficiency** | How often did the agent retry before succeeding? | Sum of `custom.intervention_count` across all spans (no LLM judge) |
+| **Cohort Segmentation** | Are retried answers as good as first-try answers? | `ce.cohort` annotation (`high_risk` / `baseline`) for dashboard charting |
 
-```bash
-EVAL_PHOENIX_PROJECT=advanced-rag-eval
-```
+#### How It Works
 
-When the self-correcting agent rejects a draft answer, it emits a dedicated
-marker span:
+The `post_processing` LangGraph node stamps an `agent.generation.metrics` marker span on **every** request with:
 
 ```text
-agent.verification.rejected
+custom.intervention_count = 0   → agent got it right on the first try
+custom.intervention_count = 2   → agent retried twice before the verifier passed it
+question, answer, contexts      → ready for LLM judges
 ```
 
-The marker span includes these attributes for inspection:
+The drift flow queries these spans and **stratifies** into two cohorts:
 
 ```text
-custom.verification_status = failed
-custom.verification_grounded = false
-custom.verification_reason = <verifier rejection reason>
+┌─────────────────────────────────────────────────────────────┐
+│  agent.generation.metrics spans (last N minutes)            │
+│                                                             │
+│  ┌─────────────────────┐   ┌────────────────────────────┐  │
+│  │  Cohort A: High-Risk│   │  Cohort B: Baseline        │  │
+│  │  intervention > 0   │   │  intervention == 0         │  │
+│  │  cap: RETRY_MAX=100 │   │  random: BASELINE_MAX=20   │  │
+│  └────────┬────────────┘   └────────────┬───────────────┘  │
+│           │                             │                   │
+│           ▼                             ▼                   │
+│     ce.faithfulness              ce.faithfulness             │
+│     ce.answer_relevancy          ce.answer_relevancy         │
+│     ce.cohort = "high_risk"      ce.cohort = "baseline"      │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-Run drift detection on demand:
+This lets Phoenix chart **two separate trend lines** instead of one diluted average:
+
+- *Baseline Faithfulness: 99%* — clean traffic is reliable
+- *High-Risk Faithfulness: 50%* — self-correction loop needs attention
+
+#### Running Drift Detection
+
+**On demand:**
 
 ```bash
 make eval-drift
 ```
 
-The flow searches the last `EVAL_TRACE_LOOKBACK_MINUTES` minutes, defaulting to
-`60`. To evaluate a wider window from inside the worker:
+**From Prefect dashboard:**
+
+1. Open Prefect UI at `http://localhost:4200`
+2. Go to **Deployments** → **evaluate-traces**
+3. Click **Quick Run** for a one-shot run, or create a **Schedule** for recurring runs
+
+**With a cron schedule (automatic):**
+
+```bash
+# In .env — run every night at 2 AM
+EVAL_TRACE_SCHEDULE_CRON=0 2 * * *
+```
+
+**Custom lookback window:**
 
 ```bash
 docker compose --project-directory . --env-file .env -f docker/docker-compose.yaml \
   exec rag-worker .venv/bin/python -c \
   "from orchestration.evaluation.prefect_flows import run_nightly_drift_detection; \
-   print(run_nightly_drift_detection(lookback_minutes=240, limit=1000))"
+   print(run_nightly_drift_detection(lookback_minutes=240))"
 ```
 
-Find the marker spans in Phoenix:
+The flow searches the last `EVAL_TRACE_LOOKBACK_MINUTES` minutes (default `60`).
 
-1. Open Phoenix at `http://localhost:6006`.
-2. Select project `advanced-rag-eval` (or your `EVAL_PHOENIX_PROJECT` value).
-3. Open the tracing/spans view.
-4. Search with:
+#### Tuning Drift Detection
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `EVAL_TRACE_LOOKBACK_MINUTES` | `60` | Time window to query for production spans |
+| `EVAL_RETRY_COHORT_MAX_EXAMPLES` | `100` | Cap on high-risk (retried) traces to evaluate. Higher = more thorough but more judge cost |
+| `EVAL_BASELINE_MAX_EXAMPLES` | `20` | Random sample of clean first-try traces. Kept low to save judge cost |
+| `EVAL_TRACE_SCHEDULE_CRON` | _(empty)_ | Cron expression for automatic scheduling (e.g., `0 2 * * *` for nightly at 2 AM) |
+
+> [!TIP]
+> Start with the defaults. If your agent rarely retries, lower `EVAL_RETRY_COHORT_MAX_EXAMPLES`. If you want tighter baseline monitoring, increase `EVAL_BASELINE_MAX_EXAMPLES` — but each example costs one LLM judge call per metric.
+
+#### Viewing Results in Phoenix
+
+After `make eval-drift` runs, open Phoenix at `http://localhost:6006`:
+
+1. **Annotations view** — each evaluated span has `ce.faithfulness`, `ce.answer_relevancy`, and `ce.cohort` annotations
+2. **Filter by cohort:**
+   ```text
+   annotations['ce.cohort'].label == 'high_risk'
+   ```
+3. **Filter by low scores:**
+   ```text
+   annotations['ce.faithfulness'].score < 0.5
+   ```
+4. **Metrics tab** — plot `ce.faithfulness` and `ce.answer_relevancy` over time, segmented by `ce.cohort`
+
+#### Debugging Spans
+
+The self-correcting agent also emits `agent.verification.rejected` marker spans for **visual debugging** in Phoenix. These carry `custom.attempt_number` and `custom.verification_reason` so you can inspect exactly which draft failed and why:
 
 ```text
 name == 'agent.verification.rejected'
 ```
 
-After `make eval-drift` runs, the matched spans receive `ce.*` annotations for
-the drift evaluator scores. These drift evaluations will be populated as annotations and can be queried in Phoenix like this:
-
-```text
-annotations['ce.faithfulness'].score == 0
-```
-or 
-```text
-annotations['ce.answer_relevancy'].score == 0
-```
-
-Also, since these are scheduled evaluations, their plot over time can be seen in the Phoenix **Metrics** tab.
+> [!NOTE]
+> The rejection spans are for human debugging only. The drift detection flow ignores them and uses `agent.generation.metrics` spans exclusively — these carry the final answer the user actually received.
 
 ### Threshold Gates
 
@@ -340,6 +385,8 @@ The hook is non-blocking — eval failures are logged but never break ingestion.
 | `EVAL_THRESHOLDS` | _(empty)_ | JSON dict of metric → min score |
 | `EVAL_CSV_ARTIFACT_ENABLED` | `false` | Emit CSV Prefect artifact |
 | `EVAL_TRACE_LOOKBACK_MINUTES` | `60` | Time window for trace eval |
+| `EVAL_RETRY_COHORT_MAX_EXAMPLES` | `100` | Max high-risk (retried) spans to evaluate per drift run |
+| `EVAL_BASELINE_MAX_EXAMPLES` | `20` | Max clean first-try spans to sample per drift run |
 
 > [!TIP]
 > **OSS users without AWS:** Set `EVAL_JUDGE_PROVIDER=ollama` (or `lmstudio`) and `EVAL_JUDGE_MODEL=<your-model>` to use local judge models.

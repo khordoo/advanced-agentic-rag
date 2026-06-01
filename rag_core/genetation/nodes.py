@@ -12,6 +12,7 @@ from langchain_core.messages import (
     SystemMessage,
     ToolMessage,
 )
+from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool
 from langgraph.prebuilt import ToolNode
 from pydantic import ValidationError
@@ -27,7 +28,7 @@ from rag_core.core.config import (
     get_generation_settings,
     setup_logging,
 )
-from rag_core.core.telemetry import mark_failed_verification_attempt
+from rag_core.core.telemetry import mark_failed_verification_attempt, stamp_generation_metrics
 from rag_core.genetation.parsers import extract_text_from_message, parse_agent_response
 from rag_core.genetation.state import RagState
 from rag_core.prompts.loader import AgentPrompt
@@ -114,8 +115,10 @@ class GraphNodes:
             "source_docs": source_docs,
         }
 
-    def execute_self_correcting_agent(self, state: RagState) -> dict:
-        logger.info("Executing self_correcting node...")
+    def execute_self_correcting_agent(
+        self, state: RagState, config: RunnableConfig | None = None
+    ) -> dict:
+        logger.info("Executing self_correcting_agent node...")
         current_attempts = state.get("self_correction_attempts", 0)
 
         if not self.settings.enable_grounding_verifier:
@@ -199,6 +202,7 @@ class GraphNodes:
                 question=original_question or None,
                 answer=generated_answer,
                 contexts=[doc.page_content for doc in documents],
+                attempt_number=current_attempts,
             )
             feedback_msg = (
                 f"{self.VERIFIER_REJECTION_PREFIX} "
@@ -401,7 +405,23 @@ class GraphNodes:
                 citation_index_map,
             )
 
-            print(parsed_response.answer)
+            # Stamp generation metrics for drift detection
+            attempts = state.get("self_correction_attempts", 0)
+            original_question = ""
+            for msg in reversed(state["messages"]):
+                if isinstance(msg, HumanMessage) and not str(msg.content).startswith(
+                    self.VERIFIER_REJECTION_PREFIX
+                ):
+                    original_question = str(msg.content)
+                    break
+
+            stamp_generation_metrics(
+                question=original_question or None,
+                answer=parsed_response.answer,
+                contexts=[doc.page_content for doc in state.get("source_docs", [])],
+                intervention_count=max(0, attempts - 1),
+            )
+
             logger.info("Post-Processing node completed. Parsed response: %s", parsed_response)
             return {"messages": [AIMessage(content=parsed_response.model_dump_json())]}
         except Exception as e:

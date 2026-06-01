@@ -17,6 +17,9 @@ FAILED_VERIFICATION_ATTRIBUTE = "custom.verification_status"
 FAILED_VERIFICATION_VALUE = "failed"
 VERIFICATION_REASON_ATTRIBUTE = "custom.verification_reason"
 VERIFICATION_GROUNDED_ATTRIBUTE = "custom.verification_grounded"
+GENERATION_METRICS_SPAN_NAME = "agent.generation.metrics"
+INTERVENTION_COUNT_ATTRIBUTE = "custom.intervention_count"
+ATTEMPT_NUMBER_ATTRIBUTE = "custom.attempt_number"
 PHOENIX_PROJECT_RESOURCE_ATTRIBUTE = "openinference.project.name"
 PHOENIX_PROJECT_HEADER = "x-project-name"
 
@@ -94,6 +97,7 @@ def mark_failed_verification_attempt(
     question: str | None = None,
     answer: str | None = None,
     contexts: list[str] | None = None,
+    attempt_number: int | None = None,
 ) -> None:
     """Create a marker span so CE drift jobs can find verifier rejections.
 
@@ -101,6 +105,9 @@ def mark_failed_verification_attempt(
     top-level span attributes so that ``_extract_trace_example()`` in the
     drift-detection flow can turn marker spans directly into eval examples
     without crawling the trace tree.
+
+    The ``attempt_number`` records which attempt this specific failure
+    occurred on, enabling micro-level debugging in Phoenix.
 
     Telemetry must never affect generation, so unexpected OpenTelemetry
     failures are logged at debug level and swallowed.
@@ -120,5 +127,36 @@ def mark_failed_verification_attempt(
                 span.set_attribute("answer", answer)
             if contexts:
                 span.set_attribute("contexts", contexts)
+            if attempt_number is not None:
+                span.set_attribute(ATTEMPT_NUMBER_ATTRIBUTE, attempt_number)
     except Exception as exc:
         logger.debug("Failed to mark verifier failure span: %s", exc)
+
+
+def stamp_generation_metrics(
+    *,
+    question: str | None = None,
+    answer: str | None = None,
+    contexts: list[str] | None = None,
+    intervention_count: int = 0,
+) -> None:
+    """Stamp a marker span with generation metrics for drift detection.
+
+    Created on **every** request (not just failures) so the nightly
+    drift job can query ``agent.generation.metrics`` spans and stratify
+    by ``custom.intervention_count`` without joining orphaned traces.
+
+    Interventions are ``self_correction_attempts - 1`` because the first
+    attempt is not an intervention.
+    """
+    try:
+        with tracer.start_as_current_span(GENERATION_METRICS_SPAN_NAME) as span:
+            span.set_attribute(INTERVENTION_COUNT_ATTRIBUTE, intervention_count)
+            if question:
+                span.set_attribute("question", question)
+            if answer:
+                span.set_attribute("answer", answer)
+            if contexts:
+                span.set_attribute("contexts", contexts)
+    except Exception as exc:
+        logger.debug("Failed to stamp generation metrics span: %s", exc)
