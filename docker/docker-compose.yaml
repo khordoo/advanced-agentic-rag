@@ -143,6 +143,7 @@ services:
       PREFECT_WORKER_LIMIT: ${PREFECT_WORKER_LIMIT:-2}
     volumes:
       - ./data/source_documents:/app/data/source_documents:ro
+      - ./evaluation/dataset:/app/evaluation/dataset:ro
       - hf-cache-volume:/app/.cache/huggingface
       - fastembed-cache:/app/.cache/fastembed
     depends_on:
