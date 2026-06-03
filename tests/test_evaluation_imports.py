@@ -138,7 +138,7 @@ class TestEvalRuntimeGatingContract:
             specs = build_eval_deployment_specs(config)
             assert [spec[1] for spec in specs] == [
                 "evaluate-ground-truth",
-                "evaluate-traces",
+                "evaluate-drift",
                 "generate-synthetic-qa",
             ]
             assert specs[0][0].fn.__name__ == "run_ground_truth_evaluation"

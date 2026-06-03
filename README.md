@@ -249,7 +249,7 @@ make eval EVAL_STATIC_RERANK_ENABLED=true
 | Mode | Flow | Trigger | Ground Truth | Description |
 |------|------|---------|-------------|-------------|
 | **Ground truth** | `run_ground_truth_evaluation` | `EVAL_STATIC_SCHEDULE_CRON` or manual | ✅ Required | Runs `GROUND_TRUTH_EVALUATORS` against `ground_truth_dataset.csv` |
-| **Trace-based** | `run_nightly_drift_detection` | `EVAL_DRIFT_SCHEDULE_CRON`, `make eval-drift`, or Prefect dashboard (`evaluate-traces`) | ❌ Not needed | Stratified evaluation of production final answers with cohort tagging |
+| **Trace-based** | `run_nightly_drift_detection` | `EVAL_DRIFT_SCHEDULE_CRON`, `make eval-drift`, or Prefect dashboard (`evaluate-drift`) | ❌ Not needed | Stratified evaluation of production final answers with cohort tagging |
 | **Synthetic QA** | `synthetic_qa_flow` | Manual | N/A | Generates QA pairs from document store → Phoenix Dataset |
 
 ### Trace-Based Drift Detection
@@ -308,7 +308,7 @@ make eval-drift
 **From Prefect dashboard:**
 
 1. Open Prefect UI at `http://localhost:4200`
-2. Go to **Deployments** → **evaluate-traces**
+2. Go to **Deployments** → **evaluate-drift**
 3. Click **Quick Run** for a one-shot run, or create a **Schedule** for recurring runs
 
 **With a cron schedule (automatic):**
