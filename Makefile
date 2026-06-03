@@ -26,6 +26,13 @@ down:
 
 reset:
 	@echo "🛑 Stopping and removing containers..."
+	@printf "\033[31m⚠️  WARNING: reset will delete all Docker volumes, cached images, and local container state.\033[0m\n"
+	@printf "\033[31mAre you sure? Type reset to continue: \033[0m"; \
+	read -r confirm; \
+	if [ "$$confirm" != "reset" ]; then \
+		echo "Aborted."; \
+		exit 1; \
+	fi
 	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) down --volumes
 	@echo "🧹 Sweeping dangling ghost images..."
 	docker image prune -f
@@ -33,8 +40,9 @@ reset:
 	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) up --build -d --wait
 
 reload:
-	@echo "♻️ Recreating containers to apply new .env values..."
-	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) up -d --force-recreate
+	@echo "♻️ Restarting containers to apply new .env values..."
+	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) down
+	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) up -d --wait
 
 deep-clean:
 	@echo "🗑️ Clearing all Docker caches to reclaim hard drive space..."
