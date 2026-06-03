@@ -3,7 +3,7 @@ RAG Evaluation Pipeline — Architecture Spec & Rewrite Plan
 Runtime cleanup note: evaluation deployments are now registered by default and
 optional eval dependencies are checked only when an eval flow executes.
 `EVAL_ENABLED` and `EVAL_POST_INGESTION_HOOK` have been replaced by runtime
-gating and `EVAL_AUTO_RUN_AFTER_INGESTION`.
+gating and `EVAL_STATIC_POST_INGESTION_HOOK`.
 
  Target repo: /Users/mahmoodkhordoo/Developer/playgorund/rag-chunking
  Audience: downstream execution agent
@@ -90,12 +90,12 @@ gating and `EVAL_AUTO_RUN_AFTER_INGESTION`.
 
  A) Scheduled offline eval (golden dataset) — eval_golden_flow
  - Inputs: a Phoenix Dataset (registered from ground_truth_dataset.csv).
- - Triggers: EVAL_SCHEDULE_CRON (Prefect deployment schedule) and/or EVAL_POST_INGESTION_HOOK (called from end-of-ingestion if enabled).
+- Triggers: EVAL_STATIC_SCHEDULE_CRON (Prefect deployment schedule) and/or EVAL_STATIC_POST_INGESTION_HOOK (called from end-of-ingestion if enabled).
  - Evaluators: RAGAS Faithfulness, AnswerRelevancy, ContextRecall, ContextPrecision, AnswerCorrectness (ground-truth-bearing) + phoenix.evals reference-free judges (Hallucination, Relevance, QA-Correctness).
 
  B) Online trace-based eval — eval_trace_flow
  - Inputs: time window over Phoenix spans in production project (e.g. last hour of advanced-rag).
- - Triggers: EVAL_TRACE_SCHEDULE_CRON.
+- Triggers: EVAL_DRIFT_SCHEDULE_CRON.
  - Evaluators: phoenix.evals reference-free only (no ground truth). Writes annotations back onto live spans via Phoenix annotation API — not a separate Experiment.
 
  Both flows share evaluator code paths and the same EvalConfig flag surface.
@@ -285,7 +285,7 @@ gating and `EVAL_AUTO_RUN_AFTER_INGESTION`.
  ├───────────────────────────────────────────┼────────────────────────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────┤
  │ data/synthetic/eval_results_detailed.csv  │ DEPRECATE. No longer primary output.                               │                                                                                      │
  ├───────────────────────────────────────────┼────────────────────────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────┤
- │ SYNTHETIC_QA_PERSIST_PATH in .env.example │ REMOVE (or mark deprecated). Replaced by EVAL_DATASET_NAME.        │                                                                                      │
+ │ SYNTHETIC_QA_PERSIST_PATH in .env.example │ REMOVE (or mark deprecated). Replaced by EVAL_STATIC_DATASET_NAME.   │                                                                                      │
  └───────────────────────────────────────────┴────────────────────────────────────────────────────────────────────┴──────────────────────────────────────────────────────────────────────────────────────┘
 
  ---
@@ -410,19 +410,19 @@ gating and `EVAL_AUTO_RUN_AFTER_INGESTION`.
  16. Update .env.example. Append:
  # ─── Evaluation (default OFF; enable to run RAG eval) ──────────────────
  EVAL_ENABLED=false
- EVAL_SCHEDULE_CRON=
- EVAL_TRACE_SCHEDULE_CRON=
- EVAL_POST_INGESTION_HOOK=false
- EVAL_DATASET_NAME=rag-golden-v1
- EVAL_DATASET_CSV_PATH=evaluation/datasets/ground_truth_dataset.csv
+ EVAL_STATIC_SCHEDULE_CRON=
+ EVAL_DRIFT_SCHEDULE_CRON=
+ EVAL_STATIC_POST_INGESTION_HOOK=false
+ EVAL_STATIC_DATASET_NAME=ground-truth-v1
+ EVAL_STATIC_DATASET_CSV_PATH=evaluation/datasets/ground_truth_dataset.csv
  EVAL_PHOENIX_PROJECT=advanced-rag-eval
  EVAL_PHOENIX_ENDPOINT=
  EVAL_JUDGE_PROVIDER=aws
  EVAL_JUDGE_MODEL=
  EVAL_CONCURRENCY=4
- EVAL_TRACE_LOOKBACK_MINUTES=60
- EVAL_CSV_ARTIFACT_ENABLED=false
- EVAL_MAX_EXAMPLES=
+ EVAL_DRIFT_LOOKBACK_MINUTES=60
+ EVAL_STATIC_CSV_ARTIFACT_ENABLED=false
+ EVAL_STATIC_MAX_EXAMPLES=
  EVAL_RAGAS_METRICS=faithfulness,answer_relevancy,context_recall,context_precision,answer_correctness
  EVAL_PHOENIX_EVALUATORS=hallucination,qa_correctness,relevance
  EVAL_THRESHOLDS=
@@ -502,7 +502,7 @@ gating and `EVAL_AUTO_RUN_AFTER_INGESTION`.
  7. Risks & Open Questions
 
  1. Judge cost explosion on large golden sets. RAGAS metrics each invoke judge ≥1×/example; Faithfulness/AnswerCorrectness decompose into multiple sub-prompts. 100-row golden set × 5 RAGAS + 3 phoenix.evals ≈ 1,500+ judge
- calls/run. Mitigation: default golden set is 9 rows; honor EVAL_MAX_EXAMPLES hard cap; document per-run cost.
+calls/run. Mitigation: default golden set is 9 rows; honor EVAL_STATIC_MAX_EXAMPLES hard cap; document per-run cost.
  2. Phoenix ingest volume from frequent runs. Nightly cron × 100 examples × 30 spans = 3,000 spans/day in eval project. Mitigation: keep eval project separate from prod (advanced-rag-eval vs advanced-rag); document retention
  expectations; recommend project-level cleanup cron for OSS long-term users.
  3. Feature-flag-off invisibility. With EVAL_ENABLED=false default, easy to ship broken eval that no one notices. Mitigation: CI smoke test (step 18) imports all eval modules and runs disabled-by-default flow path. Follow-up (out
