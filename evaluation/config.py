@@ -35,14 +35,17 @@ class EvalConfig(BaseSettings):
     # ── Feature flags ────────────────────────────────────────────────
     schedule_cron: str | None = Field(
         default=None,
+        validation_alias="EVAL_STATIC_SCHEDULE_CRON",
         description="Cron expression for scheduled ground truth evaluation.",
     )
     trace_schedule_cron: str | None = Field(
         default=None,
+        validation_alias="EVAL_DRIFT_SCHEDULE_CRON",
         description="Cron expression for online trace-based evaluation.",
     )
     auto_run_after_ingestion: bool = Field(
         default=False,
+        validation_alias="EVAL_STATIC_POST_INGESTION_HOOK",
         description=(
             "Run run_ground_truth_evaluation at the end of ingestion (non-blocking)."
         ),
@@ -51,10 +54,12 @@ class EvalConfig(BaseSettings):
     # ── Dataset ──────────────────────────────────────────────────────
     dataset_name: str = Field(
         default="ground-truth-v1",
+        validation_alias="EVAL_STATIC_DATASET_NAME",
         description="Phoenix Dataset name for the ground truth evaluation set.",
     )
     dataset_csv_path: str = Field(
         default="evaluation/datasets/ground_truth_dataset.csv",
+        validation_alias="EVAL_STATIC_DATASET_CSV_PATH",
         description=(
             "Path to the bundled ground truth CSV relative to project root. "
             "Accepts a short name like 'adversarial' which resolves to "
@@ -111,7 +116,7 @@ class EvalConfig(BaseSettings):
 
     # ── Execution tuning ─────────────────────────────────────────────
     timeout: int = Field(
-        default=60,
+        default=120,
         ge=1,
         description="Maximum time in seconds to wait for a single metric evaluation.",
     )
@@ -133,26 +138,31 @@ class EvalConfig(BaseSettings):
     trace_lookback_minutes: int = Field(
         default=60,
         ge=1,
+        validation_alias="EVAL_DRIFT_LOOKBACK_MINUTES",
         description="Time window (minutes) for trace-based evaluation.",
     )
     csv_artifact_enabled: bool = Field(
         default=False,
+        validation_alias="EVAL_STATIC_CSV_ARTIFACT_ENABLED",
         description="Emit an optional CSV Prefect artifact alongside markdown.",
     )
     max_examples: int | None = Field(
         default=None,
         ge=1,
+        validation_alias="EVAL_STATIC_MAX_EXAMPLES",
         description="Hard cap on ground truth examples to bound judge cost.",
     )
     retry_cohort_max_examples: int = Field(
         default=100,
         ge=1,
-        description="Max high-risk spans (intervention_count > 0) to evaluate per drift run.",
+        validation_alias="EVAL_DRIFT_HIGH_RISK_SAMPLE_MAX",
+        description="Max high-risk sample size (intervention_count > 0) to evaluate per drift run.",
     )
     baseline_max_examples: int = Field(
         default=20,
         ge=1,
-        description="Max clean first-try spans to randomly sample per drift run.",
+        validation_alias="EVAL_DRIFT_BASELINE_SAMPLE_MAX",
+        description="Max baseline sample size (intervention_count == 0) to randomly sample per drift run.",
     )
 
     # ── Evaluator selection ──────────────────────────────────────────
@@ -173,13 +183,13 @@ class EvalConfig(BaseSettings):
 
     # ── Answer correctness tuning ────────────────────────────────────
     factuality_weight: float = Field(
-        default=0.75,
+        default=0.85,
         ge=0.0,
         le=1.0,
         description=(
             "Weight for factual correctness in RAGAS AnswerCorrectness "
             "(0.0–1.0). Semantic similarity weight is automatically "
-            "1.0 − this value. RAGAS default is 0.75."
+            "1.0 − this value."
         ),
     )
 

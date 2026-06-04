@@ -83,7 +83,7 @@ def ensure_dataset_uploaded(eval_config) -> str:
     # Cap examples before hashing/upload so idempotency matches what Phoenix stores.
     if eval_config.max_examples and len(rows) > eval_config.max_examples:
         logger.info(
-            "Capping dataset from %d to %d examples (EVAL_MAX_EXAMPLES)",
+            "Capping dataset from %d to %d examples (EVAL_STATIC_MAX_EXAMPLES)",
             len(rows),
             eval_config.max_examples,
         )

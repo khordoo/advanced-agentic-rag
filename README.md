@@ -47,6 +47,35 @@ make register-ingestion-deployments
 uv run rag_core/cli.py
 ```
 
+## Testing
+
+The test suite is split by runtime boundary so you do not have to install every dependency just to get fast feedback.
+
+```bash
+# Fast local unit tests that only need the core + dev dependencies
+make test
+
+# API route and response tests in the live API container
+make test-api
+
+# Prefect / orchestration / evaluation tests in the live worker container
+make test-worker
+
+# Run all three suites in sequence
+make test-all
+```
+
+Layout:
+- `tests/test_*.py` is the fast local suite.
+- `tests/api/` contains FastAPI-specific tests.
+- `tests/worker/` contains Prefect and evaluation tests.
+
+`make test` is safe on a fresh clone. `uv` will make sure the local environment is ready on demand, and it will reuse the existing cache when nothing changed.
+
+`make test-api` and `make test-worker` automatically bring up the core stack first, then run the tests inside the already-running service containers. This keeps local DX fast while avoiding a separate one-off test container.
+
+If you want to run the full suite locally in your IDE or work on API/worker tests outside Docker, install every optional dependency once with `uv sync --all-extras`.
+
 ## 🚨 Point of No Return: Changing Embedding Models
 
 > [!CAUTION]
@@ -71,7 +100,7 @@ update the enum and factory wiring described in
 
 ## Applying Configuration Changes
 
-If you modify your `.env` file (e.g., changing API keys or switching providers), run the following to recreate containers with the new variables without losing data:
+If you modify your `.env` file (e.g., changing API keys or switching providers), run the following to restart containers with the new variables without losing data:
 
 ```bash
 make reload
@@ -154,7 +183,7 @@ The evaluation subsystem runs registry-backed RAGAS metrics plus deterministic p
 ### How It Works
 
 ```text
-  ground_truth_dataset.csv ──→ Phoenix Dataset ("rag-ground-truth-v1")
+  ground_truth_dataset.csv ──→ Phoenix Dataset ("ground-truth-v1")
                         │
                         ▼
       run_ground_truth_evaluation (Prefect @flow)
@@ -205,7 +234,7 @@ make eval-drift
 
 # 4. Verify in Phoenix UI (http://localhost:6006):
 #    - Project "advanced-rag-eval" exists
-#    - Dataset "rag-ground-truth-v1" appears
+#    - Dataset "ground-truth-v1" appears
 #    - Experiment shows row count == ground truth row count
 #    - Each row has evaluator scores + full RAG span tree
 
@@ -233,8 +262,10 @@ make eval DATASET=evaluation/datasets/adversarial_dataset.csv
 make eval DATASET=adversarial NAME=adversarial-v2
 
 # With reranking enabled
-make eval EVAL_RERANK_ENABLED=true
+make eval EVAL_STATIC_RERANK_ENABLED=true
 ```
+
+`EVAL_STATIC_RERANK_ENABLED` is a `make eval` / `make eval-drift` passthrough. It is not read by `evaluation.config.EvalConfig`; use it only when you want the worker-side reranker enabled for the evaluation command.
 
 > [!IMPORTANT]
 > Custom datasets are uploaded to Phoenix as **separate Datasets** (not overwriting the ground truth). The Phoenix dataset name is auto-derived from the CSV filename (`adversarial_dataset.csv` → `adversarial-dataset`). Override with `NAME=custom-name` if needed.
@@ -246,8 +277,8 @@ make eval EVAL_RERANK_ENABLED=true
 
 | Mode | Flow | Trigger | Ground Truth | Description |
 |------|------|---------|-------------|-------------|
-| **Ground truth** | `run_ground_truth_evaluation` | `EVAL_SCHEDULE_CRON` or manual | ✅ Required | Runs `GROUND_TRUTH_EVALUATORS` against `ground_truth_dataset.csv` |
-| **Trace-based** | `run_nightly_drift_detection` | `EVAL_TRACE_SCHEDULE_CRON`, `make eval-drift`, or Prefect dashboard (`evaluate-traces`) | ❌ Not needed | Stratified evaluation of production final answers with cohort tagging |
+| **Ground truth** | `run_ground_truth_evaluation` | `EVAL_STATIC_SCHEDULE_CRON` or manual | ✅ Required | Runs `GROUND_TRUTH_EVALUATORS` against `ground_truth_dataset.csv` |
+| **Trace-based** | `run_nightly_drift_detection` | `EVAL_DRIFT_SCHEDULE_CRON`, `make eval-drift`, or Prefect dashboard (`evaluate-drift`) | ❌ Not needed | Stratified evaluation of production final answers with cohort tagging |
 | **Synthetic QA** | `synthetic_qa_flow` | Manual | N/A | Generates QA pairs from document store → Phoenix Dataset |
 
 ### Trace-Based Drift Detection
@@ -279,7 +310,8 @@ The drift flow queries these spans and **stratifies** into two cohorts:
 │  ┌─────────────────────┐   ┌────────────────────────────┐  │
 │  │  Cohort A: High-Risk│   │  Cohort B: Baseline        │  │
 │  │  intervention > 0   │   │  intervention == 0         │  │
-│  │  cap: RETRY_MAX=100 │   │  random: BASELINE_MAX=20   │  │
+│  │  EVAL_DRIFT_HIGH_RISK_SAMPLE_MAX=100                   │  │
+│  │  EVAL_DRIFT_BASELINE_SAMPLE_MAX=20                     │  │
 │  └────────┬────────────┘   └────────────┬───────────────┘  │
 │           │                             │                   │
 │           ▼                             ▼                   │
@@ -305,16 +337,16 @@ make eval-drift
 **From Prefect dashboard:**
 
 1. Open Prefect UI at `http://localhost:4200`
-2. Go to **Deployments** → **evaluate-traces**
+2. Go to **Deployments** → **evaluate-drift**
 3. Click **Quick Run** for a one-shot run, or create a **Schedule** for recurring runs
 
 **With a cron schedule (automatic):**
 
 ```bash
 # 1. Set cron in .env — run every night at 2 AM
-EVAL_TRACE_SCHEDULE_CRON=0 2 * * *
+EVAL_DRIFT_SCHEDULE_CRON=0 2 * * *
 
-# 2. Recreate containers to pick up the new env value
+# 2. Restart containers to pick up the new env value
 make reload
 
 # 3. Re-register deployments with the new cron schedule
@@ -322,7 +354,7 @@ make register-eval-deployment
 ```
 
 > [!IMPORTANT]
-> Just setting `EVAL_TRACE_SCHEDULE_CRON` in `.env` is not enough — you must also run `make register-eval-deployment` to upsert the Prefect deployment with the new cron schedule. After that, the Prefect worker will execute drift detection automatically on schedule.
+> Just setting `EVAL_DRIFT_SCHEDULE_CRON` in `.env` is not enough — you must also run `make register-eval-deployment` to upsert the Prefect deployment with the new cron schedule. After that, the Prefect worker will execute drift detection automatically on schedule.
 
 **Custom lookback window:**
 
@@ -333,19 +365,19 @@ docker compose --project-directory . --env-file .env -f docker/docker-compose.ya
    print(run_nightly_drift_detection(lookback_minutes=240))"
 ```
 
-The flow searches the last `EVAL_TRACE_LOOKBACK_MINUTES` minutes (default `60`).
+The flow searches the last `EVAL_DRIFT_LOOKBACK_MINUTES` minutes (default `60`).
 
 #### Tuning Drift Detection
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `EVAL_TRACE_LOOKBACK_MINUTES` | `60` | Time window to query for production spans |
-| `EVAL_RETRY_COHORT_MAX_EXAMPLES` | `100` | Cap on high-risk (retried) traces to evaluate. Higher = more thorough but more judge cost |
-| `EVAL_BASELINE_MAX_EXAMPLES` | `20` | Random sample of clean first-try traces. Kept low to save judge cost |
-| `EVAL_TRACE_SCHEDULE_CRON` | _(empty)_ | Cron expression for automatic scheduling (e.g., `0 2 * * *` for nightly at 2 AM) |
+| `EVAL_DRIFT_LOOKBACK_MINUTES` | `60` | Time window to query for production spans |
+| `EVAL_DRIFT_HIGH_RISK_SAMPLE_MAX` | `100` | Cap on high-risk (retried) traces to evaluate. Higher = more thorough but more judge cost |
+| `EVAL_DRIFT_BASELINE_SAMPLE_MAX` | `20` | Random sample of clean first-try traces. Kept low to save judge cost |
+| `EVAL_DRIFT_SCHEDULE_CRON` | _(empty)_ | Cron expression for automatic scheduling (e.g., `0 2 * * *` for nightly at 2 AM) |
 
 > [!TIP]
-> Start with the defaults. If your agent rarely retries, lower `EVAL_RETRY_COHORT_MAX_EXAMPLES`. If you want tighter baseline monitoring, increase `EVAL_BASELINE_MAX_EXAMPLES` — but each example costs one LLM judge call per metric.
+> Start with the defaults. If your agent rarely retries, lower `EVAL_DRIFT_HIGH_RISK_SAMPLE_MAX`. If you want tighter baseline monitoring, increase `EVAL_DRIFT_BASELINE_SAMPLE_MAX` — but each example costs one LLM judge call per metric.
 
 #### Viewing Results in Phoenix
 
@@ -393,35 +425,51 @@ and older evaluation paths.
 To automatically run evaluation after each ingestion:
 
 ```bash
-EVAL_AUTO_RUN_AFTER_INGESTION=true
+EVAL_STATIC_POST_INGESTION_HOOK=true
 ```
 
 The hook is non-blocking — eval failures are logged but never break ingestion.
 
 ### EVAL_* Environment Variables
 
+Preferred names use the `EVAL_STATIC_` and `EVAL_DRIFT_` prefixes below.
+
+#### Global Judge & Platform Settings
+
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `EVAL_SCHEDULE_CRON` | _(empty)_ | Cron for scheduled ground truth eval |
-| `EVAL_TRACE_SCHEDULE_CRON` | _(empty)_ | Cron for trace-based eval |
-| `EVAL_AUTO_RUN_AFTER_INGESTION` | `false` | Run eval after ingestion |
-| `EVAL_DATASET_NAME` | `rag-ground-truth-v1` | Phoenix Dataset name |
-| `EVAL_DATASET_CSV_PATH` | `evaluation/datasets/ground_truth_dataset.csv` | Ground truth CSV path |
 | `EVAL_PHOENIX_PROJECT` | `advanced-rag-eval` | Phoenix project (isolated from prod) |
-| `EVAL_PHOENIX_ENDPOINT` | _(auto)_ | Override Phoenix endpoint |
+| `EVAL_PHOENIX_ENDPOINT` | _(auto)_ | Optional override; auto-resolved from Phoenix/OTEL when unset |
 | `EVAL_JUDGE_PROVIDER` | `aws` | LLM provider for judges |
 | `EVAL_JUDGE_MODEL` | _(provider default)_ | Override judge model |
-| `EVAL_TIMEOUT` | `60` | Maximum time to wait for a single metric evaluation |
+| `EVAL_TIMEOUT` | `120` | Maximum time to wait for a single metric evaluation |
 | `EVAL_MAX_RETRIES` | `3` | Maximum retries for a failed metric evaluation |
 | `EVAL_MAX_WORKERS` | `4` | Maximum concurrent evaluation tasks |
-| `EVAL_MAX_EXAMPLES` | _(all)_ | Hard cap to bound judge cost |
 | `EVAL_RAGAS_METRICS` | `faithfulness,answer_relevancy,...` | RAGAS metrics to run |
 | `EVAL_PHOENIX_EVALUATORS` | `hallucination,qa_correctness,relevance` | Legacy Phoenix judges setting; not used by the registry-backed CE ground-truth flow |
 | `EVAL_THRESHOLDS` | _(empty)_ | JSON dict of metric → min score |
-| `EVAL_CSV_ARTIFACT_ENABLED` | `false` | Emit CSV Prefect artifact |
-| `EVAL_TRACE_LOOKBACK_MINUTES` | `60` | Time window for trace eval |
-| `EVAL_RETRY_COHORT_MAX_EXAMPLES` | `100` | Max high-risk (retried) spans to evaluate per drift run |
-| `EVAL_BASELINE_MAX_EXAMPLES` | `20` | Max clean first-try spans to sample per drift run |
+| `EVAL_FACTUALITY_WEIGHT` | `0.85` | Weight for factual correctness in AnswerCorrectness |
+
+#### Static Datasets (`make eval`)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `EVAL_STATIC_SCHEDULE_CRON` | _(empty)_ | Cron for scheduled ground truth eval |
+| `EVAL_STATIC_DATASET_NAME` | `ground-truth-v1` | Phoenix Dataset name |
+| `EVAL_STATIC_DATASET_CSV_PATH` | `evaluation/datasets/ground_truth_dataset.csv` | Ground truth CSV path |
+| `EVAL_STATIC_MAX_EXAMPLES` | _(all)_ | Hard cap to bound judge cost |
+| `EVAL_STATIC_CSV_ARTIFACT_ENABLED` | `false` | Emit CSV Prefect artifact |
+| `EVAL_STATIC_POST_INGESTION_HOOK` | `false` | Run eval after ingestion |
+| `EVAL_STATIC_RERANK_ENABLED` | `true` | Enable worker-side reranker for evaluation runs |
+
+#### Continuous Drift (`make eval-drift`)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `EVAL_DRIFT_SCHEDULE_CRON` | _(empty)_ | Cron for trace-based eval |
+| `EVAL_DRIFT_LOOKBACK_MINUTES` | `60` | Time window to query for production spans |
+| `EVAL_DRIFT_HIGH_RISK_SAMPLE_MAX` | `100` | Cap on high-risk (retried) traces to evaluate. Higher = more thorough but more judge cost |
+| `EVAL_DRIFT_BASELINE_SAMPLE_MAX` | `20` | Random sample of clean first-try traces. Kept low to save judge cost |
 
 > [!TIP]
 > **OSS users without AWS:** Set `EVAL_JUDGE_PROVIDER=ollama` (or `lmstudio`) and `EVAL_JUDGE_MODEL=<your-model>` to use local judge models.

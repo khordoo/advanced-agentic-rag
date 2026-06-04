@@ -39,8 +39,8 @@ def build_eval_deployment_specs(eval_config: EvalConfig) -> list[tuple]:
         ),
         (
             run_nightly_drift_detection,
-            "evaluate-traces",
-            ["evaluation", "trace", "oss"],
+            "evaluate-drift",
+            ["evaluation", "drift", "oss"],
             "Evaluate recent production traces with reference-free judges.",
             eval_config.trace_schedule_cron,
             "orchestration/evaluation/prefect_flows.py",

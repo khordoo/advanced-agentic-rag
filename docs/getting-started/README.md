@@ -19,6 +19,24 @@ uv run python -m rag_core.ingestion.pipeline
 uv run rag_core/cli.py
 ```
 
+## Testing
+
+Use the fast local suite during development, and the containerized targets when you need runtime parity:
+
+```bash
+make test
+make test-api
+make test-worker
+```
+
+`make test-api` and `make test-worker` bring up the core stack automatically if it is not already running, then exec into the live service containers.
+
+If you want IDE support for the API and worker tests locally, sync the optional extras once:
+
+```bash
+uv sync --all-extras
+```
+
 ## Updating Configuration (DX)
 
 When you modify environment variables in your `.env` file (e.g., switching from FastEmbed to Bedrock), Docker Compose does not automatically pick up these changes if you simply restart the container. The container must be recreated to inject the new variables.

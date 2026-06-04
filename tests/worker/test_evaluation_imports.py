@@ -21,6 +21,14 @@ from unittest.mock import Mock, patch
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def clear_eval_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    for key in [key for key in os.environ if key.startswith("EVAL_")]:
+        monkeypatch.delenv(key, raising=False)
+    for key in ("PHOENIX_COLLECTOR_ENDPOINT", "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"):
+        monkeypatch.delenv(key, raising=False)
+
+
 class TestEvaluationImports:
     """Verify that importing eval modules is safe without [eval] extra."""
 
@@ -138,7 +146,7 @@ class TestEvalRuntimeGatingContract:
             specs = build_eval_deployment_specs(config)
             assert [spec[1] for spec in specs] == [
                 "evaluate-ground-truth",
-                "evaluate-traces",
+                "evaluate-drift",
                 "generate-synthetic-qa",
             ]
             assert specs[0][0].fn.__name__ == "run_ground_truth_evaluation"
@@ -379,18 +387,43 @@ class TestEvalConfigParsing:
 
         assert config.thresholds == {}
 
-    @patch.dict(os.environ, {"EVAL_MAX_EXAMPLES": ""}, clear=False)
+    @patch.dict(os.environ, {"EVAL_STATIC_MAX_EXAMPLES": ""}, clear=False)
     def test_empty_max_examples_env_parses_as_none(self):
-        """An empty EVAL_MAX_EXAMPLES value means no hard cap."""
+        """An empty EVAL_STATIC_MAX_EXAMPLES value means no hard cap."""
         from evaluation.config import EvalConfig
 
         config = EvalConfig(_env_file=None)
 
         assert config.max_examples is None
 
-    @patch.dict(os.environ, {"EVAL_AUTO_RUN_AFTER_INGESTION": "true"}, clear=False)
+    @patch.dict(
+        os.environ,
+        {
+            "EVAL_STATIC_SCHEDULE_CRON": "0 0 * * *",
+            "EVAL_STATIC_POST_INGESTION_HOOK": "true",
+            "EVAL_DRIFT_SCHEDULE_CRON": "0 2 * * *",
+            "EVAL_DRIFT_LOOKBACK_MINUTES": "120",
+            "EVAL_DRIFT_HIGH_RISK_SAMPLE_MAX": "12",
+            "EVAL_DRIFT_BASELINE_SAMPLE_MAX": "8",
+        },
+        clear=False,
+    )
+    def test_split_eval_namespace_env_parses(self):
+        """Static and drift env names parse into the correct typed fields."""
+        from evaluation.config import EvalConfig
+
+        config = EvalConfig(_env_file=None)
+
+        assert config.schedule_cron == "0 0 * * *"
+        assert config.auto_run_after_ingestion is True
+        assert config.trace_schedule_cron == "0 2 * * *"
+        assert config.trace_lookback_minutes == 120
+        assert config.retry_cohort_max_examples == 12
+        assert config.baseline_max_examples == 8
+
+    @patch.dict(os.environ, {"EVAL_STATIC_POST_INGESTION_HOOK": "true"}, clear=False)
     def test_auto_run_after_ingestion_env_parses(self):
-        """Post-ingestion eval auto-run uses the new env variable name."""
+        """Post-ingestion eval auto-run uses the new static env variable name."""
         from evaluation.config import EvalConfig
 
         config = EvalConfig(_env_file=None)
@@ -427,18 +460,30 @@ class TestEvalConfigParsing:
         assert config.max_workers == 7
         assert config.concurrency == 7
 
+    def test_eval_defaults_match_documented_values(self):
+        """Default eval settings stay aligned with the env example and README."""
+        from evaluation.config import EvalConfig
+
+        config = EvalConfig(_env_file=None)
+
+        assert config.dataset_name == "ground-truth-v1"
+        assert config.timeout == 120
+        assert config.max_retries == 3
+        assert config.factuality_weight == pytest.approx(0.85)
+        assert config.phoenix_endpoint is None
+
 
 class TestFactualityWeight:
     """Verify the EVAL_FACTUALITY_WEIGHT config for AnswerCorrectness tuning."""
 
     def test_factuality_weight_default(self):
-        """Default factuality weight matches RAGAS upstream default (0.75)."""
+        """Default factuality weight matches the configured project default."""
         from evaluation.config import EvalConfig
 
         config = EvalConfig(_env_file=None)
 
-        assert config.factuality_weight == 0.75
-        assert config.semantic_weight == pytest.approx(0.25)
+        assert config.factuality_weight == pytest.approx(0.85)
+        assert config.semantic_weight == pytest.approx(0.15)
 
     @patch.dict(os.environ, {"EVAL_FACTUALITY_WEIGHT": "0.85"}, clear=False)
     def test_factuality_weight_from_env(self):
@@ -837,7 +882,6 @@ class TestContinuousEvaluationRegistry:
         assert names == [
             "faithfulness",
             "answer_relevancy",
-            "reference_format_judge",
         ]
         assert "context_precision" not in names
         assert "context_recall" not in names

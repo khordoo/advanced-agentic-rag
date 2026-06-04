@@ -9,6 +9,19 @@ from rag_core.reranking.fastembed_reranker import FastEmbedReranker
 from rag_core.reranking.factory import get_reranker
 
 
+@pytest.fixture(autouse=True)
+def clear_reranker_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    for key in (
+        "RERANK_PROVIDER",
+        "RERANK_MODEL_NAME",
+        "RERANK_ENABLED",
+        "RERANK_TOP_K",
+        "RERANK_DEVICE",
+        "FASTEMBED_CACHE_DIR",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+
 def test_get_reranker_defaults_to_fastembed() -> None:
     reranker = get_reranker(RerankerSettings(_env_file=None))
 

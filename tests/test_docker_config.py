@@ -78,31 +78,41 @@ def test_env_example_defaults_are_docker_compose_first() -> None:
     assert 'HF_TOKEN=""' in env_example
     assert "RERANK_PROVIDER=fastembed" in env_example
     assert "RERANK_MODEL_NAME=jinaai/jina-reranker-v2-base-multilingual" in env_example
-    assert "EVAL_RERANK_ENABLED=true" in env_example
+    assert "EVAL_STATIC_RERANK_ENABLED=true" in env_example
+    assert "EVAL_STATIC_DATASET_NAME=ground-truth-v1" in env_example
+    assert "EVAL_STATIC_SCHEDULE_CRON=" in env_example
+    assert any(line == "# EVAL_PHOENIX_ENDPOINT=" for line in env_example.splitlines())
+    assert not any(line == "EVAL_PHOENIX_ENDPOINT=" for line in env_example.splitlines())
+    assert "EVAL_TIMEOUT=120" in env_example
+    assert "EVAL_MAX_RETRIES=3" in env_example
+    assert "EVAL_FACTUALITY_WEIGHT=0.85" in env_example
+    assert "EVAL_DRIFT_SCHEDULE_CRON=" in env_example
+    assert "EVAL_DRIFT_LOOKBACK_MINUTES=60" in env_example
+    assert "EVAL_DRIFT_HIGH_RISK_SAMPLE_MAX=100" in env_example
+    assert "EVAL_DRIFT_BASELINE_SAMPLE_MAX=20" in env_example
     assert "EVAL_THRESHOLDS=\n'{\"faithfulness\"" not in env_example
     assert "INGESTION_WORKER_UV_SYNC_EXTRAS=--extra ingestion --extra doc-processing --extra rerank" not in env_example
-    assert "PREFECT_WORKER_UV_SYNC_EXTRAS=--extra ingestion --extra doc-processing --extra eval" in env_example
+    assert '# PREFECT_WORKER_UV_SYNC_EXTRAS="--extra ingestion --extra doc-processing --extra eval"' in env_example
 
 
 def test_makefile_host_targets_translate_docker_service_names() -> None:
     makefile = (ROOT / "Makefile").read_text()
 
-    assert "HOST_POSTGRES_HOST?=localhost" in makefile
-    assert "HOST_QDRANT_URL?=http://localhost:6333" in makefile
-    assert "HOST_PREFECT_API_URL?=http://localhost:4200/api" in makefile
-    assert "HOST_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT?=http://localhost:6006/v1/traces" in makefile
-    assert "HOST_ENV:=POSTGRES_HOST=$(HOST_POSTGRES_HOST)" in makefile
-    assert "EVAL_RERANK_ENABLED?=true" in makefile
-    assert (
-        'exec -e RERANK_ENABLED=$(EVAL_RERANK_ENABLED) rag-worker'
-        in makefile
-    )
-    assert "from orchestration.evaluation.prefect_flows import run_ground_truth_evaluation" in makefile
-    assert "from orchestration.evaluation.prefect_flows import run_nightly_drift_detection" in makefile
+    assert 'printf "\\033[31m⚠️  WARNING: reset will delete all Docker volumes, cached images, and local container state.\\033[0m\\n"' in makefile
+    assert 'Are you sure? Type reset to continue' in makefile
+    assert 'if [ "$$confirm" != "reset" ]; then' in makefile
+    assert 'reload:\n\t@echo "♻️ Restarting containers to apply new .env values..."\n\tdocker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) down\n\tdocker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) up -d --wait' in makefile
+    assert "EVAL_STATIC_RERANK_ENABLED ?= true" in makefile
+    assert "up-core:" in makefile
+    assert "up -d --wait rag_api rag-worker prefect-server phoenix" in makefile
+    assert "RERANK_ENABLED=$(EVAL_STATIC_RERANK_ENABLED)" in makefile
+    assert "EVAL_STATIC_DATASET_CSV_PATH=$(DATASET)" in makefile
+    assert "EVAL_STATIC_DATASET_NAME=$${_name}" in makefile
+    assert "orchestration.evaluation.run_eval" in makefile
+    assert "orchestration.evaluation.run_drift" in makefile
     assert "from orchestration.evaluation.flows import eval_golden_flow" not in makefile
     assert '--entrypoint python ingestion-worker -c "import ragas"' not in makefile
     assert "--extra ingestion --extra doc-processing --extra eval --extra rerank" not in makefile
-    assert "$(HOST_ENV) $(ALEMBIC_BASE) -c $(ALEMBIC_CONFIG)" in makefile
     assert "exec rag-worker .venv/bin/python -m orchestration.ingestion.flows end_to_end" in makefile
     assert "up-core" in makefile
     assert "up: up-core" in makefile
