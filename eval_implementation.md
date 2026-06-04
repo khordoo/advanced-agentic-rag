@@ -2,8 +2,8 @@ RAG Evaluation Pipeline — Architecture Spec & Rewrite Plan
 
 Runtime cleanup note: evaluation deployments are now registered by default and
 optional eval dependencies are checked only when an eval flow executes.
-`EVAL_ENABLED` and `EVAL_POST_INGESTION_HOOK` have been replaced by runtime
-gating and `EVAL_STATIC_POST_INGESTION_HOOK`.
+`EVAL_ENABLED` and the old post-ingestion hook flag have been replaced by
+runtime gating and `EVAL_STATIC_AUTO_RUN_AFTER_INGESTION`.
 
  Target repo: /Users/mahmoodkhordoo/Developer/playgorund/rag-chunking
  Audience: downstream execution agent
@@ -90,7 +90,7 @@ gating and `EVAL_STATIC_POST_INGESTION_HOOK`.
 
  A) Scheduled offline eval (golden dataset) — eval_golden_flow
  - Inputs: a Phoenix Dataset (registered from ground_truth_dataset.csv).
-- Triggers: EVAL_STATIC_SCHEDULE_CRON (Prefect deployment schedule) and/or EVAL_STATIC_POST_INGESTION_HOOK (called from end-of-ingestion if enabled).
+- Triggers: EVAL_STATIC_SCHEDULE_CRON (Prefect deployment schedule) and/or EVAL_STATIC_AUTO_RUN_AFTER_INGESTION (called from end-of-ingestion if enabled).
  - Evaluators: RAGAS Faithfulness, AnswerRelevancy, ContextRecall, ContextPrecision, AnswerCorrectness (ground-truth-bearing) + phoenix.evals reference-free judges (Hallucination, Relevance, QA-Correctness).
 
  B) Online trace-based eval — eval_trace_flow
@@ -347,7 +347,7 @@ gating and `EVAL_STATIC_POST_INGESTION_HOOK`.
 
  4.6 Optional post-ingestion hook
 
- If EVAL_POST_INGESTION_HOOK=true AND EVAL_ENABLED=true, the existing end_to_end_flow in orchestration/ingestion/flows.py calls eval_golden_flow() as a final non-blocking step. Implementation:
+ If `EVAL_STATIC_AUTO_RUN_AFTER_INGESTION=true` AND `EVAL_ENABLED=true`, the existing end_to_end_flow in orchestration/ingestion/flows.py calls eval_golden_flow() as a final non-blocking step. Implementation:
  - Lazy-import eval_golden_flow inside end_to_end_flow body to keep ingestion-only deployments lean.
  - Wrap in try/except so eval failures never break ingestion.
  - Plain function call (not Prefect subflow) — already inside a flow context.
@@ -401,7 +401,7 @@ gating and `EVAL_STATIC_POST_INGESTION_HOOK`.
  eval_config.enabled. Schedule attached via CronSchedule if eval_config.schedule_cron.
  13. Modify orchestration/initialize.py. Inside register_deployments(), after existing loop, call build_eval_deployment_specs(get_eval_config()). If non-empty, iterate and register using same client.create_flow_from_name +
  client.create_deployment pattern. Entrypoint format: orchestration/evaluation/flows.py:<func_name>. If empty, single info log line. Do NOT add eval specs to module-level _DEPLOYMENT_SPECS literal — they are dynamic.
- 14. Modify orchestration/ingestion/flows.py (only if EVAL_POST_INGESTION_HOOK honored). End of end_to_end_flow, after end_to_end_ingestion_task: lazy-import eval_golden_flow, call inside try/except if
+ 14. Modify orchestration/ingestion/flows.py (only if `EVAL_STATIC_AUTO_RUN_AFTER_INGESTION` is honored). End of end_to_end_flow, after end_to_end_ingestion_task: lazy-import eval_golden_flow, call inside try/except if
  get_eval_config().post_ingestion_hook. Failures log, never raise.
  15. Delete legacy files.
    - rm evaluation/evaluate.py
@@ -412,7 +412,7 @@ gating and `EVAL_STATIC_POST_INGESTION_HOOK`.
  EVAL_ENABLED=false
  EVAL_STATIC_SCHEDULE_CRON=
  EVAL_DRIFT_SCHEDULE_CRON=
- EVAL_STATIC_POST_INGESTION_HOOK=false
+ EVAL_STATIC_AUTO_RUN_AFTER_INGESTION=false
  EVAL_STATIC_DATASET_NAME=ground-truth-v1
  EVAL_STATIC_DATASET_CSV_PATH=evaluation/datasets/ground_truth_dataset.csv
  EVAL_PHOENIX_PROJECT=advanced-rag-eval
@@ -514,7 +514,7 @@ calls/run. Mitigation: default golden set is 9 rows; honor EVAL_STATIC_MAX_EXAMP
  6. PREFECT_LOGGING_EXTRA_LOGGERS missing evaluation. Eval flow logs may not appear in Prefect UI. Mitigation: update .env.example to PREFECT_LOGGING_EXTRA_LOGGERS=rag_core,evaluation.
  7. Open: judge provider for OSS users without AWS. EVAL_JUDGE_PROVIDER=aws default won't work for Ollama/LM Studio users. Recommend: fall back to GENERATION_MODEL_PROVIDER from existing config when EVAL_JUDGE_PROVIDER empty.
  Document in .env.example.
- 8. Open: post-ingestion hook scope. If EVAL_POST_INGESTION_HOOK=true, should it block ingestion success on threshold failure, or log-only? Recommend: log-only default with a separate EVAL_POST_INGESTION_BLOCKS_ON_FAILURE flag
+ 8. Open: post-ingestion hook scope. If `EVAL_STATIC_AUTO_RUN_AFTER_INGESTION=true`, should it block ingestion success on threshold failure, or log-only? Recommend: log-only default with a separate `EVAL_STATIC_POST_INGESTION_BLOCKS_ON_FAILURE` flag
  (default false). Confirm before implementing.
 
  ---

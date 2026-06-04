@@ -45,7 +45,7 @@ class EvalConfig(BaseSettings):
     )
     auto_run_after_ingestion: bool = Field(
         default=False,
-        validation_alias="EVAL_STATIC_POST_INGESTION_HOOK",
+        validation_alias="EVAL_STATIC_AUTO_RUN_AFTER_INGESTION",
         description=(
             "Run run_ground_truth_evaluation at the end of ingestion (non-blocking)."
         ),

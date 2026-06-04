@@ -88,8 +88,9 @@ def test_env_example_defaults_are_docker_compose_first() -> None:
     assert "EVAL_FACTUALITY_WEIGHT=0.85" in env_example
     assert "EVAL_DRIFT_SCHEDULE_CRON=" in env_example
     assert "EVAL_DRIFT_LOOKBACK_MINUTES=60" in env_example
-    assert "EVAL_DRIFT_HIGH_RISK_SAMPLE_MAX=100" in env_example
-    assert "EVAL_DRIFT_BASELINE_SAMPLE_MAX=20" in env_example
+    assert "EVAL_DRIFT_HIGH_RISK_SAMPLE_MAX=5" in env_example
+    assert "EVAL_DRIFT_BASELINE_SAMPLE_MAX=5" in env_example
+    assert "EVAL_STATIC_AUTO_RUN_AFTER_INGESTION=false" in env_example
     assert "EVAL_THRESHOLDS=\n'{\"faithfulness\"" not in env_example
     assert "INGESTION_WORKER_UV_SYNC_EXTRAS=--extra ingestion --extra doc-processing --extra rerank" not in env_example
     assert '# PREFECT_WORKER_UV_SYNC_EXTRAS="--extra ingestion --extra doc-processing --extra eval"' in env_example

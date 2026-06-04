@@ -400,7 +400,7 @@ class TestEvalConfigParsing:
         os.environ,
         {
             "EVAL_STATIC_SCHEDULE_CRON": "0 0 * * *",
-            "EVAL_STATIC_POST_INGESTION_HOOK": "true",
+            "EVAL_STATIC_AUTO_RUN_AFTER_INGESTION": "true",
             "EVAL_DRIFT_SCHEDULE_CRON": "0 2 * * *",
             "EVAL_DRIFT_LOOKBACK_MINUTES": "120",
             "EVAL_DRIFT_HIGH_RISK_SAMPLE_MAX": "12",
@@ -421,7 +421,7 @@ class TestEvalConfigParsing:
         assert config.retry_cohort_max_examples == 12
         assert config.baseline_max_examples == 8
 
-    @patch.dict(os.environ, {"EVAL_STATIC_POST_INGESTION_HOOK": "true"}, clear=False)
+    @patch.dict(os.environ, {"EVAL_STATIC_AUTO_RUN_AFTER_INGESTION": "true"}, clear=False)
     def test_auto_run_after_ingestion_env_parses(self):
         """Post-ingestion eval auto-run uses the new static env variable name."""
         from evaluation.config import EvalConfig
