@@ -39,6 +39,12 @@ services:
       - OTEL_EXPORTER_OTLP_PROTOCOL=${OTEL_EXPORTER_OTLP_PROTOCOL:-http/protobuf}
       - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-advanced-rag-api}
     volumes:
+      - ./app:/app/app:ro
+      - ./db:/app/db:ro
+      - ./evaluation:/app/evaluation:ro
+      - ./orchestration:/app/orchestration:ro
+      - ./rag_core:/app/rag_core:ro
+      - ./tests:/app/tests:ro
       - fastembed-cache:/app/.cache/fastembed
     healthcheck:
       # Use Python's built-in urllib so we don't need to install curl
@@ -142,6 +148,12 @@ services:
       PREFECT_LOGGING_EXTRA_LOGGERS: ${PREFECT_LOGGING_EXTRA_LOGGERS:-rag_core}
       PREFECT_WORKER_LIMIT: ${PREFECT_WORKER_LIMIT:-2}
     volumes:
+      - ./app:/app/app:ro
+      - ./db:/app/db:ro
+      - ./evaluation:/app/evaluation:ro
+      - ./orchestration:/app/orchestration:ro
+      - ./rag_core:/app/rag_core:ro
+      - ./tests:/app/tests:ro
       - ./data/source_documents:/app/data/source_documents:ro
       - ./evaluation/dataset:/app/evaluation/dataset:ro
       - hf-cache-volume:/app/.cache/huggingface

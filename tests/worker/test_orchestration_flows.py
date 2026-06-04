@@ -3,17 +3,10 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-from prefect.testing.utilities import prefect_test_harness
 
 prefect = pytest.importorskip("prefect")
 
 from orchestration.ingestion import flows  # noqa: E402
-
-
-@pytest.fixture(autouse=True)
-def prefect_test_fixture():
-    with prefect_test_harness():
-        yield
 
 
 def test_end_to_end_flow_runs_migrations_before_ingestion(
@@ -32,7 +25,7 @@ def test_end_to_end_flow_runs_migrations_before_ingestion(
         lambda **_: calls.append("ingest") or {"succeeded": True},
     )
 
-    flows.end_to_end_flow(max_jobs=1)
+    flows.end_to_end_flow.fn(max_jobs=1)
     assert calls == ["migrate", "ingest"]
 
 
@@ -56,14 +49,14 @@ def test_end_to_end_flow_uses_auto_run_after_ingestion_hook(
         lambda: calls.append("eval"),
     )
 
-    flows.end_to_end_flow(max_jobs=1)
+    flows.end_to_end_flow.fn(max_jobs=1)
 
     assert calls == ["eval"]
 
 
 def test_factory_reset_flow_requires_confirmation() -> None:
     with pytest.raises(ValueError, match="confirm_destructive_wipe=true"):
-        flows.factory_reset_flow(confirm_destructive_wipe=False)
+        flows.factory_reset_flow.fn(confirm_destructive_wipe=False)
 
 
 def test_factory_reset_flow_runs_both_reset_tasks(
@@ -78,7 +71,7 @@ def test_factory_reset_flow_runs_both_reset_tasks(
         lambda: calls.append("registry"),
     )
 
-    flows.factory_reset_flow(confirm_destructive_wipe=True)
+    flows.factory_reset_flow.fn(confirm_destructive_wipe=True)
     assert calls == ["vector", "registry"]
 
 

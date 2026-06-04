@@ -1,4 +1,4 @@
-.PHONY: up-core up down reset reload deep-clean logs stat cli ui migrate-up migrate-down migrate-new migrate-status migrate-statusd ingest test eval eval-drift eval-synthetic register-eval-deployment
+.PHONY: up-core up down reset reload deep-clean logs stat cli ui migrate-up migrate-down migrate-new migrate-status migrate-statusd ingest test test-api test-worker test-all eval eval-drift eval-synthetic register-eval-deployment
 
 ENV_FILE:= .env
 COMPOSE_FILE:=docker/docker-compose.yaml
@@ -6,6 +6,7 @@ ALEMBIC_CONFIG:=db/alembic.ini
 COMPOSE_RUN_API:=docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) run --rm --no-deps rag_api
 ALEMBIC:=$(COMPOSE_RUN_API) /app/.venv/bin/alembic -c $(ALEMBIC_CONFIG)
 EVAL_STATIC_RERANK_ENABLED ?= true
+PYTEST := uv run --no-dev --with pytest --with pytest-asyncio pytest
 
 # Container name
 # 1. Capture the "rest" of the arguments
@@ -94,7 +95,19 @@ ingest: up-core migrate-up
 	fi
 
 test:
-	uv run pytest tests/
+	@echo "⚡ Running fast local tests..."
+	$(PYTEST) tests/test_*.py
+
+test-api: up-core
+	@echo "🧪 Ensuring infra is up, then running API tests in the live api container..."
+	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) exec rag_api $(PYTEST) tests/api
+
+test-worker: up-core
+	@echo "🧪 Ensuring infra is up, then running worker tests in the live rag-worker container..."
+	docker compose --project-directory . --env-file $(ENV_FILE) -f $(COMPOSE_FILE) exec rag-worker /bin/sh -lc '$(PYTEST) tests/worker'
+
+test-all: test test-api test-worker
+	@echo "✅ All test suites passed!"
 
 eval: up-core
 	@echo "🚀 Running Ground Truth Evaluation..."

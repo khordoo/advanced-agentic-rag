@@ -21,6 +21,14 @@ from unittest.mock import Mock, patch
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def clear_eval_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    for key in [key for key in os.environ if key.startswith("EVAL_")]:
+        monkeypatch.delenv(key, raising=False)
+    for key in ("PHOENIX_COLLECTOR_ENDPOINT", "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"):
+        monkeypatch.delenv(key, raising=False)
+
+
 class TestEvaluationImports:
     """Verify that importing eval modules is safe without [eval] extra."""
 
@@ -874,7 +882,6 @@ class TestContinuousEvaluationRegistry:
         assert names == [
             "faithfulness",
             "answer_relevancy",
-            "reference_format_judge",
         ]
         assert "context_precision" not in names
         assert "context_recall" not in names

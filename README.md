@@ -47,6 +47,35 @@ make register-ingestion-deployments
 uv run rag_core/cli.py
 ```
 
+## Testing
+
+The test suite is split by runtime boundary so you do not have to install every dependency just to get fast feedback.
+
+```bash
+# Fast local unit tests that only need the core + dev dependencies
+make test
+
+# API route and response tests in the live API container
+make test-api
+
+# Prefect / orchestration / evaluation tests in the live worker container
+make test-worker
+
+# Run all three suites in sequence
+make test-all
+```
+
+Layout:
+- `tests/test_*.py` is the fast local suite.
+- `tests/api/` contains FastAPI-specific tests.
+- `tests/worker/` contains Prefect and evaluation tests.
+
+`make test` is safe on a fresh clone. `uv` will make sure the local environment is ready on demand, and it will reuse the existing cache when nothing changed.
+
+`make test-api` and `make test-worker` automatically bring up the core stack first, then run the tests inside the already-running service containers. This keeps local DX fast while avoiding a separate one-off test container.
+
+If you want to run the full suite locally in your IDE or work on API/worker tests outside Docker, install every optional dependency once with `uv sync --all-extras`.
+
 ## 🚨 Point of No Return: Changing Embedding Models
 
 > [!CAUTION]
