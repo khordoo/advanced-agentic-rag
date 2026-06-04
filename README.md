@@ -310,8 +310,8 @@ The drift flow queries these spans and **stratifies** into two cohorts:
 │  ┌─────────────────────┐   ┌────────────────────────────┐  │
 │  │  Cohort A: High-Risk│   │  Cohort B: Baseline        │  │
 │  │  intervention > 0   │   │  intervention == 0         │  │
-│  │  EVAL_DRIFT_HIGH_RISK_SAMPLE_MAX=100                   │  │
-│  │  EVAL_DRIFT_BASELINE_SAMPLE_MAX=20                     │  │
+│  │  EVAL_DRIFT_HIGH_RISK_SAMPLE_MAX=5                     │  │
+│  │  EVAL_DRIFT_BASELINE_SAMPLE_MAX=5                      │  │
 │  └────────┬────────────┘   └────────────┬───────────────┘  │
 │           │                             │                   │
 │           ▼                             ▼                   │
@@ -372,12 +372,12 @@ The flow searches the last `EVAL_DRIFT_LOOKBACK_MINUTES` minutes (default `60`).
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `EVAL_DRIFT_LOOKBACK_MINUTES` | `60` | Time window to query for production spans |
-| `EVAL_DRIFT_HIGH_RISK_SAMPLE_MAX` | `100` | Cap on high-risk (retried) traces to evaluate. Higher = more thorough but more judge cost |
-| `EVAL_DRIFT_BASELINE_SAMPLE_MAX` | `20` | Random sample of clean first-try traces. Kept low to save judge cost |
+| `EVAL_DRIFT_HIGH_RISK_SAMPLE_MAX` | `5` | Cap on high-risk (retried) traces to evaluate. Use `5` for quick local testing; for production, start around `50-100` and scale with traffic volume and token budget |
+| `EVAL_DRIFT_BASELINE_SAMPLE_MAX` | `5` | Random sample of clean first-try traces. Kept low to save judge cost |
 | `EVAL_DRIFT_SCHEDULE_CRON` | _(empty)_ | Cron expression for automatic scheduling (e.g., `0 2 * * *` for nightly at 2 AM) |
 
 > [!TIP]
-> Start with the defaults. If your agent rarely retries, lower `EVAL_DRIFT_HIGH_RISK_SAMPLE_MAX`. If you want tighter baseline monitoring, increase `EVAL_DRIFT_BASELINE_SAMPLE_MAX` — but each example costs one LLM judge call per metric.
+> Start with the defaults. For quick local drift runs, `EVAL_DRIFT_HIGH_RISK_SAMPLE_MAX=5` keeps runs fast and cheap. For production, increase it to roughly `50-100` based on your traffic volume and token budget. If your agent rarely retries, lower `EVAL_DRIFT_HIGH_RISK_SAMPLE_MAX`. If you want tighter baseline monitoring, increase `EVAL_DRIFT_BASELINE_SAMPLE_MAX` - but each example costs one LLM judge call per metric.
 
 #### Viewing Results in Phoenix
 
@@ -425,7 +425,7 @@ and older evaluation paths.
 To automatically run evaluation after each ingestion:
 
 ```bash
-EVAL_STATIC_POST_INGESTION_HOOK=true
+EVAL_STATIC_AUTO_RUN_AFTER_INGESTION=true
 ```
 
 The hook is non-blocking — eval failures are logged but never break ingestion.
@@ -459,7 +459,7 @@ Preferred names use the `EVAL_STATIC_` and `EVAL_DRIFT_` prefixes below.
 | `EVAL_STATIC_DATASET_CSV_PATH` | `evaluation/datasets/ground_truth_dataset.csv` | Ground truth CSV path |
 | `EVAL_STATIC_MAX_EXAMPLES` | _(all)_ | Hard cap to bound judge cost |
 | `EVAL_STATIC_CSV_ARTIFACT_ENABLED` | `false` | Emit CSV Prefect artifact |
-| `EVAL_STATIC_POST_INGESTION_HOOK` | `false` | Run eval after ingestion |
+| `EVAL_STATIC_AUTO_RUN_AFTER_INGESTION` | `false` | Run eval after ingestion |
 | `EVAL_STATIC_RERANK_ENABLED` | `true` | Enable worker-side reranker for evaluation runs |
 
 #### Continuous Drift (`make eval-drift`)
@@ -468,8 +468,8 @@ Preferred names use the `EVAL_STATIC_` and `EVAL_DRIFT_` prefixes below.
 |----------|---------|-------------|
 | `EVAL_DRIFT_SCHEDULE_CRON` | _(empty)_ | Cron for trace-based eval |
 | `EVAL_DRIFT_LOOKBACK_MINUTES` | `60` | Time window to query for production spans |
-| `EVAL_DRIFT_HIGH_RISK_SAMPLE_MAX` | `100` | Cap on high-risk (retried) traces to evaluate. Higher = more thorough but more judge cost |
-| `EVAL_DRIFT_BASELINE_SAMPLE_MAX` | `20` | Random sample of clean first-try traces. Kept low to save judge cost |
+| `EVAL_DRIFT_HIGH_RISK_SAMPLE_MAX` | `5` | Cap on high-risk (retried) traces to evaluate. Higher = more thorough but more judge cost |
+| `EVAL_DRIFT_BASELINE_SAMPLE_MAX` | `5` | Random sample of clean first-try traces. Kept low to save judge cost |
 
 > [!TIP]
 > **OSS users without AWS:** Set `EVAL_JUDGE_PROVIDER=ollama` (or `lmstudio`) and `EVAL_JUDGE_MODEL=<your-model>` to use local judge models.
