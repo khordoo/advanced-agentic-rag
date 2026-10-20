@@ -1,12 +1,20 @@
 # Advanced RAG Pipeline
 
-Production-oriented Retrieval-Augmented Generation pipeline with hierarchical chunking, reranking, hybrid retrieval, and automated evaluation via Phoenix Experiments + RAGAS.
+**From changing documents to grounded answers, end to end.** This project combines incremental ingestion, table-aware PDF parsing, hierarchical indexing, hybrid retrieval, and a multi-agent answer workflow in a runnable RAG stack. It includes an OpenAI-compatible API, Prefect orchestration, and Phoenix tracing and evaluation.
 
 ## Architecture at a Glance
 
 ![Architecture diagram showing document ingestion, the answering path, and shared services](docs/architecture/overview.png)
 
 The [architecture guide](docs/architecture.md) explains ingestion, query, storage, and evaluation flows with detailed Mermaid diagrams. You can edit the overview in [draw.io](docs/architecture/overview.drawio).
+
+## What Makes It Different
+
+- **Ingestion that tracks change.** Content hashes skip unchanged files and queue modified ones for reprocessing. Discovery tracks removed sources, while database leases let multiple workers claim jobs safely.
+- **Parsing that preserves context.** Docling converts PDFs into page-aware Markdown. Tables are extracted with surrounding text, optionally summarized, and indexed separately. Headings guide the split into larger parent passages and smaller searchable child chunks.
+- **Retrieval with two backends.** Use Qdrant's dense and sparse search or PostgreSQL vector and full-text search. Both paths reconstruct parent context, support metadata filters, and can apply a reranker.
+- **An agent that checks its work.** A LangGraph workflow routes requests, uses semantic, page, and table lookup tools, and can verify answers against retrieved sources. Unsupported drafts trigger a bounded correction loop or a fallback response.
+- **A runnable system with feedback.** Docker Compose brings up the API, worker, stores, Prefect, Phoenix, and Web UI. Ground-truth experiments and trace-based drift checks help inspect behavior after deployment.
 
 ## Start Here
 
