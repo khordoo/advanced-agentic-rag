@@ -9,6 +9,7 @@ Where to put what:
 
 ## Sections
 
+- [Architecture](architecture.md) — component map, request and ingestion flows, storage, and evaluation
 - [Getting Started](getting-started/README.md)
 - [OpenAI-Compatible API](getting-started/openai-api.md)
 - [Configuration](configuration/README.md)

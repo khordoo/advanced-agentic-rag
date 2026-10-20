@@ -2,18 +2,25 @@
 
 Production-oriented Retrieval-Augmented Generation pipeline with hierarchical chunking, reranking, hybrid retrieval, and automated evaluation via Phoenix Experiments + RAGAS.
 
+## Architecture at a Glance
+
+![Architecture diagram showing document ingestion, the answering path, and shared services](docs/architecture/overview.png)
+
+The [architecture guide](docs/architecture.md) explains ingestion, query, storage, and evaluation flows with detailed Mermaid diagrams. You can edit the overview in [draw.io](docs/architecture/overview.drawio).
+
 ## Start Here
 
 Use this file as the landing page, then go to detailed guides in [`docs/`](docs/README.md).
 
 - [Documentation Index](docs/README.md)
+- [Architecture](docs/architecture.md)
 - [Getting Started](docs/getting-started/README.md)
 - [Configuration](docs/configuration/README.md)
 - [Retrieval RRF Semantics](docs/configuration/retrieval-rrf.md)
 - [Generation Model Settings](docs/configuration/generation-models.md)
 - [Ingestion Rules](docs/ingestion/README.md)
 - [Agents & Prompt Profiles](docs/agents/README.md)
-- [Evaluation Pipeline](#evaluation-pipeline) ← new
+- [Evaluation Pipeline](#evaluation-pipeline)
 
 ## Quick Start
 
@@ -76,23 +83,15 @@ Layout:
 
 If you want to run the full suite locally in your IDE or work on API/worker tests outside Docker, install every optional dependency once with `uv sync --all-extras`.
 
-## 🚨 Point of No Return: Changing Embedding Models
+## Changing the Embedding Model
 
-> [!CAUTION]
-> **Embedding models are immutable for existing indices.**
-> 
-> Vectors are mathematically tied to the specific model that generated them. If you change your `EMBEDDING_MODEL_NAME` or `EMBEDDING_PROVIDER` in your settings:
-> 
-> - **Vector Mismatch**: If the new model has a different dimension, all existing database queries and insertions will fail.
-> - **Semantic Drift**: Even if the dimensions match, the new model cannot "understand" vectors created by the old model. Your search results will become random noise.
-> 
-> **Requirement**: Changing your embedding configuration requires a full re-ingestion. For a one-off rebuild, run the ingestion entrypoint with `INGESTION_OVERWRITE=true`:
->
-> ```bash
-> INGESTION_OVERWRITE=true uv run python -m rag_core.ingestion.pipeline
-> ```
->
-> This deletes existing vectors for the selected backend before rebuilding them. Do not keep `INGESTION_OVERWRITE=true` in committed `.env` files or long-lived deployment config; run future ingestion with overwrite disabled to avoid accidental data loss.
+An index must use the same embedding model for stored documents and incoming queries. A different vector dimension is incompatible with the existing index; even with the same dimension, vectors from two models do not share a reliable meaning. Rebuild the selected index after changing `EMBEDDING_MODEL_NAME` or `EMBEDDING_PROVIDER`:
+
+```bash
+INGESTION_OVERWRITE=true uv run python -m rag_core.ingestion.pipeline
+```
+
+This one-off run resets the selected backend's indexed content and re-ingests the source documents. Leave `INGESTION_OVERWRITE` disabled for normal runs. See [index lifecycle and storage choices](docs/architecture.md#index-lifecycle-and-model-changes) for the full context.
 
 Provider names are intentionally strict. If you add a new embedding backend,
 update the enum and factory wiring described in
